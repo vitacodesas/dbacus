@@ -15,18 +15,18 @@ Preparación: MySQL 8.x local (p. ej. `docker run --rm --tmpfs /var/lib/mysql -e
 
 ## Consultas
 - [ ] `⌘/Ctrl+Enter` ejecuta todo; `⌘/Ctrl+Shift+Enter` la sentencia bajo el cursor.
-- [ ] `SELECT SLEEP(60)` + Detener: devuelve el control en < 1 s y el hilo desaparece de `SHOW PROCESSLIST`.
+- [~] `SELECT SLEEP(60)` + Detener: devuelve el control en < 1 s y el hilo desaparece de `SHOW PROCESSLIST`. (2026-10-28: Detener cancela y muestra «Consulta cancelada» con la fila `1` que MySQL devuelve a SLEEP; **no se cronometró** el tiempo de respuesta ni se miró el PROCESSLIST.)
 - [ ] Resultado de 1 M de filas (`docs/benchmarks.md`): primera ventana inmediata, scroll fluido con la rueda y arrastrando la barra, sin que la ventana se congele; vigilar la memoria en el Monitor de Actividad (debe quedar acotada).
 - [ ] Dos pestañas ejecutando a la vez no mezclan resultados; `SET @x=1` en una no afecta a la otra.
 - [ ] BIGINT UNSIGNED máximo, DECIMAL, BLOB, JSON, DATETIME(6), NULL y emojis se ven sin pérdida.
 - [ ] Cerrar la pestaña con una consulta en curso la cancela.
 
 ## Exportación (diálogos nativos)
-- [ ] Exportar → el **diálogo nativo de guardar** se abre, con nombre sugerido y crea carpetas.
-- [ ] Cancelar el diálogo no deja archivos ni toast de error.
+- [x] Exportar → el **diálogo nativo de guardar** se abre, con nombre sugerido y crea carpetas. (2026-10-28, macOS)
+- [x] Cancelar el diálogo no deja archivos ni toast de error. (2026-10-28)
 - [ ] CSV abre bien en Excel/Numbers (acentos con BOM, comillas, saltos de línea); JSON válido (`jq . archivo.json`).
-- [ ] Exportar 1 M de filas muestra progreso y se puede cancelar; no queda `.partial`.
-- [ ] No sobrescribe un archivo existente sin pedirlo.
+- [x] Exportar 1 M de filas muestra progreso y se puede cancelar; no queda `.partial`. (2026-10-28: 1 000 001 líneas, 6 888 893 bytes, ids únicos y completos; cancelar no deja archivo)
+- [x] No sobrescribe un archivo existente sin pedirlo. (2026-10-28: macOS pregunta; cancelar conserva el original y «Replace» lo sustituye por el contenido completo)
 
 ## Ajustes e interfaz
 - [ ] Cambiar tema/idioma en Ajustes (`⌘/Ctrl+,`) y reabrir: se conserva. Ancho del panel y del divisor también.
@@ -34,3 +34,6 @@ Preparación: MySQL 8.x local (p. ej. `docker run --rm --tmpfs /var/lib/mysql -e
 - [ ] Barra de título: se puede arrastrar la ventana y los botones nativos no se tapan (macOS).
 - [ ] Atajos en macOS (⌘) y en Windows/Linux (Ctrl).
 - [ ] Historial: aparece lo ejecutado, «No guardar historial» en la conexión lo desactiva, búsqueda y borrado funcionan.
+
+## Registro
+- 2026-10-28 (macOS, `wails3 dev`, MySQL de prueba): verificado el bloque de exportación completo y la cancelación de SLEEP. Hallazgo: la exportación con LIMIT automático exportaba solo lo cargado; corregido (spec 07). Pendiente: llavero, SSH/TLS, solo lectura en la app nativa, CSP en la ventana nativa, fluidez del scroll con 1 M de filas.

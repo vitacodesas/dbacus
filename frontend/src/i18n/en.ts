@@ -102,7 +102,7 @@ const en: typeof es = {
     button: "Export", title: "Export result", format: "Format", delimiter: "Delimiter", comma: "Comma (,)", semicolon: "Semicolon (;)", tab: "Tab",
     nullAs: "NULL values", nullEmpty: "Empty", header: "Include headers", bom: "UTF-8 BOM (to open in Excel)", crlf: "Windows line endings (\\r\\n)",
     quoteAll: "Quote every field", escapeFormulas: "Guard against spreadsheet formulas (prefixes ')", ndjson: "One object per line (NDJSON)",
-    source: "Data to export", truncatedNote: "The result is truncated to {n} rows.", sourceRerun: "Run again and export everything",
+    source: "Data to export", truncatedNote: "The result is truncated to {n} rows.", limitNote: "The app added an automatic LIMIT of {n} rows: what is loaded is not the whole result.", sourceRerun: "Run again and export everything",
     sourceBuffer: "Only the {n} loaded rows", rerunHint: "The statement runs again: if the data changed, the file may differ from what you see.",
     start: "Export…", stop: "Stop", exporting: "Exporting…", progress: "{rows} rows · {size}", saved: "Exported {rows} rows to {path}",
     canceled: "Export canceled", failed: "Couldn't export",

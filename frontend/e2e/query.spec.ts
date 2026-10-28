@@ -27,6 +27,7 @@ test.describe("consultas y resultados", () => {
   });
 
   test("un resultado enorme se trunca al tope y el grid sigue virtualizado", async ({ app: page }) => {
+    await page.getByTestId("limit-select").selectOption({ label: "Sin límite" }); // con el límite por defecto no se trunca
     await setSql(page, "SELECT * FROM big_numbers");
     await run(page);
     await expect(page.getByTestId("range")).toContainText(/100.000\+ filas \(truncado\)/);

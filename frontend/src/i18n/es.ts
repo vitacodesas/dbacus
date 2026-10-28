@@ -100,7 +100,7 @@ export default {
     button: "Exportar", title: "Exportar resultado", format: "Formato", delimiter: "Separador", comma: "Coma (,)", semicolon: "Punto y coma (;)", tab: "Tabulador",
     nullAs: "Valores NULL", nullEmpty: "Vacío", header: "Incluir encabezados", bom: "BOM UTF-8 (para abrir en Excel)", crlf: "Saltos de línea de Windows (\\r\\n)",
     quoteAll: "Entrecomillar todos los campos", escapeFormulas: "Proteger contra fórmulas de hoja de cálculo (antepone ')", ndjson: "Un objeto por línea (NDJSON)",
-    source: "Datos a exportar", truncatedNote: "El resultado está truncado a {n} filas.", sourceRerun: "Volver a ejecutar y exportar todo",
+    source: "Datos a exportar", truncatedNote: "El resultado está truncado a {n} filas.", limitNote: "La app añadió un LIMIT automático de {n} filas: lo cargado no es todo el resultado.", sourceRerun: "Volver a ejecutar y exportar todo",
     sourceBuffer: "Solo las {n} filas cargadas", rerunHint: "Se ejecuta de nuevo la sentencia: si los datos cambiaron, el archivo puede diferir de lo que ves.",
     start: "Exportar…", stop: "Detener", exporting: "Exportando…", progress: "{rows} filas · {size}", saved: "Se exportaron {rows} filas a {path}",
     canceled: "Exportación cancelada", failed: "No se pudo exportar",

@@ -66,6 +66,22 @@ test.describe("exportación", () => {
   });
 });
 
+test.describe("exportación con LIMIT automático", () => {
+  test("avisa de que lo cargado no es todo y por defecto re-ejecuta sin el límite", async ({ app: page }) => {
+    await connect(page);
+    await runSql(page, "SELECT * FROM big_numbers"); // el límite por defecto (1000) se aplica solo
+    await expect(page.getByTestId("range")).toContainText(/1[.,]000/);
+
+    await page.getByTestId("export-open").click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByTestId("export-source")).toContainText(/LIMIT automático de 1[.,]000 filas/);
+    await dialog.getByRole("button", { name: "Exportar…" }).click();
+    await expect(page.getByText(/mock-export\.csv/).first()).toBeVisible();
+    const sent = await page.evaluate(() => (window as unknown as { __mock: { exports: { source: string }[] } }).__mock.exports);
+    expect(sent.map((r) => r.source)).toEqual(["rerun"]);
+  });
+});
+
 test.describe("ajustes", () => {
   test("cambiar el tema aplica la clase dark y se guarda", async ({ app: page }) => {
     await page.keyboard.press(`${mod}+,`);

@@ -27,3 +27,6 @@
 - **Formatos**: CSV (separador `,` `;` tab, encabezado, `NULL` vacío o literal, BOM, CRLF, entrecomillar todo, protección contra fórmulas `= + - @` solo en textos). JSON (array o NDJSON; BIGINT/DECIMAL como string; binarios en base64 del contenido completo; DATETIME/TIMESTAMP en ISO 8601; JSON embebido si es válido; columnas repetidas reciben sufijo `_2`). Se usa `Cell.Full()`, nunca el valor recortado para la UI.
 - **Verificado** (integración en MySQL 8.0, 8.4 y MariaDB 10.11): 1 M de filas en ~0,3 s con +3–4 MB de memoria máxima; cancelación en pleno vuelo borra el parcial y deja la sesión usable; tipos extremos a JSON.
 - **No verificado**: el diálogo nativo de guardado (el modo servidor no lo soporta; el error se muestra en un aviso) y abrir el CSV en Excel real.
+
+### Corrección (smoke manual, 2026-10-28)
+El diálogo solo ofrecía elegir origen cuando el resultado estaba `truncated`. Con el LIMIT automático de la barra (por defecto 1000) el resultado no se marca truncado, así que se exportaban solo las filas cargadas sin avisar. Ahora el selector también aparece si `limitApplied > 0`, con aviso propio y «volver a ejecutar» (sentencia original, sin el LIMIT automático) como opción por defecto. Cubierto en `ExportDialog.test.ts` y en el E2E «exportación con LIMIT automático».

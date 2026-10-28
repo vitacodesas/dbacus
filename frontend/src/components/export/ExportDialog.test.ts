@@ -10,7 +10,7 @@ import { useExportsStore } from "../../stores/exports";
 import ExportDialog from "./ExportDialog.vue";
 
 let w: VueWrapper | null = null;
-const mountDialog = (props: Partial<{ truncated: boolean; rowCount: number }> = {}) => {
+const mountDialog = (props: Partial<{ truncated: boolean; rowCount: number; limitApplied: number }> = {}) => {
   w = mount(ExportDialog, { props: { queryId: "q1", stmtIndex: 2, truncated: false, rowCount: 100, open: true, ...props }, attachTo: document.body, global: { plugins: [i18n] } });
   return w;
 };
@@ -57,6 +57,23 @@ describe("ExportDialog", () => {
     button("Exportar…")!.click();
     await flushPromises();
     expect(api.startExport).toHaveBeenCalledWith(expect.objectContaining({ source: "rerun" }));
+  });
+
+  it("con un LIMIT automático el resultado no es completo: avisa y propone re-ejecutar", async () => {
+    api.startExport.mockResolvedValue({ jobId: "j1", path: "p", canceled: false });
+    mountDialog({ truncated: false, limitApplied: 1000, rowCount: 1000 });
+    await flushPromises();
+    expect(body().textContent).toMatch(/LIMIT automático de 1[.,]000 filas/);
+    expect(body().textContent).not.toContain("truncado");
+    button("Exportar…")!.click();
+    await flushPromises();
+    expect(api.startExport).toHaveBeenCalledWith(expect.objectContaining({ source: "rerun" }));
+  });
+
+  it("sin truncado ni LIMIT no hay elección de origen", async () => {
+    mountDialog({ truncated: false, limitApplied: 0 });
+    await flushPromises();
+    expect(body().querySelector('[data-testid="export-source"]')).toBeNull();
   });
 
   it("elegir 'solo las filas cargadas' exporta el buffer", async () => {

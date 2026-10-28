@@ -181,6 +181,7 @@ const summary = (i: number) => {
       :query-id="res.queryId"
       :stmt-index="current"
       :truncated="!!stmt.truncated"
+      :limit-applied="stmt.limitApplied ?? 0"
       :row-count="rowCount"
     />
   </section>

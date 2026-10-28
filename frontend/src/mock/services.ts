@@ -72,7 +72,7 @@ const asMeta = (cols: Any[]) => cols.map((c) => ({ name: c.name, dataType: c.dat
 interface Run { stmts: Any[]; data: Record<number, { rows: number; cell: (i: number, c: number) => Any }>; canceled: boolean; cancelWake?: () => void }
 const runs = new Map<string, Run>();
 
-function planStatement(sql: string, index: number, start: number, maxRows: number) {
+function planStatement(sql: string, index: number, start: number, maxRows: number, autoLimit: number) {
   const text = sql.trim();
   const lower = text.toLowerCase();
   const base = { index, kind: "rows", columns: null, rowCount: 0, truncated: false, affectedRows: 0, lastInsertId: 0, warnings: 0, elapsedMs: 5, sql: text, limitApplied: 0, start, end: start + sql.length };
@@ -81,8 +81,11 @@ function planStatement(sql: string, index: number, start: number, maxRows: numbe
   const name = Object.keys(TABLES).find((t) => new RegExp(`\\b${t}\\b`).test(lower));
   if (lower.startsWith("select") && name) {
     const t = TABLES[name];
-    const total = Math.min(t.rows, maxRows);
-    return { stmt: { ...base, columns: asMeta(t.cols), rowCount: total, truncated: t.rows > maxRows }, table: t };
+    // Como Go: LIMIT automático solo a un SELECT simple sin LIMIT; no cuenta como truncado.
+    const limit = autoLimit > 0 && !/\blimit\b/.test(lower) ? autoLimit : 0;
+    const cap = limit > 0 ? Math.min(maxRows, limit) : maxRows;
+    const total = Math.min(t.rows, cap);
+    return { stmt: { ...base, columns: asMeta(t.cols), rowCount: total, truncated: limit === 0 && t.rows > maxRows, limitApplied: limit > 0 && t.rows > limit ? limit : limit > 0 ? limit : 0 }, table: { ...t, rows: total } };
   }
   if (lower.startsWith("select")) {
     const label = text.replace(/^select\s+/i, "").replace(/;$/, "") || "1";
@@ -108,7 +111,7 @@ async function runQuery(queryId: string, req: Any, run: Run) {
   const maxRows = req.maxRows > 0 ? req.maxRows : settings.maxRows;
   let idx = 0;
   for (const part of splitStatements(req.sql)) {
-    const plan: Any = planStatement(part.text, idx, part.start, maxRows);
+    const plan: Any = planStatement(part.text, idx, part.start, maxRows, req.autoLimit ?? 0);
     if (plan.error) {
       const e = JSON.parse(plan.error.cause);
       Events.Emit("query:error", { queryId, stmtIndex: idx, error: e, start: part.start, end: part.start + part.text.length });
@@ -281,6 +284,7 @@ export const HistoryService = {
 export const ExportService = {
   Export: (req: Any) =>
     cp(() => {
+      (window as Any).__mock.exports.push(req);
       const jobId = uid("j");
       const path = `/tmp/mock-export.${req.options.format}`;
       setTimeout(() => Events.Emit("export:done", { jobId, path, rows: 123, bytes: 4567, canceled: false }), 150);
@@ -302,4 +306,4 @@ export const SettingsService = {
 export const PingService = { Hello: (name: string) => cp(() => `Hola, ${name}`), PickFile: () => cp(() => "") };
 
 /** Para que las pruebas lean el estado interno si lo necesitan. */
-(window as Any).__mock = { profiles, sessions, history, get settings() { return settings; } };
+(window as Any).__mock = { profiles, sessions, history, exports: [] as Any[], get settings() { return settings; } };

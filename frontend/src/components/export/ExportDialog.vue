@@ -9,18 +9,20 @@ import BaseModal from "../ui/BaseModal.vue";
 import BaseSelect from "../ui/BaseSelect.vue";
 import BaseSpinner from "../ui/BaseSpinner.vue";
 
-const props = defineProps<{ queryId: string; stmtIndex: number; truncated: boolean; rowCount: number }>();
+const props = withDefaults(defineProps<{ queryId: string; stmtIndex: number; truncated: boolean; rowCount: number; limitApplied?: number }>(), { limitApplied: 0 });
 const open = defineModel<boolean>("open", { default: false });
 
 const { t, locale } = useI18n();
 const exports = useExportsStore();
 const opts = exports.options;
 
-// Si el resultado está truncado, lo que hay en memoria no es todo: se propone volver a ejecutar.
+// Si el resultado está truncado o la app le añadió un LIMIT automático, lo que hay en memoria no es todo: se propone
+// volver a ejecutar (Go guarda la sentencia original, sin ese LIMIT).
+const partial = computed(() => props.truncated || props.limitApplied > 0);
 const source = ref<"buffer" | "rerun">("buffer");
-watch(() => [open.value, props.truncated] as const, ([o, truncated]) => {
+watch(() => [open.value, partial.value] as const, ([o, isPartial]) => {
   if (o) {
-    source.value = truncated ? "rerun" : "buffer";
+    source.value = isPartial ? "rerun" : "buffer";
     exports.dismiss();
   }
 }, { immediate: true });
@@ -76,9 +78,9 @@ async function submit() {
       </template>
       <BaseCheckbox v-else v-model="opts.ndjson" :label="t('export.ndjson')" />
 
-      <fieldset v-if="truncated" class="flex flex-col gap-1 rounded-md border border-border p-2">
+      <fieldset v-if="partial" class="flex flex-col gap-1 rounded-md border border-border p-2" data-testid="export-source">
         <legend class="px-1 text-xs font-medium text-muted">{{ t("export.source") }}</legend>
-        <p class="text-xs text-warning">{{ t("export.truncatedNote", { n: rowCount.toLocaleString() }) }}</p>
+        <p class="text-xs text-warning">{{ truncated ? t("export.truncatedNote", { n: rowCount.toLocaleString() }) : t("export.limitNote", { n: limitApplied.toLocaleString() }) }}</p>
         <label class="flex items-center gap-2 text-sm"><input v-model="source" type="radio" value="rerun" class="accent-[var(--accent)]">{{ t("export.sourceRerun") }}</label>
         <label class="flex items-center gap-2 text-sm"><input v-model="source" type="radio" value="buffer" class="accent-[var(--accent)]">{{ t("export.sourceBuffer", { n: rowCount.toLocaleString() }) }}</label>
         <p v-if="source === 'rerun'" class="text-xs text-muted">{{ t("export.rerunHint") }}</p>
