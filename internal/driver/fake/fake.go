@@ -24,6 +24,7 @@ type Driver struct {
 	OpenErr   error
 	Version   string
 	OnRun     func(ctx context.Context, stmt string) (driver.RunResult, error)
+	OnExec    func(ctx context.Context, stmt string, args []any) (int64, error) // si es nil, Exec afecta 1 fila
 	LastDial  driver.DialFunc
 	LastCfg   driver.ConnConfig
 	AcquireFn func(ctx context.Context) error // se llama antes de entregar una conexión
@@ -70,6 +71,7 @@ type Pool struct {
 	seq      atomic.Int64
 	mu       sync.Mutex
 	Conns    []*Conn
+	Edits    []*Conn // las entregadas por AcquireEdit
 }
 
 func (p *Pool) Ping(context.Context) error { return p.d.PingErr }
@@ -83,6 +85,17 @@ func (p *Pool) Schema() driver.SchemaReader {
 	return &Schema{}
 }
 func (p *Pool) Close() error { p.Closed.Store(true); return nil }
+
+// AcquireEdit entrega una conexión como Acquire y la anota en Edits (para que los tests distingan las de edición).
+func (p *Pool) AcquireEdit(ctx context.Context) (driver.Conn, error) {
+	c, err := p.Acquire(ctx)
+	if err == nil {
+		p.mu.Lock()
+		p.Edits = append(p.Edits, c.(*Conn))
+		p.mu.Unlock()
+	}
+	return c, err
+}
 
 func (p *Pool) Acquire(ctx context.Context) (driver.Conn, error) {
 	if fn := p.d.AcquireFn; fn != nil {
@@ -99,9 +112,19 @@ func (p *Pool) Acquire(ctx context.Context) (driver.Conn, error) {
 	return c, nil
 }
 
+// ExecCall es una llamada a Conn.Exec registrada por el fake.
+type ExecCall struct {
+	Stmt string
+	Args []any
+}
+
 type Conn struct {
 	pool     *Pool
 	id       string
+	mu       sync.Mutex
+	Execs    []ExecCall
+	TxLog    []string // "begin", "commit", "rollback" en orden
+	inTx     bool
 	Released atomic.Bool
 	Killed   atomic.Int64
 	UsedDB   atomic.Value // string
@@ -118,6 +141,32 @@ func (c *Conn) Run(ctx context.Context, stmt string) (driver.RunResult, error) {
 	}
 	return &Result{}, nil
 }
+func (c *Conn) Exec(ctx context.Context, stmt string, args ...any) (int64, error) {
+	c.mu.Lock()
+	c.Execs = append(c.Execs, ExecCall{stmt, args})
+	c.mu.Unlock()
+	if fn := c.pool.d.OnExec; fn != nil {
+		return fn(ctx, stmt, args)
+	}
+	return 1, nil
+}
+func (c *Conn) tx(event string) {
+	c.mu.Lock()
+	c.TxLog = append(c.TxLog, event)
+	c.inTx = event == "begin"
+	c.mu.Unlock()
+}
+func (c *Conn) Begin(context.Context) error  { c.tx("begin"); return nil }
+func (c *Conn) Commit(context.Context) error { c.tx("commit"); return nil }
+func (c *Conn) Rollback(context.Context) error {
+	c.mu.Lock()
+	open := c.inTx
+	c.mu.Unlock()
+	if open {
+		c.tx("rollback")
+	}
+	return nil
+}
 func (c *Conn) Kill(context.Context) error {
 	c.Killed.Add(1)
 	if fn := c.pool.d.OnKill; fn != nil {
@@ -126,6 +175,7 @@ func (c *Conn) Kill(context.Context) error {
 	return nil
 }
 func (c *Conn) Release() error {
+	_ = c.Rollback(context.Background())
 	if c.Released.CompareAndSwap(false, true) {
 		c.pool.Open.Add(-1)
 	}

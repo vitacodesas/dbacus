@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"tabulariswails/internal/apperr"
 
 	"tabulariswails/internal/driver"
 	"tabulariswails/internal/sqlsplit"
@@ -14,6 +15,8 @@ import (
 type pool struct {
 	db  *sql.DB
 	aux *sql.DB // solo KILL QUERY
+	// edit: conexiones con CLIENT_FOUND_ROWS, solo para aplicar ediciones de celdas (driver.Pool.AcquireEdit).
+	edit *sql.DB
 	// readOnly: cada conexión dedicada arranca en una transacción de solo lectura (spec 10).
 	readOnly bool
 	schema   driver.SchemaReader
@@ -31,10 +34,14 @@ func (p *pool) ServerVersion(ctx context.Context) (string, error) {
 
 func (p *pool) Schema() driver.SchemaReader { return p.schema }
 
-func (p *pool) Close() error { return errors.Join(p.db.Close(), p.aux.Close()) }
+func (p *pool) Close() error { return errors.Join(p.db.Close(), p.aux.Close(), p.edit.Close()) }
 
-func (p *pool) Acquire(ctx context.Context) (driver.Conn, error) {
-	c, err := p.db.Conn(ctx)
+func (p *pool) Acquire(ctx context.Context) (driver.Conn, error) { return p.acquire(ctx, p.db) }
+
+func (p *pool) AcquireEdit(ctx context.Context) (driver.Conn, error) { return p.acquire(ctx, p.edit) }
+
+func (p *pool) acquire(ctx context.Context, db *sql.DB) (driver.Conn, error) {
+	c, err := db.Conn(ctx)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -57,6 +64,7 @@ type conn struct {
 	c    *sql.Conn
 	id   string
 	pool *pool
+	tx   *sql.Tx // transacción abierta con Begin (solo la edición de celdas, spec 13)
 }
 
 func (c *conn) ID() string { return c.id }
@@ -99,4 +107,54 @@ func (c *conn) Kill(ctx context.Context) error {
 	return mapError(err)
 }
 
-func (c *conn) Release() error { return c.c.Close() }
+func (c *conn) Exec(ctx context.Context, stmt string, args ...any) (int64, error) {
+	var (
+		res sql.Result
+		err error
+	)
+	if c.tx != nil {
+		res, err = c.tx.ExecContext(ctx, stmt, args...)
+	} else {
+		res, err = c.c.ExecContext(ctx, stmt, args...)
+	}
+	if err != nil {
+		return 0, mapError(err)
+	}
+	n, err := res.RowsAffected()
+	return n, mapError(err)
+}
+
+func (c *conn) Begin(ctx context.Context) error {
+	if c.tx != nil {
+		return apperr.New(apperr.Internal, "Ya hay una transacción abierta en esta conexión")
+	}
+	tx, err := c.c.BeginTx(ctx, nil)
+	if err != nil {
+		return mapError(err)
+	}
+	c.tx = tx
+	return nil
+}
+
+func (c *conn) Commit(context.Context) error {
+	tx := c.tx
+	if tx == nil {
+		return apperr.New(apperr.Internal, "No hay transacción abierta")
+	}
+	c.tx = nil
+	return mapError(tx.Commit())
+}
+
+func (c *conn) Rollback(context.Context) error {
+	tx := c.tx
+	if tx == nil {
+		return nil // idempotente: revertir sin transacción no es un error
+	}
+	c.tx = nil
+	return mapError(tx.Rollback())
+}
+
+func (c *conn) Release() error {
+	_ = c.Rollback(context.Background()) // una transacción olvidada no debe sobrevivir en la conexión devuelta al pool
+	return c.c.Close()
+}

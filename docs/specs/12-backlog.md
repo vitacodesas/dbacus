@@ -66,7 +66,7 @@ Alcance: goroutine por run, eventos, throttling, `KILL QUERY`, LIMIT automático
 
 ## Épica 7 — Edición de celdas (etapa 2; spec 13 aprobado)
 **T7.1 ✅ · Elegibilidad** — Dep: Épicas 4–5 · Specs: 13, 05 · Alcance: `sqlsplit.SimpleSelectTable`, ampliar `Column` con `IsGenerated` y el esquema con índices únicos sin NULL, `EditService.GetEditInfo`. Fuera de alcance: cualquier escritura. DoD: tabla de casos (JOIN, alias, vista, sin PK, clave compuesta, clave no seleccionada).
-**T7.2 · Driver: ejecución parametrizada** — Dep: T7.1 · Specs: 03, 13 · Alcance: `Conn.Exec(ctx, stmt, args...)` y transacción (`Begin/Commit/Rollback`) en `driver.Conn`, implementación MySQL y fake. DoD: tests unitarios + integración en 3 motores.
+**T7.2 ✅ · Driver: ejecución parametrizada** — Dep: T7.1 · Specs: 03, 13 · Alcance: `Conn.Exec(ctx, stmt, args...)` y transacción (`Begin/Commit/Rollback`) en `driver.Conn`, implementación MySQL y fake. DoD: tests unitarios + integración en 3 motores.
 **T7.3 · Cambios pendientes y conversión** — Dep: T7.1 · Specs: 13, 02 · Alcance: `Stage/Unstage/Discard/Preview`, conversión por tipo, superposición en `GetRows` (`Cell.Edited`), límite de 1 000. DoD: tests por tipo, sin valores en logs/eventos.
 **T7.4 · Aplicar** — Dep: T7.2, T7.3 · Specs: 13, 10 · Alcance: `Apply` atómico con control optimista, relectura y reemplazo en el buffer, historial, rechazo en solo lectura, evento `edit:applied`. DoD: integración con conflicto, rollback, clave compuesta y valores extremos en MySQL 8.0/8.4 y MariaDB 10.11.
 **T7.5 · UI** — Dep: T7.3, T7.4 · Specs: 13, 08, 09 · Alcance: editor en celda, barra de cambios, diálogo de SQL, menú contextual, store `edits`, confirmación al descartar. DoD: tests de componente.

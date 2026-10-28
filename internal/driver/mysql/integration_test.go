@@ -4,6 +4,8 @@ package mysql
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -54,6 +56,7 @@ func TestIntegration(t *testing.T) {
 			t.Run("exec", func(t *testing.T) { testExec(t, in) })
 			t.Run("sesión por conexión", func(t *testing.T) { testSessionIsolation(t, in) })
 			t.Run("kill conserva la conexión", func(t *testing.T) { testKill(t, in) })
+			t.Run("exec parametrizado y transacciones", func(t *testing.T) { testExecParams(t, in) })
 			t.Run("sintaxis", func(t *testing.T) { testSyntax(t, in) })
 			t.Run("esquema", func(t *testing.T) { testSchema(t, in) })
 		})
@@ -212,4 +215,135 @@ func testSyntax(t *testing.T, in mysqlbox.Instance) {
 	defer c.Release()
 	_, err = c.Run(context.Background(), "SELEC 1")
 	require.Equal(t, apperr.QuerySyntax, code(t, err))
+}
+
+func cellStr(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return "<NULL>"
+	case []byte:
+		return string(x)
+	default:
+		return fmt.Sprint(x)
+	}
+}
+
+// testExecParams cubre Conn.Exec (spec 13): parámetros sin interpolar, valores extremos, NULL, filas afectadas y
+// transacciones (commit, rollback, Release con la transacción abierta).
+func testExecParams(t *testing.T, in mysqlbox.Instance) {
+	ctx := context.Background()
+	p := openPool(t, in, nil)
+	c, err := p.Acquire(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Release() })
+
+	run := func(stmt string) [][]any {
+		t.Helper()
+		r, err := c.Run(ctx, stmt)
+		require.NoError(t, err, stmt)
+		return collect(t, r)
+	}
+	one := func(stmt string) []string {
+		t.Helper()
+		rows := run(stmt)
+		require.Len(t, rows, 1, stmt)
+		out := make([]string, len(rows[0]))
+		for i, v := range rows[0] {
+			out[i] = cellStr(v)
+		}
+		return out
+	}
+	run("DROP TABLE IF EXISTS ex_p")
+	run("CREATE TABLE ex_p (id BIGINT UNSIGNED PRIMARY KEY, s VARCHAR(100) NULL, d DECIMAL(20,4) NULL, dt DATETIME(6) NULL, b BLOB NULL) DEFAULT CHARSET=utf8mb4")
+
+	t.Run("valores extremos sin pérdida", func(t *testing.T) {
+		n, err := c.Exec(ctx, "INSERT INTO ex_p VALUES (?, ?, ?, ?, ?)", uint64(math.MaxUint64), "emoji 😀 'comilla' \\ \"doble\"", "12345678901234.5678", "2024-01-02 03:04:05.123456", []byte{0, 0xff, 0x10})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+		got := one("SELECT CAST(id AS CHAR), s, CAST(d AS CHAR), CAST(dt AS CHAR), HEX(b) FROM ex_p")
+		require.Equal(t, []string{"18446744073709551615", "emoji 😀 'comilla' \\ \"doble\"", "12345678901234.5678", "2024-01-02 03:04:05.123456", "00FF10"}, got)
+	})
+
+	t.Run("el valor nunca se interpreta como SQL", func(t *testing.T) {
+		evil := "x'; DROP TABLE ex_p; --"
+		n, err := c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", evil, uint64(math.MaxUint64))
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+		require.Equal(t, []string{evil}, one("SELECT s FROM ex_p"))
+	})
+
+	t.Run("NULL y comparación null-safe", func(t *testing.T) {
+		n, err := c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", nil, uint64(math.MaxUint64))
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+		require.Equal(t, []string{"<NULL>"}, one("SELECT s FROM ex_p"))
+		// `<=>` con NULL encuentra la fila; `=` no.
+		n, err = c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ? AND s <=> ?", "ya no es null", uint64(math.MaxUint64), nil)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+	})
+
+	t.Run("filas encontradas aunque el valor no cambie, y cero si no hay fila", func(t *testing.T) {
+		// Conexión normal: afectadas = cambiadas (lo que ve el usuario al ejecutar su propio UPDATE).
+		n, err := c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "ya no es null", uint64(math.MaxUint64))
+		require.NoError(t, err)
+		require.EqualValues(t, 0, n, "sin CLIENT_FOUND_ROWS una fila encontrada pero igual cuenta 0")
+
+		// Conexión de edición: afectadas = encontradas, que es lo que permite el control optimista sin falsos conflictos.
+		ec, err := p.AcquireEdit(ctx)
+		require.NoError(t, err)
+		defer ec.Release()
+		n, err = ec.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "ya no es null", uint64(math.MaxUint64))
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+		n, err = ec.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "x", uint64(7))
+		require.NoError(t, err)
+		require.EqualValues(t, 0, n, "sin fila, cero")
+	})
+
+	t.Run("error del servidor", func(t *testing.T) {
+		_, err := c.Exec(ctx, "UPDATE no_existe SET a = ?", 1)
+		require.Error(t, err)
+		var ae *apperr.AppError
+		require.ErrorAs(t, err, &ae)
+		require.Equal(t, apperr.QueryFailed, ae.Code)
+	})
+
+	t.Run("transacciones", func(t *testing.T) {
+		other, err := p.Acquire(ctx)
+		require.NoError(t, err)
+		defer other.Release()
+		val := func(cn driver.Conn) string {
+			r, err := cn.Run(ctx, "SELECT s FROM ex_p")
+			require.NoError(t, err)
+			rows := collect(t, r)
+			return cellStr(rows[0][0])
+		}
+		id := uint64(math.MaxUint64)
+
+		require.NoError(t, c.Begin(ctx))
+		require.Error(t, c.Begin(ctx), "no se anidan")
+		_, err = c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "dentro", id)
+		require.NoError(t, err)
+		require.Equal(t, "ya no es null", val(other), "otra conexión no ve lo no confirmado")
+		require.NoError(t, c.Rollback(ctx))
+		require.Equal(t, "ya no es null", val(c))
+
+		require.NoError(t, c.Begin(ctx))
+		_, err = c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "confirmado", id)
+		require.NoError(t, err)
+		require.NoError(t, c.Commit(ctx))
+		require.Equal(t, "confirmado", val(other))
+		require.Error(t, c.Commit(ctx), "commit sin transacción")
+		require.NoError(t, c.Rollback(ctx), "rollback sin transacción es inocuo")
+
+		// Una transacción olvidada se revierte al liberar la conexión.
+		third, err := p.Acquire(ctx)
+		require.NoError(t, err)
+		require.NoError(t, third.Begin(ctx))
+		_, err = third.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "olvidado", id)
+		require.NoError(t, err)
+		require.NoError(t, third.Release())
+		require.Equal(t, "confirmado", val(other))
+	})
 }

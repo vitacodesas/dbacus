@@ -52,7 +52,19 @@ func (*Driver) Open(_ context.Context, cfg driver.ConnConfig, dial driver.DialFu
 	aux.SetMaxOpenConns(auxMaxConns)
 	aux.SetConnMaxIdleTime(time.Minute)
 
-	p := &pool{db: db, aux: aux, readOnly: cfg.Profile.ReadOnly}
+	// Misma configuración pero con CLIENT_FOUND_ROWS, solo para aplicar ediciones (ver driver.Pool.AcquireEdit).
+	emc := mc.Clone()
+	emc.ClientFoundRows = true
+	econnector, err := gomysql.NewConnector(emc)
+	if err != nil {
+		return nil, fmt.Errorf("mysql connector: %w", err)
+	}
+	edit := sql.OpenDB(econnector)
+	edit.SetMaxOpenConns(auxMaxConns)
+	edit.SetMaxIdleConns(0) // efímera: no se conserva abierta
+	edit.SetConnMaxIdleTime(time.Second)
+
+	p := &pool{db: db, aux: aux, edit: edit, readOnly: cfg.Profile.ReadOnly}
 	p.schema = newSchemaReader(db)
 	return p, nil
 }

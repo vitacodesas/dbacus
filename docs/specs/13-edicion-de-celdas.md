@@ -62,8 +62,8 @@ El front envía texto; Go convierte según el tipo de columna y rechaza antes de
 
 ## Aplicar
 1. Comprobar de nuevo perfil no solo lectura (el guardia de `QueryService` no cubre este camino: se hace explícito en `Apply`), sesión viva y resultado en memoria.
-2. Conexión efímera (D3) → `START TRANSACTION`.
-3. Por fila, **una** sentencia: ``UPDATE `db`.`t` SET `c1`=?, `c2`=? WHERE `pk`=? AND `c1` <=> ? AND `c2` <=> ?`` — los `<=>` con el valor original dan control optimista (null-safe). Con `clientFoundRows` activo, `affected=1` significa «la fila existe y estaba como la vimos».
+2. Conexión efímera (D3), obtenida con `Pool.AcquireEdit` → `Begin`. Es una conexión aparte con `CLIENT_FOUND_ROWS`: **hallazgo de T7.2**: sin esa opción MySQL cuenta 0 filas afectadas cuando la fila existe pero el valor queda igual, lo que daría falsos conflictos; no se activa en las conexiones normales para no cambiar el recuento de «filas afectadas» de las sentencias del usuario.
+3. Por fila, **una** sentencia: ``UPDATE `db`.`t` SET `c1`=?, `c2`=? WHERE `pk`=? AND `c1` <=> ? AND `c2` <=> ?`` — los `<=>` con el valor original dan control optimista (null-safe). Con `CLIENT_FOUND_ROWS`, `affected=1` significa «la fila existe y estaba como la vimos».
 4. Si alguna sentencia afecta 0 filas → `ROLLBACK` y `Conflict{Row, Reason}`; si falla el servidor → `ROLLBACK` y `AppError` con la fila. Si todo va bien → `COMMIT`.
 5. Tras el commit, Go relee las filas tocadas por clave (misma conversión a `Cell`), reemplaza esas filas del buffer (copia al escribir bajo el mutex del manager), vacía el conjunto de cambios y emite `edit:applied`.
 6. Cada sentencia se registra en el historial (spec 07) con su SQL de revisión; el SQL con valores **no** va a logs (regla 5).

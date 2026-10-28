@@ -84,3 +84,6 @@ func List() []Driver
 - `Kill`: `KILL QUERY <thread_id>` desde `Pool` (conexión auxiliar). Funciona también en MariaDB.
 - Compatibilidad objetivo: MySQL 5.7, 8.0, 8.4 y MariaDB 10.6+.
 - Streaming real: `rows.Next()` sin `ReadAll`; `MaxAllowedPacket` respetado.
+
+## Escritura parametrizada (T7.2, spec 13)
+`Pool.AcquireEdit(ctx)` entrega una conexión efímera con `CLIENT_FOUND_ROWS`, y `Conn` añade `Exec(ctx, stmt, args...) (rowsAffected, error)` (parámetros del driver, nunca interpolados), `Begin`, `Commit` y `Rollback` (idempotente sin transacción; `Release` revierte una transacción olvidada). Solo la edición de celdas los usa; el SQL del usuario sigue por `Run`. Verificado en MySQL 8.0/8.4 y MariaDB 10.11: `BIGINT UNSIGNED` máximo, `DECIMAL`, `DATETIME(6)`, bytes, emojis, NULL con `<=>`, intento de inyección guardado literalmente, commit/rollback y aislamiento entre conexiones.

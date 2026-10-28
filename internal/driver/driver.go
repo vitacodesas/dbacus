@@ -45,6 +45,10 @@ type Pool interface {
 	ServerVersion(ctx context.Context) (string, error)
 	// Acquire entrega una conexión dedicada (una por pestaña, ADR-004).
 	Acquire(ctx context.Context) (Conn, error)
+	// AcquireEdit entrega una conexión efímera para aplicar ediciones de celdas (spec 13): cuenta como «afectadas» las
+	// filas encontradas aunque el valor no cambie (CLIENT_FOUND_ROWS), que es lo que necesita el control optimista.
+	// No se usa para el SQL del usuario, cuyo recuento de filas afectadas es el normal. Debe liberarse con Release.
+	AcquireEdit(ctx context.Context) (Conn, error)
 	Schema() SchemaReader
 	Close() error
 }
@@ -55,6 +59,14 @@ type Conn interface {
 	Use(ctx context.Context, database string) error
 	// Run ejecuta UNA sentencia. El llamador debe cerrar el RunResult.
 	Run(ctx context.Context, stmt string) (RunResult, error)
+	// Exec ejecuta UNA sentencia con parámetros (nunca interpolados) y devuelve las filas encontradas por la condición
+	// (con CLIENT_FOUND_ROWS, también las que ya tenían el valor). Dentro de una transacción abierta con Begin usa esa
+	// transacción. Solo lo usa la edición de celdas (spec 13); el SQL del usuario va por Run.
+	Exec(ctx context.Context, stmt string, args ...any) (rowsAffected int64, err error)
+	// Begin/Commit/Rollback gestionan una transacción en esta conexión. Release la revierte si quedó abierta.
+	Begin(ctx context.Context) error
+	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
 	// Kill aborta la consulta en curso SIN cerrar la conexión (conserva variables de sesión, ADR-004).
 	// Usa un canal aparte del pool para no bloquearse si el pool está agotado.
 	Kill(ctx context.Context) error
