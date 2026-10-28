@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/pem"
 	"errors"
@@ -187,6 +188,7 @@ func TestMapError(t *testing.T) {
 		{"sin tls", gomysql.ErrNoTLS, apperr.TLSError},
 		{"x509", x509.UnknownAuthorityError{}, apperr.TLSError},
 		{"bad conn", driver.ErrBadConn, apperr.SessionClosed},
+		{"conexión ya cerrada por database/sql", sql.ErrConnDone, apperr.SessionClosed},
 		{"eof", io.EOF, apperr.SessionClosed},
 		{"dns", &net.DNSError{Err: "no such host", Name: "x"}, apperr.NetworkUnreachable},
 		{"refused", &net.OpError{Op: "dial", Err: errors.New("connection refused")}, apperr.NetworkUnreachable},

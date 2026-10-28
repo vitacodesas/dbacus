@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -54,7 +55,7 @@ func mapError(err error) error {
 		return apperr.Wrap(apperr.TLSError, "El servidor no soporta TLS", err)
 	case isTLSError(err):
 		return apperr.Wrap(apperr.TLSError, "Falló la negociación TLS", err)
-	case errors.Is(err, driver.ErrBadConn), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, gomysql.ErrInvalidConn):
+	case errors.Is(err, driver.ErrBadConn), errors.Is(err, sql.ErrConnDone), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, gomysql.ErrInvalidConn):
 		return apperr.Wrap(apperr.SessionClosed, "La conexión con el servidor se perdió", err).AsRetryable()
 	}
 

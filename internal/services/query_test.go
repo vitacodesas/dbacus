@@ -745,3 +745,78 @@ func TestDatabaseIsSelectedAgainAfterReconnect(t *testing.T) {
 	require.Equal(t, "identity", d.Database)
 	require.Equal(t, "identity", e.drv.Pools[1].Conns[0].UsedDB.Load(), "la conexión nueva recibió su USE")
 }
+
+// El usuario detuvo una consulta que no respondió al KILL: tras la cancelación a la fuerza el driver cierra la conexión de la
+// pestaña. La siguiente ejecución no debe fallar con «connection is already closed»: se abre otra conexión y se reintenta.
+func TestDeadTabConnectionIsReplacedAndTheQueryRetried(t *testing.T) {
+	e := newQueryEnv(t)
+	calls := 0
+	e.drv.OnRun = func(_ context.Context, stmt string) (driver.RunResult, error) {
+		calls++
+		if calls == 1 {
+			return nil, apperr.New(apperr.SessionClosed, "La conexión con el servidor se perdió")
+		}
+		return fake.Rows([]string{"n"}, []any{int64(1)}), nil
+	}
+	qid := e.execute(t, "tab1", "SELECT 1", func(r *ExecuteRequest) { r.Database = "shop" })
+	done, failed := e.terminal(t, qid)
+	require.Nil(t, failed, "el usuario no ve el fallo de la conexión muerta")
+	require.EqualValues(t, 1, done.Results[0].RowCount)
+	require.Equal(t, "shop", done.Database)
+
+	conns := e.drv.Pools[0].Conns
+	require.Len(t, conns, 2, "se abrió una conexión nueva para la pestaña")
+	require.True(t, conns[0].Released.Load(), "la muerta se descartó")
+	require.False(t, conns[1].Released.Load())
+	require.Equal(t, "shop", conns[1].UsedDB.Load(), "la base elegida se volvió a seleccionar en la conexión nueva")
+
+	h := <-e.history
+	require.True(t, h.OK, "el historial solo registra el resultado final")
+	select {
+	case extra := <-e.history:
+		t.Fatalf("entrada de historial de más: %+v", extra)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestConnectionLostTwiceIsReportedAndNotRetriedForever(t *testing.T) {
+	e := newQueryEnv(t)
+	calls := 0
+	e.drv.OnRun = func(context.Context, string) (driver.RunResult, error) {
+		calls++
+		return nil, apperr.New(apperr.SessionClosed, "La conexión con el servidor se perdió")
+	}
+	qid := e.execute(t, "tab1", "SELECT 1")
+	_, failed := e.terminal(t, qid)
+	require.NotNil(t, failed)
+	require.Equal(t, apperr.SessionClosed, failed.Error.Code)
+	require.Equal(t, 2, calls, "un único reintento")
+	h := <-e.history
+	require.False(t, h.OK)
+}
+
+func TestForcedCancelDropsTheDeadConnectionSoTheNextRunWorks(t *testing.T) {
+	e := newQueryEnv(t)
+	started := make(chan struct{})
+	var once sync.Once
+	e.drv.OnRun = func(ctx context.Context, stmt string) (driver.RunResult, error) {
+		if strings.Contains(stmt, "SLEEP") {
+			once.Do(func() { close(started) })
+			<-ctx.Done() // el servidor no responde al KILL: solo la cancelación del contexto la corta
+			return nil, ctx.Err()
+		}
+		return fake.Rows([]string{"n"}, []any{int64(1)}), nil
+	}
+	first := e.execute(t, "tab1", "SELECT SLEEP(60)")
+	<-started
+	require.NoError(t, e.q.Cancel(first))
+	_, failed := e.terminal(t, first)
+	require.NotNil(t, failed)
+	require.Equal(t, apperr.QueryCanceled, failed.Error.Code)
+
+	second := e.execute(t, "tab1", "SELECT 1")
+	done, failed := e.terminal(t, second)
+	require.Nil(t, failed)
+	require.EqualValues(t, 1, done.Results[0].RowCount)
+	require.Len(t, e.drv.Pools[0].Conns, 2, "la conexión cancelada a la fuerza no se reutilizó")
+}

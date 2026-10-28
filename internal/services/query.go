@@ -291,38 +291,69 @@ func (s *QueryService) execute(ctx context.Context, ar *activeRun, sess *session
 			ev.Start, ev.End = st.Start, st.End
 		}
 		s.emit("query:error", ev)
+		// Si el contexto se canceló a la fuerza (el servidor no respondió al KILL), el driver cierra la conexión: se descarta
+		// para que la siguiente ejecución de la pestaña abra una nueva en vez de reutilizar una muerta.
+		if ctx.Err() != nil {
+			_ = sess.CloseTab(ar.tabID)
+		}
 	}
 
-	conn, err := sess.AcquireConn(ctx, ar.tabID)
+	// prepare adquiere la conexión de la pestaña y deja puesta la base elegida. Si la conexión cacheada murió (p. ej. tras
+	// cancelar a la fuerza una consulta que no respondió al KILL, o por un corte de red), se descarta y se pide otra una vez.
+	prepare := func(retry bool) (driver.Conn, string, error) {
+		conn, err := sess.AcquireConn(ctx, ar.tabID)
+		if err != nil {
+			return nil, "", err
+		}
+		ar.setConn(conn)
+		s.mu.Lock()
+		prev, known := s.tabDB[ar.tabID]
+		s.mu.Unlock()
+		// La base recordada solo vale para la conexión del servidor en la que se hizo el USE: tras reconectar la pestaña
+		// recibe otra conexión (otra sesión y otro ID) que arranca con la base por defecto del perfil.
+		curDB := sess.CurrentDatabase
+		if known && prev.sessionID == sess.ID && prev.connID == conn.ID() {
+			curDB = prev.db
+		}
+		if req.Database != "" && req.Database != curDB {
+			if err := conn.Use(ctx, req.Database); err != nil {
+				if retry && connLost(err) {
+					_ = sess.CloseTab(ar.tabID)
+					return nil, "", errRetry
+				}
+				return nil, "", err
+			}
+			curDB = req.Database
+		}
+		s.setTabDB(ar.tabID, sess.ID, conn.ID(), curDB)
+		return conn, curDB, nil
+	}
+	conn, curDB, err := prepare(true)
+	if errors.Is(err, errRetry) {
+		conn, curDB, err = prepare(false)
+	}
 	if err != nil {
 		fail(-1, err, nil)
 		return
 	}
-	ar.setConn(conn)
-
-	s.mu.Lock()
-	prev, known := s.tabDB[ar.tabID]
-	s.mu.Unlock()
-	// La base recordada solo vale para la conexión del servidor en la que se hizo el USE: tras reconectar la pestaña
-	// recibe otra conexión (otra sesión y otro ID) que arranca con la base por defecto del perfil.
-	curDB := sess.CurrentDatabase
-	if known && prev.sessionID == sess.ID && prev.connID == conn.ID() {
-		curDB = prev.db
-	}
-	if req.Database != "" && req.Database != curDB {
-		if err := conn.Use(ctx, req.Database); err != nil {
-			fail(-1, err, nil)
-			return
-		}
-		curDB = req.Database
-	}
-	s.setTabDB(ar.tabID, sess.ID, conn.ID(), curDB)
 
 	var all []StatementResult
-	for i := range stmts {
+	retried := false
+	for i := 0; i < len(stmts); i++ {
 		st := &stmts[i]
-		res, err := s.runStatement(ctx, ar, conn, sess, run, req, st, i, maxRows, curDB)
+		res, err := s.runStatement(ctx, ar, conn, sess, run, req, st, i, maxRows, curDB, !retried && i == 0)
 		if err != nil {
+			if !retried && i == 0 && connLost(err) && ctx.Err() == nil {
+				retried = true
+				slog.Info("la conexión de la pestaña estaba cerrada; se abre otra", "tab", ar.tabID)
+				_ = sess.CloseTab(ar.tabID)
+				if conn, curDB, err = prepare(false); err != nil {
+					fail(-1, err, nil)
+					return
+				}
+				i--
+				continue
+			}
 			fail(i, err, st)
 			return
 		}
@@ -342,8 +373,16 @@ func (s *QueryService) execute(ctx context.Context, ar *activeRun, sess *session
 	s.emit("query:done", QueryDone{QueryID: ar.queryID, Results: all, ElapsedMs: time.Since(started).Milliseconds(), Database: curDB})
 }
 
+// errRetry indica que la conexión de la pestaña estaba muerta y se descartó: hay que pedir otra.
+var errRetry = errors.New("conexión descartada")
+
+// connLost dice si el error significa que la conexión ya no sirve (cerrada, cortada), no que la sentencia falló.
+func connLost(err error) bool { return apperr.From(err).Code == apperr.SessionClosed }
+
+// runStatement ejecuta una sentencia. Con allowRetry, un fallo por conexión perdida no se registra en el historial: el
+// llamador volverá a intentarlo con otra conexión y lo que consta es el resultado final.
 func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn driver.Conn, sess *session.Session, run *results.Run,
-	req ExecuteRequest, st *sqlsplit.Statement, idx, maxRows int, db string) (StatementResult, error) {
+	req ExecuteRequest, st *sqlsplit.Statement, idx, maxRows int, db string, allowRetry bool) (StatementResult, error) {
 
 	text, applied := st.Text, 0
 	if req.AutoLimit > 0 {
@@ -371,7 +410,9 @@ func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn dri
 
 	res, err := conn.Run(ctx, text)
 	if err != nil {
-		record(err)
+		if !(allowRetry && connLost(err)) {
+			record(err)
+		}
 		return out, err
 	}
 	defer res.Close()
