@@ -2,6 +2,7 @@
 import { useUiStore } from "../../stores/ui";
 import BaseSplitter from "../ui/BaseSplitter.vue";
 import BaseToast from "../ui/BaseToast.vue";
+import SettingsDialog from "../settings/SettingsDialog.vue";
 import ConnectDialogs from "../connections/ConnectDialogs.vue";
 import ConnectionFormDialog from "../connections/ConnectionFormDialog.vue";
 import DeleteConnectionDialog from "../connections/DeleteConnectionDialog.vue";
@@ -33,6 +34,7 @@ const ui = useUiStore();
     <ConnectionFormDialog />
     <DeleteConnectionDialog />
     <ConnectDialogs />
+    <SettingsDialog />
     <BaseToast />
   </div>
 </template>

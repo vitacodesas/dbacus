@@ -4,6 +4,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# En macOS, sin esto cada binario de test enlaza con decenas de avisos «built for newer macOS» (el build de Wails ya lo fija).
+if [[ "$(uname)" == "Darwin" ]]; then
+  export MACOSX_DEPLOYMENT_TARGET=12.0 CGO_CFLAGS=-mmacosx-version-min=12.0 CGO_LDFLAGS=-mmacosx-version-min=12.0
+fi
+
 echo "› bindings"
 wails3 generate bindings -clean=true -ts -i
 

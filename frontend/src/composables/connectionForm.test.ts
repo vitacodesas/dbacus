@@ -79,6 +79,9 @@ describe("conversión", () => {
     expect(f.noHistory).toBe(false);
     expect(toProfile({ ...f, noHistory: true })).toMatchObject({ noHistory: true });
     expect(formFromProfile({ ...p, noHistory: true } as never).noHistory).toBe(true);
+    expect(f.readOnly).toBe(false);
+    expect(toProfile({ ...f, readOnly: true })).toMatchObject({ readOnly: true });
+    expect(formFromProfile({ ...p, readOnly: true } as never).readOnly).toBe(true);
   });
 });
 

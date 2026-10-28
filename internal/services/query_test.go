@@ -53,13 +53,16 @@ type namedEvent struct {
 	data any
 }
 
-func newQueryEnv(t *testing.T) *queryEnv {
+func newQueryEnv(t *testing.T, profileMut ...func(*model.ConnectionProfile)) *queryEnv {
 	t.Helper()
 	e := newEnv(t)
 	sc := &fake.Schema{}
 	e.drv.SchemaReader = sc
 	prof := e.profile("Q")
 	prof.Database = "app"
+	for _, m := range profileMut {
+		m(&prof)
+	}
 	p, err := e.svc.Save(context.Background(), prof, ConnectionSecrets{})
 	require.NoError(t, err)
 	info, err := e.svc.Connect(context.Background(), p.ID, nil)
@@ -651,4 +654,33 @@ func TestRowsAsInsert(t *testing.T) {
 	require.Equal(t, "rows", detail(t, err))
 	_, err = e.q.RowsAsInsert("nada", 0, 0, 5, "t")
 	require.Equal(t, apperr.ResultExpired, code(t, err))
+}
+
+func TestReadOnlyProfileRejectsWritesBeforeSending(t *testing.T) {
+	e := newQueryEnv(t, func(p *model.ConnectionProfile) { p.ReadOnly = true })
+	var sent []string
+	e.drv.OnRun = func(_ context.Context, stmt string) (driver.RunResult, error) {
+		sent = append(sent, stmt)
+		return &fake.Result{}, nil
+	}
+
+	for _, sql := range []string{"DROP TABLE t", "SELECT 1; DELETE FROM t", "SELECT * FROM t INTO OUTFILE '/tmp/x'", "SET SESSION TRANSACTION READ WRITE"} {
+		_, err := e.q.Execute(context.Background(), ExecuteRequest{SessionID: e.sid, TabID: "ro", SQL: sql})
+		ae := apperr.From(err)
+		require.Equal(t, apperr.QueryFailed, ae.Code, sql)
+		require.Equal(t, "readonly", ae.Detail, sql)
+	}
+	require.Empty(t, sent, "nada llegó al servidor: ni siquiera la sentencia de lectura de un script mixto")
+
+	// Lo de lectura sí corre.
+	e.execute(t, "ro", "SELECT 1")
+	e.next(t, "query:done")
+	require.Equal(t, []string{"SELECT 1"}, sent)
+}
+
+func TestReadWriteProfileIsUnchanged(t *testing.T) {
+	e := newQueryEnv(t)
+	e.drv.OnRun = func(context.Context, string) (driver.RunResult, error) { return &fake.Result{}, nil }
+	e.execute(t, "rw", "DROP TABLE t")
+	e.next(t, "query:done")
 }

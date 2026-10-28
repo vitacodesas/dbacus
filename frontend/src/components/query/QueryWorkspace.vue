@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef, watch } from "vue";
+import { computed, defineAsyncComponent, ref, useTemplateRef, watch } from "vue";
 import { SquareTerminal } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { errorMarker } from "../../composables/queryMarkers";
@@ -14,7 +14,10 @@ import BaseSplitter from "../ui/BaseSplitter.vue";
 import QueryTabsBar from "./QueryTabsBar.vue";
 import QueryToolbar from "./QueryToolbar.vue";
 import ResultPane from "./ResultPane.vue";
-import SqlEditor from "./SqlEditor.vue";
+import type SqlEditorType from "./SqlEditor.vue";
+
+// Monaco pesa ~3,8 MB: se carga al abrir la primera pestaña de consulta, no al arrancar la app.
+const SqlEditor = defineAsyncComponent(() => import("./SqlEditor.vue"));
 
 const { t } = useI18n();
 const tabs = useQueryTabsStore();
@@ -24,7 +27,7 @@ const ui = useUiStore();
 const { newQuery, runner } = useQueryActions();
 
 const active = computed(() => tabs.active);
-const editor = useTemplateRef<InstanceType<typeof SqlEditor>>("editor");
+const editor = useTemplateRef<InstanceType<typeof SqlEditorType>>("editor");
 const session = computed(() => (active.value ? sessions.sessionFor(active.value.profileId) : null));
 const database = computed(() => active.value?.database || session.value?.currentDatabase || "");
 

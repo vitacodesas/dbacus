@@ -12,7 +12,9 @@ const api = vi.hoisted(() => ({
 vi.mock("../../api/queries", () => api);
 vi.mock("../../api/connections", () => ({ ...api, noSecrets: () => ({}) }));
 // Monaco necesita un navegador real: se sustituye el editor por un stub con la misma interfaz.
+// QueryWorkspace lo carga con defineAsyncComponent: __esModule le indica que debe usar `default`.
 vi.mock("./SqlEditor.vue", () => ({
+  __esModule: true,
   default: defineComponent({
     props: { tabId: String, modelValue: String, sessionId: String, database: String, marker: Object },
     emits: ["update:modelValue", "run", "runSelection", "format"],

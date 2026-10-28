@@ -7,13 +7,15 @@ import * as HistoryService from "./historyservice.js";
 import * as PingService from "./pingservice.js";
 import * as QueryService from "./queryservice.js";
 import * as SchemaService from "./schemaservice.js";
+import * as SettingsService from "./settingsservice.js";
 export {
     ConnectionService,
     ExportService,
     HistoryService,
     PingService,
     QueryService,
-    SchemaService
+    SchemaService,
+    SettingsService
 };
 
 export type {

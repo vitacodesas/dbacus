@@ -57,10 +57,12 @@ Alcance: goroutine por run, eventos, throttling, `KILL QUERY`, LIMIT automático
 **T5.2 ✅ · ExportService CSV/JSON + diálogo** — Dep: T4.2 · Specs: 07 · DoD: 1 M filas con memoria acotada; cancelación.
 
 ## Épica 6 — Cierre
-**T6.1 · Ajustes (SettingsService + diálogo)** — Dep: T0.3, T0.5 · límites (MaxRows, memoria), tema, idioma.
-**T6.2 · E2E y rendimiento** — Dep: Épicas 2–5 · Specs: 11 · DoD: suite Playwright (mock API) + guion de smoke manual en app real; reporte de benchmarks.
-**T6.3 · Empaquetado y CI multiplataforma** — Dep: T6.2 · DoD: artefactos macOS/Win/Linux en CI.
-**T6.4 · Auditoría de seguridad** — Dep: T6.2 · Specs: 10 · DoD: criterios del spec 10 verificados, `govulncheck`/`npm audit` limpios.
+**T6.1 · Ajustes (SettingsService + diálogo)** ✅ — Dep: T0.3, T0.5 · límites (MaxRows, memoria), tema, idioma.
+**T6.2 · E2E y rendimiento** ✅ — Dep: Épicas 2–5 · Specs: 11 · DoD: suite Playwright (mock API) + guion de smoke manual en app real; reporte de benchmarks.
+**T6.3 · Empaquetado y CI multiplataforma** ✅ (parcial: ver notas) — Dep: T6.2 · DoD: artefactos macOS/Win/Linux en CI.
+> Notas T6.3: `.github/workflows/ci.yml` compila en los 3 SO, sube artefactos (`.app` zip en macOS, `.exe` en Windows, `tar.gz` en Linux), y añade jobs `integration` (MySQL/MariaDB reales) y `security` (`govulncheck`, `npm audit`). **Solo el empaquetado macOS está verificado** (`wails3 package` → `bin/tabularis-clon.app` de 19 MB, firma ad-hoc válida, sin avisos del enlazador). Los pasos de Windows/Linux y el workflow completo **no se han ejecutado** (el repo no tiene remoto). Sin instaladores (NSIS/AppImage/deb) ni firma/notarización: requieren certificados y herramientas que no hay aquí. Monaco ahora es un chunk aparte que carga al abrir una consulta (el chunk principal pasó de 3,8 MB a 458 kB).
+**T6.4 · Auditoría de seguridad** ✅ — Dep: T6.2 · Specs: 10 · DoD: criterios del spec 10 verificados, `govulncheck`/`npm audit` limpios.
+> Notas T6.4: informe en `docs/specs/10-seguridad.md` («Auditoría»). Hallazgos corregidos: modo solo lectura sin implementar, CSP ausente y 17 vulnerabilidades de la stdlib (toolchain fijado a go1.26.10). Pendiente sin solución upstream: `GO-2026-5932` (x/crypto, no alcanzable).
 
 ## Grafo resumido
 T0.1 → {T0.2, T0.3, T0.4, T0.5} → T1.x → T2.x (conexiones) → T3.x → T4.x → T5.x → T6.x

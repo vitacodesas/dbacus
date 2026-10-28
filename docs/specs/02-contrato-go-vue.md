@@ -23,6 +23,7 @@ type ConnectionProfile struct {
   TLS  TLSConfig
   SSH  SSHConfig
   Params map[string]string      // opciones extra del DSN (charset, timeout, etc.)
+  ReadOnly bool                 // solo lectura (spec 10): sesión READ ONLY y Go rechaza lo que no sea lectura (`QUERY_FAILED`, Detail `readonly`)
   SavePassword bool             // si false, se pide al conectar (aplica a todos los secretos del perfil)
   HasPassword, HasSshPassword, HasSshPassphrase bool // solo lectura: los fija el servidor; evita leer el llavero al listar
   CreatedAt, UpdatedAt time.Time
@@ -103,7 +104,7 @@ Métodos:
 - `Explain(...)`: fuera de etapa 1.
 
 ## SettingsService
-`Get()` → `Settings{Theme, Locale, MaxRows, MaxResultMemoryMiB, HistoryRetention, ShowSystemDatabases, SidebarWidth, SplitRatio}`; `Set(Settings)`. Cambios se validan en Go y se persisten en `settings`.
+`Get()` → `Settings{Theme, Locale, MaxRows, MaxResultMemoryMiB, HistoryRetention, ShowSystemDatabases, SidebarWidth, SplitRatio}`; `Set(Settings)` → `Settings` (lo guardado). Cambios se validan en Go (`VALIDATION` con `Detail` = nombre del campo) y se persisten en `settings`. `QueryService` y el historial releen el store en cada uso: los límites aplican a la siguiente consulta sin reiniciar.
 
 Reglas de serialización de celdas: enteros > 2^53 → `T:"bigint"` con `V` string; `[]byte` no UTF-8 → `T:"bytes"` con hex truncado; `DATETIME/TIMESTAMP` → string ISO sin zona salvo `TIMESTAMP`; `JSON` → string; textos > 64 KiB se truncan (`Trunc:true`) con opción de "ver completo" vía `GetCell(queryID, stmtIndex, row, col)`.
 

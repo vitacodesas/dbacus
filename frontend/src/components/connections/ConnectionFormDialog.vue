@@ -177,6 +177,8 @@ const err = (field: string) => errors.value[field];
             />
             <BaseCheckbox v-model="form.savePassword" class="col-span-2" :label="t('form.fields.savePassword')" />
             <BaseCheckbox v-model="form.noHistory" class="col-span-2" :label="t('form.fields.noHistory')" />
+            <BaseCheckbox v-model="form.readOnly" class="col-span-2" :label="t('form.fields.readOnly')" />
+            <p v-if="form.readOnly" class="col-span-2 -mt-2 text-xs text-muted">{{ t("form.fields.readOnlyHint") }}</p>
             <BaseInput v-model="form.database" class="col-span-2" :label="t('form.fields.database')" :error="err('database')" mono />
             <div class="col-span-2 flex flex-col gap-1">
               <span class="text-xs font-medium text-muted">{{ t("form.fields.color") }}</span>

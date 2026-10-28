@@ -10,6 +10,7 @@ import { startEventDispatch } from "./events";
 import { useConnectionsStore } from "./stores/connections";
 import { useQueryTabsStore } from "./stores/queryTabs";
 import { useSessionsStore } from "./stores/sessions";
+import { useUiStore } from "./stores/ui";
 
 useTheme();
 useShortcuts();
@@ -21,6 +22,7 @@ onMounted(() => {
   stopEvents = startEventDispatch();
   const flow = useConnectFlow();
   useSessionsStore().reconnect = (profileId) => void flow.connect(profileId);
+  void useUiStore().load();
   void useConnectionsStore().load();
   void useSessionsStore().refresh();
   void queryTabs.restore();

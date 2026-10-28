@@ -15,6 +15,7 @@ export type {
   ColumnMeta,
   TabState,
   HistoryEntry,
+  Settings,
 } from "../../bindings/tabulariswails/internal/model";
 export type {
   ConnectionSecrets,

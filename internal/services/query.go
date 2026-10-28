@@ -205,6 +205,14 @@ func (s *QueryService) Execute(ctx context.Context, req ExecuteRequest) (Execute
 		return ExecuteResponse{}, invalid("sql", "No hay nada que ejecutar")
 	}
 
+	if sess.ReadOnly {
+		for _, st := range stmts {
+			if !sqlsplit.IsReadOnlySafe(st.Text) {
+				return ExecuteResponse{}, apperr.New(apperr.QueryFailed, "Esta conexión es de solo lectura: solo se permiten SELECT, SHOW, DESCRIBE y EXPLAIN").WithDetail("readonly")
+			}
+		}
+	}
+
 	settings, _ := s.d.Store.GetSettings(ctx)
 	if settings.MaxRows <= 0 {
 		settings = model.DefaultSettings()

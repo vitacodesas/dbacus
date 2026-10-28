@@ -22,3 +22,6 @@ Go es la fuente de verdad de datos; Pinia guarda **proyecciones** para pintar y 
 - Errores: cada acción captura `AppError` y lo deja en el store correspondiente (`lastError`) o lo manda a `ui.toasts`; nada de `console.error` como único manejo.
 - Pinia persist plugin **no** se usa; la persistencia es explícita vía Go.
 - Tests: Vitest + `@pinia/testing`, mockeando `api/`.
+
+## Ajustes (T6.1)
+`ui` carga `SettingsService.Get()` al arrancar y proyecta tema, idioma, anchos y límites. Tema, idioma, anchos de panel y «mostrar bases del sistema» se guardan solos con debounce de 500 ms **solo después de una carga correcta** (si no, el primer redimensionado pisaría lo guardado con los valores por defecto). El diálogo (`⌘/Ctrl+,` o el engranaje) edita una copia y guarda con `ui.saveSettings`: si Go devuelve `VALIDATION`, el error se pinta en el campo `Detail` y no cambia nada. `schema.showSystem` es una vista de `ui.showSystemDatabases`.

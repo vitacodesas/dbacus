@@ -13,6 +13,7 @@ export type {
     HistoryEntry,
     Index,
     SSHConfig,
+    Settings,
     TLSConfig,
     TabState,
     Table,

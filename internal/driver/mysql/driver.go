@@ -52,7 +52,7 @@ func (*Driver) Open(_ context.Context, cfg driver.ConnConfig, dial driver.DialFu
 	aux.SetMaxOpenConns(auxMaxConns)
 	aux.SetConnMaxIdleTime(time.Minute)
 
-	p := &pool{db: db, aux: aux}
+	p := &pool{db: db, aux: aux, readOnly: cfg.Profile.ReadOnly}
 	p.schema = newSchemaReader(db)
 	return p, nil
 }

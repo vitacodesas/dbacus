@@ -1,7 +1,8 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import * as api from "../api/schema";
 import { asAppError } from "../api/errors";
+import { useUiStore } from "./ui";
 import { omit, omitWhere } from "../utils/record";
 import type { AppError, CompletionCatalog, Database, SchemaInvalidated, Table, TableDetail } from "../types";
 
@@ -21,7 +22,8 @@ export const useSchemaStore = defineStore("schema", () => {
   const loading = ref<Record<string, true>>({});
   const errors = ref<Record<string, AppError>>({});
   const filter = ref("");
-  const showSystem = ref(false);
+  // Es un ajuste de usuario (SettingsService): vive en el store ui para persistirse junto al resto.
+  const showSystem = computed({ get: () => useUiStore().showSystemDatabases, set: (v: boolean) => (useUiStore().showSystemDatabases = v) });
 
   const keyDbs = (s: string) => k(s, "dbs");
   const keyTables = (s: string, db: string) => k(s, "tables", db);

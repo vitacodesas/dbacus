@@ -55,8 +55,10 @@ func NewManager(opts Options) *Manager {
 }
 
 type Session struct {
-	ID              string
-	ProfileID       string
+	ID        string
+	ProfileID string
+	// ReadOnly: el perfil es de solo lectura; QueryService rechaza antes de enviar lo que no sea lectura (spec 10).
+	ReadOnly        bool
 	ServerVersion   string
 	CurrentDatabase string
 	Pool            driver.Pool
@@ -132,7 +134,7 @@ func (m *Manager) Open(ctx context.Context, req OpenRequest) (*Session, error) {
 	sctx, scancel := context.WithCancel(context.Background())
 	s := &Session{
 		ctx: sctx, cancel: scancel, Schema: schemacache.New(schemacache.DefaultTTL),
-		ID: uuid.NewString(), ProfileID: req.Profile.ID, ServerVersion: version, CurrentDatabase: req.Profile.Database,
+		ID: uuid.NewString(), ProfileID: req.Profile.ID, ReadOnly: req.Profile.ReadOnly, ServerVersion: version, CurrentDatabase: req.Profile.Database,
 		Pool: pool, Driver: drv, m: m, tunnel: tn, tabs: map[string]*tabEntry{},
 	}
 	m.mu.Lock()

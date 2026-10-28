@@ -14,6 +14,9 @@ export function useShortcuts() {
     if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
       e.preventDefault();
       ui.toggleSidebar();
+    } else if (mod && !e.shiftKey && !e.altKey && e.key === ",") {
+      e.preventDefault();
+      ui.settingsOpen = true;
     } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "t") {
       e.preventDefault();
       actions.newQuery();

@@ -58,6 +58,11 @@ export interface ConnectionProfile {
     "noHistory": boolean;
 
     /**
+     * ReadOnly abre las conexiones con SET SESSION TRANSACTION READ ONLY y rechaza en Go lo que no sea lectura (spec 10).
+     */
+    "readOnly": boolean;
+
+    /**
      * Estado de los secretos en el llavero; los fija el servicio (el cliente no puede escribirlos).
      */
     "hasPassword": boolean;
@@ -116,6 +121,20 @@ export interface SSHConfig {
      */
     "authMethod": string;
     "keyPath": string;
+}
+
+export interface Settings {
+    /**
+     * light|dark|system
+     */
+    "theme": string;
+    "locale": string;
+    "maxRows": number;
+    "maxResultMemoryMiB": number;
+    "historyRetention": number;
+    "showSystemDatabases": boolean;
+    "sidebarWidth": number;
+    "splitRatio": number;
 }
 
 export interface TLSConfig {

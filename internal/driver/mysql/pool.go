@@ -12,9 +12,11 @@ import (
 )
 
 type pool struct {
-	db     *sql.DB
-	aux    *sql.DB // solo KILL QUERY
-	schema driver.SchemaReader
+	db  *sql.DB
+	aux *sql.DB // solo KILL QUERY
+	// readOnly: cada conexión dedicada arranca en una transacción de solo lectura (spec 10).
+	readOnly bool
+	schema   driver.SchemaReader
 }
 
 func (p *pool) Ping(ctx context.Context) error { return mapError(p.db.PingContext(ctx)) }
@@ -35,6 +37,13 @@ func (p *pool) Acquire(ctx context.Context) (driver.Conn, error) {
 	c, err := p.db.Conn(ctx)
 	if err != nil {
 		return nil, mapError(err)
+	}
+	// Falla cerrado: si el servidor no acepta el modo, la conexión no se entrega en modo lectura-escritura.
+	if p.readOnly {
+		if _, err := c.ExecContext(ctx, "SET SESSION TRANSACTION READ ONLY"); err != nil {
+			_ = c.Close()
+			return nil, mapError(err)
+		}
 	}
 	var id uint64
 	if err := c.QueryRowContext(ctx, "SELECT CONNECTION_ID()").Scan(&id); err != nil {

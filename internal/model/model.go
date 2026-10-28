@@ -36,6 +36,8 @@ type ConnectionProfile struct {
 	SavePassword bool              `json:"savePassword"`
 	// NoHistory desactiva el historial de consultas de este perfil (spec 07). Cero = se guarda.
 	NoHistory bool `json:"noHistory"`
+	// ReadOnly abre las conexiones con SET SESSION TRANSACTION READ ONLY y rechaza en Go lo que no sea lectura (spec 10).
+	ReadOnly bool `json:"readOnly"`
 	// Estado de los secretos en el llavero; los fija el servicio (el cliente no puede escribirlos).
 	HasPassword      bool      `json:"hasPassword"`
 	HasSSHPassword   bool      `json:"hasSshPassword"`

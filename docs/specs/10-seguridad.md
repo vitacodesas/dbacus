@@ -30,6 +30,31 @@
 `go mod verify`, `govulncheck` y `npm audit` en CI; versiones pineadas (incluida Wails 3, ADR-001).
 
 ## Criterios de aceptación
-- [ ] `grep` de la contraseña de prueba en `app.db`, logs y capturas de eventos devuelve vacío (test automatizado).
-- [ ] Host key cambiada bloquea la conexión.
-- [ ] Modo solo lectura rechaza `DROP TABLE` antes de enviarla.
+- [x] `grep` de la contraseña de prueba en `app.db`, logs y capturas de eventos devuelve vacío (test automatizado: `TestSecretsNeverReachDBLogsOrEvents`; comprobado por mutación que falla si se registra el secreto).
+- [x] Host key cambiada bloquea la conexión (`TestHostKeyMismatchBlocksAndCannotBeOverwritten`, `TestConnectViaSSHHostKeyFlow`).
+- [x] Modo solo lectura rechaza `DROP TABLE` antes de enviarla (`TestReadOnlyProfileRejectsWritesBeforeSending`) y el servidor lo impide aunque algo se colara (`TestReadOnlyProfileEnforcedByServerIntegration`, MySQL 8.0/8.4 y MariaDB 10.11).
+
+## Auditoría (T6.4, 2026-10-28)
+Qué se comprobó y cómo; lo que no, queda dicho.
+
+| Punto del spec | Estado | Evidencia |
+|---|---|---|
+| Secretos fuera de SQLite, logs, eventos y DTOs | ✅ | `TestSecretsNeverReachDBLogsOrEvents` + `TestSaveCreateStoresSecretOutsideSQLite`; los DTOs solo exponen `hasPassword` |
+| Redacción en logs (`password\|passphrase\|secret\|token`), SQL truncado a 200 | ✅ | `internal/logging`; ningún `slog` de `internal/` registra SQL (solo mensajes de `KILL`) |
+| Host key SSH estricta, sin `InsecureIgnoreHostKey` | ✅ | tests de `tunnel` y `TestNoInsecureHostKeyCallbackInProduction` (falla si aparece en código no-test) |
+| TLS mínimo 1.2, modos `verify-ca`/`verify-full` | ✅ | `driver/mysql/config.go` y sus tests |
+| Sin `multiStatements`, una sentencia por envío | ✅ | `mysql_test.go` (también rechaza el parámetro reservado) |
+| Identificadores escapados por el driver | ✅ | `QuoteIdent`/`QuoteString`; Vue no arma SQL |
+| **Modo solo lectura** | ✅ (**estaba sin implementar**: el spec lo pedía y ninguna tarea lo recogió) | Perfil `ReadOnly`: `SET SESSION TRANSACTION READ ONLY` al abrir cada conexión dedicada (falla cerrado) + `sqlsplit.IsReadOnlySafe` antes de enviar. Rechaza todo salvo SELECT/SHOW/DESCRIBE/EXPLAIN/USE/WITH/VALUES/TABLE/HELP, `INTO` de nivel superior (`OUTFILE`), `SET`, `CALL` y `START TRANSACTION` |
+| CSP estricta en el webview | ✅ | Meta en el `index.html` del **build** (no en dev, donde Vite necesita HMR): `default-src 'self'`, `script-src 'self'`, `connect-src 'self'`, `object-src 'none'`… Verificada con Playwright sobre el build (`security.spec.ts`: bloquea inline y orígenes externos; ningún test ve violaciones) y con el servidor Wails real en el navegador (Monaco, worker, WebSocket de eventos sin violaciones). **No** verificada en la ventana nativa de macOS/Windows/Linux |
+| Sin `v-html` ni CDN | ✅ | `grep` sin resultados; Monaco y su worker salen del bundle |
+| `go mod verify`, `npm audit` | ✅ | «all modules verified»; 0 vulnerabilidades |
+| `govulncheck` | ✅ con una excepción | Había **17 vulnerabilidades de la biblioteca estándar** alcanzables con Go 1.26.4 (`net/http`, `crypto/tls`, `crypto/x509`…); se corrigen fijando `toolchain go1.26.10` en `go.mod` (CI usa `go-version-file`). Queda `GO-2026-5932` en `golang.org/x/crypto@v0.58.0`: **sin versión corregida** y el código no la alcanza; revisar al salir un parche |
+| Validación de entradas de los servicios | ⚠️ parcial | Revisados `ConnectionService`, `HistoryService`, `SettingsService`, `ExportService`, `QueryService.Execute` (tests de validación y `NOT_FOUND`). **No** se auditó línea a línea cada método de `SchemaService` |
+| Rutas de archivo | ✅ | La ruta de exportación la elige el diálogo nativo en Go; las rutas TLS/SSH vienen del perfil y solo se leen para eso |
+
+Riesgos aceptados o abiertos:
+- `preferred` y `required` cifran pero **no verifican** el certificado (`InsecureSkipVerify`), igual que el cliente `mysql`; para verificar hay que usar `verify-ca`/`verify-full`.
+- `style-src 'unsafe-inline'` es necesario porque Monaco inyecta `<style>`.
+- El modo solo lectura no impide efectos secundarios de funciones llamadas desde un `SELECT` ni `INTO` dentro de subconsultas; la garantía real es del servidor y de los privilegios del usuario de BD. Tampoco permite `SET @x = …`.
+- El llavero real del SO solo se ha ejercido con un perfil temporal en macOS; Windows y Linux no se han probado.

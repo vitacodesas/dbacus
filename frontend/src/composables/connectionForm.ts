@@ -17,6 +17,7 @@ export interface FormState {
   database: string;
   savePassword: boolean;
   noHistory: boolean;
+  readOnly: boolean;
   password: string;
   clearPassword: boolean;
   tls: { mode: string; caPath: string; certPath: string; keyPath: string };
@@ -48,7 +49,7 @@ const paramKeyRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export function emptyForm(driver = "mysql", port = DEFAULT_PORT): FormState {
   return {
     id: "", name: "", driver, color: "", host: "127.0.0.1", port: String(port), user: "", database: "",
-    savePassword: true, noHistory: false, password: "", clearPassword: false,
+    savePassword: true, noHistory: false, readOnly: false, password: "", clearPassword: false,
     tls: { mode: "preferred", caPath: "", certPath: "", keyPath: "" },
     ssh: { enabled: false, host: "", port: "22", user: "", authMethod: "password", keyPath: "", password: "", clearPassword: false, passphrase: "", clearPassphrase: false },
     params: [],
@@ -59,7 +60,7 @@ export function emptyForm(driver = "mysql", port = DEFAULT_PORT): FormState {
 export function formFromProfile(p: ConnectionProfile): FormState {
   const f = emptyForm(p.driver, p.port || DEFAULT_PORT);
   Object.assign(f, {
-    id: p.id, name: p.name, color: p.color ?? "", host: p.host, user: p.user, database: p.database ?? "", savePassword: p.savePassword, noHistory: !!p.noHistory,
+    id: p.id, name: p.name, color: p.color ?? "", host: p.host, user: p.user, database: p.database ?? "", savePassword: p.savePassword, noHistory: !!p.noHistory, readOnly: !!p.readOnly,
   });
   f.tls = { mode: p.tls?.mode || "preferred", caPath: p.tls?.caPath ?? "", certPath: p.tls?.certPath ?? "", keyPath: p.tls?.keyPath ?? "" };
   f.ssh = {
@@ -77,7 +78,7 @@ export function toProfile(f: FormState): ConnectionProfile {
   for (const { key, value } of f.params) if (key.trim()) params[key.trim()] = value;
   return {
     id: f.id, name: f.name.trim(), driver: f.driver, host: f.host.trim(), port: Number(f.port), user: f.user.trim(), database: f.database.trim(),
-    color: f.color.trim(), tls: { ...f.tls }, params, savePassword: f.savePassword, noHistory: f.noHistory,
+    color: f.color.trim(), tls: { ...f.tls }, params, savePassword: f.savePassword, noHistory: f.noHistory, readOnly: f.readOnly,
     ssh: {
       enabled: f.ssh.enabled, host: f.ssh.host.trim(), port: Number(f.ssh.port) || 22, user: f.ssh.user.trim(),
       authMethod: f.ssh.authMethod, keyPath: f.ssh.keyPath,

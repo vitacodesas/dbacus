@@ -19,3 +19,9 @@
 
 ## Definition of Done (global)
 Compila en las 3 plataformas · lint/typecheck sin warnings nuevos · tests nuevos pasan con `-race` · spec actualizado si cambió un contrato · sin secretos en logs · criterios de aceptación del spec marcados.
+
+## Implementación (T6.2)
+- **E2E**: `frontend/e2e/*.spec.ts` (Playwright, 14 casos: conexiones, consultas y grid, esquema, historial, exportación, ajustes). `npm run test:e2e` levanta Vite con `VITE_MOCK_API=1`, que sustituye por alias `@wailsio/runtime` y los bindings de servicios por `src/mock/` (backend en memoria con los mismos nombres y DTOs; no entra en el build normal). Cada test parte de un estado limpio y recibe sus datos con `window.__MOCK_SEED__`. En local `PW_CHANNEL=chrome npm run test:e2e` usa el Chrome instalado; en CI se instala chromium.
+- **Límite conocido**: el mock puede divergir del backend real. Los contratos reales se prueban en Go (unit e integración); el mock solo valida la UI. Si cambia un DTO o evento, hay que actualizar `src/mock/services.ts` (el typecheck no lo detecta porque devuelve `any`).
+- **Rendimiento**: `scripts/bench.sh [--integration]`; cifras y alcance en `docs/benchmarks.md`. El criterio «primera ventana < 500 ms con 1 M de filas» lo exige `TestQueryPerfIntegration`.
+- **Smoke manual**: `docs/smoke-manual.md` (diálogos nativos, llavero, SSH/TLS y fluidez real del grid, que ningún test automático cubre).

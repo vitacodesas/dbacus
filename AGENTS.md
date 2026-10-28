@@ -40,13 +40,18 @@ docs/specs/                  # specs y ADRs
 4. Convenciones: Go con `gofmt`/`go vet`/`golangci-lint`; TS con `vue-tsc --noEmit` y ESLint; commits pequeños y descriptivos.
 5. Comentarios de código: solo el "por qué" no obvio. Imita el estilo del código circundante.
 
+## Seguridad y toolchain
+- **Toolchain**: `go.mod` fija `toolchain go1.26.10` (corrige vulnerabilidades de la stdlib que `govulncheck` encontró en 1.26.4); no lo bajes. Si falla un build local por la versión, deja que Go descargue el toolchain.
+- **Solo lectura**: un perfil `ReadOnly` rechaza en Go (`sqlsplit.IsReadOnlySafe`) todo lo que no sea lectura y abre las conexiones con `SET SESSION TRANSACTION READ ONLY`. Toda ruta nueva que ejecute SQL del usuario debe pasar por `QueryService.Execute` o adquirir la conexión con `Session.AcquireConn` (que ya la aplica).
+
 ## Comandos
 - Requisitos: Go ≥1.26, Node ≥24, `wails3` v3.0.0 (`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0`), Docker para integración.
 - Dev (hot reload): `wails3 dev` · Build: `wails3 build` (binario en `bin/`).
 - Bindings TS (tras cambiar servicios Go o eventos): `wails3 generate bindings -clean=true -ts -i`.
 - Go: `go vet ./... && go test -race ./...` · integración (Docker): `colima start`, luego `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock go test -tags=integration ./...`. Imágenes por defecto: mysql:8.0, mysql:8.4, mariadb:10.11 (`TABULARIS_IT_IMAGES` las cambia).
 - Front (`cd frontend`): `npm run typecheck && npm run lint && npm test`.
-- Todo junto: `scripts/smoke.sh`.
+- Todo junto: `scripts/smoke.sh`. En macOS, `go vet`/`go test` sueltos imprimen avisos `ld: warning … built for newer 'macOS'`: son inocuos; `export MACOSX_DEPLOYMENT_TARGET=12.0 CGO_CFLAGS=-mmacosx-version-min=12.0 CGO_LDFLAGS=-mmacosx-version-min=12.0` los quita (smoke.sh ya lo hace; `wails3 build` también).
+- E2E de UI (backend simulado): `cd frontend && PW_CHANNEL=chrome npm run test:e2e` (usa el Chrome instalado; sin `PW_CHANNEL`, `npx playwright install chromium` primero). Rendimiento: `scripts/bench.sh [--integration]`; smoke manual en app real: `docs/smoke-manual.md`.
 - Pruebas de UI sin ventana nativa: `wails3 task build:server DEV=true && ./bin/tabularis-clon-server` y abrir `http://localhost:8080` (no soporta diálogos nativos).
 
 ## Notas de dependencias

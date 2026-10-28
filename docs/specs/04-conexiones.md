@@ -8,7 +8,7 @@ Configurar, probar, guardar y abrir conexiones MySQL con la menor fricción posi
 - **Botón "Nueva conexión"** abre el formulario en un panel/modal grande.
 
 ## Formulario (secciones)
-1. **General**: Nombre* (único), Driver* (selector; solo MySQL activo, otros "Próximamente"), Color, Host* (default `127.0.0.1`), Puerto* (default `3306`, 1–65535), Usuario*, Contraseña (con ojo mostrar/ocultar), checkbox "Guardar contraseña en el llavero", Base de datos (opcional).
+1. **General**: Nombre* (único), Driver* (selector; solo MySQL activo, otros "Próximamente"), Color, Host* (default `127.0.0.1`), Puerto* (default `3306`, 1–65535), Usuario*, Contraseña (con ojo mostrar/ocultar), checkbox "Guardar contraseña en el llavero", checkbox "No guardar el historial" (spec 07), checkbox "Solo lectura" (spec 10; la barra de estado lo señala), Base de datos (opcional).
 2. **SSL/TLS**: Modo (`disable|preferred|required|verify-ca|verify-full`), rutas CA/Cert/Key con selector de archivo nativo (diálogo en Go).
 3. **Túnel SSH**: toggle; Host*, Puerto (22), Usuario*, Método (Contraseña | Clave privada); contraseña o ruta de clave + passphrase opcional.
 4. **Avanzado**: tabla clave/valor de `Params` (charset, `timeout`, `readTimeout`, `sql_mode` de sesión, etc.) con sugerencias.

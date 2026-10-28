@@ -11,3 +11,8 @@ build/android/overlay.json
 build/android/gen/.DS_Store
 .idea
 .vscode
+
+# Playwright
+frontend/test-results
+frontend/playwright-report
+frontend/dist-e2e

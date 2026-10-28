@@ -37,7 +37,7 @@ Escribir SQL, ejecutarlo sin bloquear la UI, ver resultados grandes con fluidez 
 Vacío ("Ejecuta una consulta"), ejecutando (spinner + cronómetro + filas recibidas), éxito, éxito-sin-filas ("0 filas"), error (panel con mensaje, código MySQL, posición), cancelado, conexión perdida.
 
 ## Criterios de aceptación
-- [ ] `SELECT * FROM t` con 1 M de filas: primera ventana visible < 500 ms; scroll fluido; memoria de la app acotada por el tope configurado.
+- [~] `SELECT * FROM t` con 1 M de filas: primera ventana visible < 500 ms; scroll fluido; memoria de la app acotada por el tope configurado. (Primera ventana 5–44 ms y memoria acotada medidas en `docs/benchmarks.md`; la fluidez del scroll en la ventana nativa sigue pendiente del smoke manual.)
 - [ ] Cancelar `SELECT SLEEP(60)` retorna control en < 1 s y el hilo desaparece de `SHOW PROCESSLIST`.
 - [ ] Script con 3 sentencias muestra 3 resultados; error en la 2ª detiene y conserva el resultado de la 1ª.
 - [ ] Dos pestañas ejecutan concurrentemente sin bloquearse ni mezclar resultados; `SET @x=1` en una no afecta a la otra.
