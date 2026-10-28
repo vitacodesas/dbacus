@@ -92,8 +92,12 @@ describe("ResultGrid", () => {
 
   describe("edición de celdas", () => {
     const editable = {
-      editable: true, reason: "", database: "app", table: "t", keyColumns: [0], pending: 0,
-      columns: [{ editable: false, reason: "key", dataType: "int", nullable: false }, { editable: true, reason: "", dataType: "varchar", nullable: true }],
+      editable: true, reason: "", database: "app", table: "t", keyColumns: [0], pending: 0, pendingInserts: 0, pendingDeletes: 0,
+      canInsert: true, insertReason: "", insertMissing: [], deleteAffects: [],
+      columns: [
+        { editable: false, reason: "key", dataType: "int", nullable: false, insertable: false, required: false },
+        { editable: true, reason: "", dataType: "varchar", nullable: true, insertable: true, required: false },
+      ],
     };
     async function setupEditable(info = editable) {
       const s = await setup(50);

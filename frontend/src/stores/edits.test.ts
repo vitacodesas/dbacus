@@ -12,8 +12,12 @@ import { useUiStore } from "./ui";
 import type { EditInfo } from "../types";
 
 const info = (over: Partial<EditInfo> = {}): EditInfo => ({
-  editable: true, reason: "", database: "app", table: "t", keyColumns: [0], pending: 0,
-  columns: [{ editable: false, reason: "key", dataType: "int", nullable: false }, { editable: true, reason: "", dataType: "varchar", nullable: true }], ...over,
+  editable: true, reason: "", database: "app", table: "t", keyColumns: [0], pending: 0, pendingInserts: 0, pendingDeletes: 0,
+  canInsert: true, insertReason: "", insertMissing: [], deleteAffects: [],
+  columns: [
+    { editable: false, reason: "key", dataType: "int", nullable: false, insertable: false, required: false },
+    { editable: true, reason: "", dataType: "varchar", nullable: true, insertable: true, required: false },
+  ], ...over,
 });
 const apiError = (message: string, code = "VALIDATION") => Object.assign(new Error(message), { cause: JSON.stringify({ code, message, detail: "cell", retryable: false }) });
 

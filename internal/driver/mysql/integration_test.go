@@ -57,6 +57,7 @@ func TestIntegration(t *testing.T) {
 			t.Run("sesión por conexión", func(t *testing.T) { testSessionIsolation(t, in) })
 			t.Run("kill conserva la conexión", func(t *testing.T) { testKill(t, in) })
 			t.Run("exec parametrizado y transacciones", func(t *testing.T) { testExecParams(t, in) })
+			t.Run("último ID autoincremental", func(t *testing.T) { testExecLastInsertID(t, in) })
 			t.Run("sintaxis", func(t *testing.T) { testSyntax(t, in) })
 			t.Run("esquema", func(t *testing.T) { testSchema(t, in) })
 		})
@@ -257,7 +258,7 @@ func testExecParams(t *testing.T, in mysqlbox.Instance) {
 	run("CREATE TABLE ex_p (id BIGINT UNSIGNED PRIMARY KEY, s VARCHAR(100) NULL, d DECIMAL(20,4) NULL, dt DATETIME(6) NULL, b BLOB NULL) DEFAULT CHARSET=utf8mb4")
 
 	t.Run("valores extremos sin pérdida", func(t *testing.T) {
-		n, err := c.Exec(ctx, "INSERT INTO ex_p VALUES (?, ?, ?, ?, ?)", uint64(math.MaxUint64), "emoji 😀 'comilla' \\ \"doble\"", "12345678901234.5678", "2024-01-02 03:04:05.123456", []byte{0, 0xff, 0x10})
+		n, _, err := c.Exec(ctx, "INSERT INTO ex_p VALUES (?, ?, ?, ?, ?)", uint64(math.MaxUint64), "emoji 😀 'comilla' \\ \"doble\"", "12345678901234.5678", "2024-01-02 03:04:05.123456", []byte{0, 0xff, 0x10})
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
 		got := one("SELECT CAST(id AS CHAR), s, CAST(d AS CHAR), CAST(dt AS CHAR), HEX(b) FROM ex_p")
@@ -266,26 +267,26 @@ func testExecParams(t *testing.T, in mysqlbox.Instance) {
 
 	t.Run("el valor nunca se interpreta como SQL", func(t *testing.T) {
 		evil := "x'; DROP TABLE ex_p; --"
-		n, err := c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", evil, uint64(math.MaxUint64))
+		n, _, err := c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", evil, uint64(math.MaxUint64))
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
 		require.Equal(t, []string{evil}, one("SELECT s FROM ex_p"))
 	})
 
 	t.Run("NULL y comparación null-safe", func(t *testing.T) {
-		n, err := c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", nil, uint64(math.MaxUint64))
+		n, _, err := c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", nil, uint64(math.MaxUint64))
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
 		require.Equal(t, []string{"<NULL>"}, one("SELECT s FROM ex_p"))
 		// `<=>` con NULL encuentra la fila; `=` no.
-		n, err = c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ? AND s <=> ?", "ya no es null", uint64(math.MaxUint64), nil)
+		n, _, err = c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ? AND s <=> ?", "ya no es null", uint64(math.MaxUint64), nil)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
 	})
 
 	t.Run("filas encontradas aunque el valor no cambie, y cero si no hay fila", func(t *testing.T) {
 		// Conexión normal: afectadas = cambiadas (lo que ve el usuario al ejecutar su propio UPDATE).
-		n, err := c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "ya no es null", uint64(math.MaxUint64))
+		n, _, err := c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "ya no es null", uint64(math.MaxUint64))
 		require.NoError(t, err)
 		require.EqualValues(t, 0, n, "sin CLIENT_FOUND_ROWS una fila encontrada pero igual cuenta 0")
 
@@ -293,16 +294,16 @@ func testExecParams(t *testing.T, in mysqlbox.Instance) {
 		ec, err := p.AcquireEdit(ctx)
 		require.NoError(t, err)
 		defer ec.Release()
-		n, err = ec.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "ya no es null", uint64(math.MaxUint64))
+		n, _, err = ec.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "ya no es null", uint64(math.MaxUint64))
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
-		n, err = ec.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "x", uint64(7))
+		n, _, err = ec.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "x", uint64(7))
 		require.NoError(t, err)
 		require.EqualValues(t, 0, n, "sin fila, cero")
 	})
 
 	t.Run("error del servidor", func(t *testing.T) {
-		_, err := c.Exec(ctx, "UPDATE no_existe SET a = ?", 1)
+		_, _, err := c.Exec(ctx, "UPDATE no_existe SET a = ?", 1)
 		require.Error(t, err)
 		var ae *apperr.AppError
 		require.ErrorAs(t, err, &ae)
@@ -323,14 +324,14 @@ func testExecParams(t *testing.T, in mysqlbox.Instance) {
 
 		require.NoError(t, c.Begin(ctx))
 		require.Error(t, c.Begin(ctx), "no se anidan")
-		_, err = c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "dentro", id)
+		_, _, err = c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "dentro", id)
 		require.NoError(t, err)
 		require.Equal(t, "ya no es null", val(other), "otra conexión no ve lo no confirmado")
 		require.NoError(t, c.Rollback(ctx))
 		require.Equal(t, "ya no es null", val(c))
 
 		require.NoError(t, c.Begin(ctx))
-		_, err = c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "confirmado", id)
+		_, _, err = c.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "confirmado", id)
 		require.NoError(t, err)
 		require.NoError(t, c.Commit(ctx))
 		require.Equal(t, "confirmado", val(other))
@@ -341,9 +342,39 @@ func testExecParams(t *testing.T, in mysqlbox.Instance) {
 		third, err := p.Acquire(ctx)
 		require.NoError(t, err)
 		require.NoError(t, third.Begin(ctx))
-		_, err = third.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "olvidado", id)
+		_, _, err = third.Exec(ctx, "UPDATE ex_p SET s = ? WHERE id = ?", "olvidado", id)
 		require.NoError(t, err)
 		require.NoError(t, third.Release())
 		require.Equal(t, "confirmado", val(other))
 	})
+}
+
+// testExecLastInsertID: Exec devuelve el ID autoincremental generado, que la edición de filas usa para releer la fila nueva.
+func testExecLastInsertID(t *testing.T, in mysqlbox.Instance) {
+	ctx := context.Background()
+	p := openPool(t, in, nil)
+	ec, err := p.AcquireEdit(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ec.Release() })
+	_, _, err = ec.Exec(ctx, "DROP TABLE IF EXISTS ex_auto")
+	require.NoError(t, err)
+	_, _, err = ec.Exec(ctx, "CREATE TABLE ex_auto (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, v VARCHAR(10))")
+	require.NoError(t, err)
+	n, id, err := ec.Exec(ctx, "INSERT INTO ex_auto (v) VALUES (?)", "a")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	require.EqualValues(t, 1, id)
+	_, id, err = ec.Exec(ctx, "INSERT INTO ex_auto (v) VALUES (?)", "b")
+	require.NoError(t, err)
+	require.EqualValues(t, 2, id)
+	_, id, err = ec.Exec(ctx, "UPDATE ex_auto SET v = ? WHERE id = ?", "c", 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 0, id, "un UPDATE no genera ID")
+	n, _, err = ec.Exec(ctx, "DELETE FROM ex_auto WHERE id = ? LIMIT 1", 2)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	// INSERT sin columnas: todo a su DEFAULT.
+	_, id, err = ec.Exec(ctx, "INSERT INTO ex_auto () VALUES ()")
+	require.NoError(t, err)
+	require.Greater(t, id, int64(0))
 }

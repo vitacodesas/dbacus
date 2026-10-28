@@ -21,6 +21,7 @@ export {
 };
 
 export type {
+    AddRowResult,
     ConnectionSecrets,
     DriverInfo,
     EditApplied,

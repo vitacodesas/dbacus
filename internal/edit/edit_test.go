@@ -176,3 +176,72 @@ func TestColumnNamesAreCaseInsensitive(t *testing.T) {
 	require.True(t, p.Editable)
 	require.Equal(t, []string{"id", "name"}, p.TableCols, "se normaliza al nombre real de la tabla")
 }
+
+func str(s string) *string { return &s }
+
+func TestInsertEligibilityAndRequiredColumns(t *testing.T) {
+	d := detail("table", []model.Column{
+		col("id", "int", auto),
+		col("email", "varchar"),          // NOT NULL sin DEFAULT: obligatoria
+		col("name", "varchar", nullable), // opcional
+		col("created", "datetime", func(c *model.Column) { c.Default = str("CURRENT_TIMESTAMP") }), // tiene DEFAULT
+		col("blob", "blob", nullable),
+		col("full", "varchar", gen),
+	}, pkID)
+
+	t.Run("con todo en el resultado se puede insertar y se marcan las obligatorias", func(t *testing.T) {
+		p := analyze("SELECT * FROM t", d, metas("id", "email", "name", "created", "blob", "full"))
+		require.True(t, p.CanInsert, p.InsertReason)
+		require.Empty(t, p.InsertMissing)
+		want := []struct{ insertable, required bool }{
+			{false, false}, // AUTO_INCREMENT: lo pone el servidor
+			{true, true},   // email: NOT NULL sin DEFAULT
+			{true, false},
+			{true, false},  // con DEFAULT no es obligatoria
+			{false, false}, // binaria: no se escribe desde aquí
+			{false, false}, // generada
+		}
+		for i, w := range want {
+			require.Equal(t, w.insertable, p.Columns[i].Insertable, "insertable %d", i)
+			require.Equal(t, w.required, p.Columns[i].Required, "required %d", i)
+		}
+	})
+
+	t.Run("si falta una columna obligatoria no se ofrece insertar y se dice cuál", func(t *testing.T) {
+		p := analyze("SELECT id, name FROM t", d, metas("id", "name"))
+		require.True(t, p.Editable)
+		require.False(t, p.CanInsert)
+		require.Equal(t, InsertMissingRequired, p.InsertReason)
+		require.Equal(t, []string{"email"}, p.InsertMissing)
+	})
+
+	t.Run("una columna obligatoria que no se puede escribir (binaria) impide insertar", func(t *testing.T) {
+		d2 := detail("table", []model.Column{col("id", "int", auto), col("raw", "blob")}, pkID)
+		p := analyze("SELECT * FROM t", d2, metas("id", "raw"))
+		require.False(t, p.CanInsert)
+		require.Equal(t, []string{"raw"}, p.InsertMissing)
+	})
+
+	t.Run("una clave no autoincremental es insertable y obligatoria", func(t *testing.T) {
+		d3 := detail("table", []model.Column{col("code", "varchar"), col("v", "int", nullable)},
+			model.Index{Name: "PRIMARY", Unique: true, Columns: []string{"code"}})
+		p := analyze("SELECT * FROM t", d3, metas("code", "v"))
+		require.True(t, p.CanInsert)
+		require.True(t, p.Columns[0].Insertable)
+		require.True(t, p.Columns[0].Required)
+		require.False(t, p.Columns[0].Editable, "pero no se edita en filas existentes (D4)")
+	})
+}
+
+func TestDeleteAffectsListsCascadingTables(t *testing.T) {
+	d := actor()
+	d.IncomingFKs = []model.ForeignKey{
+		{Name: "fk1", RefSchema: "db", RefTable: "orders", OnDelete: "CASCADE"},
+		{Name: "fk2", RefSchema: "db", RefTable: "orders", OnDelete: "CASCADE"}, // misma tabla: una sola vez
+		{Name: "fk3", RefSchema: "db", RefTable: "logs", OnDelete: "SET NULL"},
+		{Name: "fk4", RefSchema: "db", RefTable: "audit", OnDelete: "RESTRICT"}, // RESTRICT falla, no arrastra
+		{Name: "fk5", RefSchema: "db", RefTable: "notes", OnDelete: "NO ACTION"},
+	}
+	p := analyze("SELECT * FROM t", d, metas("id", "name", "note", "blob", "full", "seq"))
+	require.Equal(t, []string{"db.orders", "db.logs"}, p.DeleteAffects)
+}

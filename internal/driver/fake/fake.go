@@ -25,6 +25,7 @@ type Driver struct {
 	Version   string
 	OnRun     func(ctx context.Context, stmt string) (driver.RunResult, error)
 	OnExec    func(ctx context.Context, stmt string, args []any) (int64, error) // si es nil, Exec afecta 1 fila
+	LastID    int64                                                             // lo que Exec devuelve como último ID autoincremental en un INSERT
 	LastDial  driver.DialFunc
 	LastCfg   driver.ConnConfig
 	AcquireFn func(ctx context.Context) error // se llama antes de entregar una conexión
@@ -141,14 +142,19 @@ func (c *Conn) Run(ctx context.Context, stmt string) (driver.RunResult, error) {
 	}
 	return &Result{}, nil
 }
-func (c *Conn) Exec(ctx context.Context, stmt string, args ...any) (int64, error) {
+func (c *Conn) Exec(ctx context.Context, stmt string, args ...any) (int64, int64, error) {
 	c.mu.Lock()
 	c.Execs = append(c.Execs, ExecCall{stmt, args})
 	c.mu.Unlock()
-	if fn := c.pool.d.OnExec; fn != nil {
-		return fn(ctx, stmt, args)
+	var id int64
+	if strings.HasPrefix(stmt, "INSERT") {
+		id = c.pool.d.LastID
 	}
-	return 1, nil
+	if fn := c.pool.d.OnExec; fn != nil {
+		n, err := fn(ctx, stmt, args)
+		return n, id, err
+	}
+	return 1, id, nil
 }
 func (c *Conn) tx(event string) {
 	c.mu.Lock()

@@ -177,3 +177,30 @@ func TestSameJSONIgnoresFormatting(t *testing.T) {
 	require.False(t, Same(col, txt("{no es json"), orig), "un JSON inválido no es «igual»: Go lo rechazará")
 	require.False(t, Same(col, Value{Null: true}, orig))
 }
+
+func TestBuildInsertsAndDeletes(t *testing.T) {
+	ins := BuildInserts(q{}, "db", "t", []InsertRow{
+		{Row: 5, Cells: []InsertCell{{Col: 1, Column: "name", Arg: "o'brien"}, {Col: 2, Column: "note", Arg: nil}, {Col: 3, Column: "n", Arg: int64(7)}}},
+		{Row: 6}, // sin celdas: todo a su DEFAULT
+	})
+	require.Len(t, ins, 2)
+	require.Equal(t, KindInsert, ins[0].Kind)
+	require.Equal(t, "INSERT INTO `db`.`t` (`name`, `note`, `n`) VALUES (?, ?, ?)", ins[0].SQL)
+	require.Equal(t, []any{"o'brien", nil, int64(7)}, ins[0].Args)
+	require.Equal(t, []int{1, 2, 3}, ins[0].Cols)
+	require.Equal(t, "INSERT INTO `db`.`t` (`name`, `note`, `n`) VALUES ('o''brien', NULL, 7)", ins[0].Review)
+	require.Equal(t, "INSERT INTO `db`.`t` () VALUES ()", ins[1].SQL)
+	require.Empty(t, ins[1].Args)
+
+	del := BuildDeletes(q{}, "db", "t", []string{"id", "code"}, []DeleteChange{
+		{Row: 9, Key: []any{int64(2), "y"}, Verify: []VerifyCol{{Column: "name", Arg: "b"}}},
+		{Row: 3, Key: []any{int64(1), "x"}, Verify: []VerifyCol{{Column: "note", Null: true}, {Column: "name", Arg: "a"}}},
+	})
+	require.Len(t, del, 2)
+	require.Equal(t, 3, del[0].Row, "ordenado por fila")
+	require.Equal(t, KindDelete, del[0].Kind)
+	require.Equal(t, "DELETE FROM `db`.`t` WHERE `id` = ? AND `code` = ? AND `note` <=> ? AND `name` <=> ? LIMIT 1", del[0].SQL)
+	require.Equal(t, []any{int64(1), "x", nil, "a"}, del[0].Args)
+	require.Equal(t, "DELETE FROM `db`.`t` WHERE `id` = 1 AND `code` = 'x' AND `note` <=> NULL AND `name` <=> 'a' LIMIT 1", del[0].Review)
+	require.Equal(t, []any{int64(1), "x"}, del[0].Key)
+}

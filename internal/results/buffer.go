@@ -154,6 +154,8 @@ type Buffer struct {
 	srcSQL    string
 	srcDB     string
 	pending   map[[2]int]Pending // cambios de celda sin aplicar (spec 13); mueren con el buffer
+	inserts   []*NewRow          // filas nuevas sin aplicar (spec 14): ocupan los índices tras la última fila real
+	deletes   map[int]any        // filas marcadas para borrar (spec 14) → datos opacos de quien las marcó
 }
 
 // Pending es un cambio de celda sin aplicar. Cell es lo que se muestra (valor nuevo, con Edited) y Data es opaco para
@@ -196,7 +198,7 @@ func (b *Buffer) ClearPending() {
 	m := b.run.m
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	b.pending = nil
+	b.pending, b.inserts, b.deletes = nil, nil, nil
 }
 
 // PendingCount es el número de celdas con cambios pendientes.
@@ -288,7 +290,8 @@ func (b *Buffer) Truncated() bool {
 	return b.truncated
 }
 
-// Window devuelve las filas [offset, offset+limit) y el estado actual. Las filas devueltas son de solo lectura.
+// Window devuelve las filas [offset, offset+limit) tal como están en el buffer (sin cambios pendientes) y el estado actual.
+// Las filas devueltas son de solo lectura. Exportar y generar INSERT usan esta vista; el grid usa WindowView.
 func (b *Buffer) Window(offset, limit int) (rows [][]Cell, total int, complete bool, err error) {
 	m := b.run.m
 	m.mu.Lock()
@@ -308,33 +311,7 @@ func (b *Buffer) Window(offset, limit int) (rows [][]Cell, total int, complete b
 	if limit < 0 || end > total {
 		end = total
 	}
-	window := b.rows[offset:end:end]
-	if len(b.pending) == 0 {
-		return window, total, b.complete, nil
-	}
-	// Con cambios pendientes se devuelve una copia de las filas tocadas (las del buffer no se modifican: son el original
-	// con el que se comprueba el conflicto al aplicar).
-	var out [][]Cell
-	copied := map[int]bool{}
-	for _, p := range b.pending {
-		if p.Row < offset || p.Row >= end {
-			continue
-		}
-		if out == nil {
-			out = make([][]Cell, len(window))
-			copy(out, window)
-		}
-		i := p.Row - offset
-		if !copied[i] {
-			out[i] = append([]Cell(nil), out[i]...)
-			copied[i] = true
-		}
-		out[i][p.Col] = p.Cell
-	}
-	if out == nil {
-		return window, total, b.complete, nil
-	}
-	return out, total, b.complete, nil
+	return b.rows[offset:end:end], total, b.complete, nil
 }
 
 // Cell devuelve una celda (con su valor completo accesible vía Cell.Full).

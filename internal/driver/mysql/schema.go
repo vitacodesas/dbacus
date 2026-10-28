@@ -134,6 +134,8 @@ func (r *schemaReader) Describe(ctx context.Context, db, table string) (model.Ta
 	errs = append(errs, err)
 	detail.ForeignKeys, err = r.foreignKeys(ctx, db, table)
 	errs = append(errs, err)
+	detail.IncomingFKs, err = r.incomingFKs(ctx, db, table)
+	errs = append(errs, err)
 	detail.CreateSQL, err = r.createSQL(ctx, db, table)
 	errs = append(errs, err)
 	if e := errors.Join(errs...); e != nil {
@@ -308,4 +310,41 @@ func (r *schemaReader) Catalog(ctx context.Context, db string) (model.Completion
 		cat.Tables[i].Columns = append(cat.Tables[i].Columns, c)
 	}
 	return cat, mapError(rows.Err())
+}
+
+// incomingFKs devuelve las claves foráneas de otras tablas que apuntan a esta (spec 14). En cada una, RefSchema/RefTable
+// son la tabla que referencia, Columns sus columnas y RefColumns las de esta tabla a las que apuntan.
+func (r *schemaReader) incomingFKs(ctx context.Context, db, table string) ([]model.ForeignKey, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT k.CONSTRAINT_NAME, k.TABLE_SCHEMA, k.TABLE_NAME, k.COLUMN_NAME, k.REFERENCED_COLUMN_NAME, r.UPDATE_RULE, r.DELETE_RULE
+		FROM information_schema.KEY_COLUMN_USAGE k
+		JOIN information_schema.REFERENTIAL_CONSTRAINTS r
+		  ON r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME = k.CONSTRAINT_NAME AND r.TABLE_NAME = k.TABLE_NAME
+		WHERE k.REFERENCED_TABLE_SCHEMA = ? AND k.REFERENCED_TABLE_NAME = ?
+		ORDER BY k.TABLE_SCHEMA, k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION`, db, table)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	defer rows.Close()
+	out := []model.ForeignKey{}
+	pos := map[string]int{}
+	for rows.Next() {
+		var name, schema, tbl, col, refCol, onUpdate, onDelete string
+		if err := rows.Scan(&name, &schema, &tbl, &col, &refCol, &onUpdate, &onDelete); err != nil {
+			return nil, mapError(err)
+		}
+		key := schema + "\x00" + tbl + "\x00" + name
+		i, ok := pos[key]
+		if !ok {
+			i = len(out)
+			pos[key] = i
+			out = append(out, model.ForeignKey{
+				Name: name, RefSchema: schema, RefTable: tbl, OnUpdate: onUpdate, OnDelete: onDelete,
+				Columns: []string{}, RefColumns: []string{},
+			})
+		}
+		out[i].Columns = append(out[i].Columns, col)
+		out[i].RefColumns = append(out[i].RefColumns, refCol)
+	}
+	return out, mapError(rows.Err())
 }

@@ -9,6 +9,16 @@ export interface ApplyResult {
      * filas actualizadas
      */
     "applied": number;
+
+    /**
+     * filas nuevas
+     */
+    "inserted": number;
+
+    /**
+     * filas borradas
+     */
+    "deleted": number;
     "conflict": Conflict | null;
 }
 
@@ -20,6 +30,16 @@ export interface Column {
     "reason"?: string;
     "dataType": string;
     "nullable": boolean;
+
+    /**
+     * Insertable: se puede escribir en una fila nueva (más amplio que Editable: incluye una clave no autoincremental).
+     */
+    "insertable": boolean;
+
+    /**
+     * Required: una fila nueva no se puede aplicar sin darle valor (NOT NULL sin DEFAULT, o parte de una clave no autoincremental).
+     */
+    "required": boolean;
 }
 
 /**
@@ -55,13 +75,35 @@ export interface Info {
      * una por columna del resultado
      */
     "columns": Column[] | null;
+
+    /**
+     * Pending es el total de cambios sin aplicar: celdas editadas + filas nuevas + filas a borrar.
+     */
     "pending": number;
+    "pendingInserts": number;
+    "pendingDeletes": number;
+
+    /**
+     * Spec 14: si se pueden añadir filas, y qué columnas obligatorias faltan en el resultado si no.
+     */
+    "canInsert": boolean;
+    "insertReason"?: string;
+    "insertMissing": string[] | null;
+
+    /**
+     * DeleteAffects lista las tablas que un DELETE modificaría por claves foráneas entrantes con CASCADE/SET NULL/SET DEFAULT.
+     */
+    "deleteAffects": string[] | null;
 }
 
 /**
  * Preview es un UPDATE listo para revisar (con los valores a la vista; nunca se ejecuta tal cual).
  */
 export interface Preview {
+    /**
+     * update | insert | delete
+     */
+    "kind": string;
     "row": number;
     "cols": number[] | null;
     "sql": string;

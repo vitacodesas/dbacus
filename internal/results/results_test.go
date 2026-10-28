@@ -266,8 +266,9 @@ func TestPendingOverlayLeavesTheBufferIntact(t *testing.T) {
 	require.Error(t, buf.Stage(0, 5, Cell{}, nil), "fuera de rango")
 	require.Equal(t, 2, buf.PendingCount())
 
-	rows, _, _, err := buf.Window(0, 5)
+	v, err := buf.WindowView(0, 5)
 	require.NoError(t, err)
+	rows := v.Rows
 	require.Equal(t, Cell{V: "nuevo", Edited: true}, rows[1][1])
 	require.Equal(t, Cell{V: nil, Edited: true}, rows[3][1])
 	require.Equal(t, Cell{V: "orig"}, rows[0][1], "las filas sin cambios no se tocan")
@@ -276,9 +277,13 @@ func TestPendingOverlayLeavesTheBufferIntact(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, Cell{V: "orig"}, orig, "el original sigue intacto para comprobar conflictos")
 
-	sub, _, _, _ := buf.Window(2, 2) // ventana que solo incluye la fila 3
+	sv, _ := buf.WindowView(2, 2) // ventana que solo incluye la fila 3
+	sub := sv.Rows
 	require.Equal(t, Cell{V: nil, Edited: true}, sub[1][1])
 	require.Equal(t, Cell{V: "orig"}, sub[0][1])
+
+	raw, _, _, _ := buf.Window(0, 5)
+	require.Equal(t, Cell{V: "orig"}, raw[1][1], "Window (exportar, INSERT) nunca lleva cambios pendientes")
 
 	list := buf.PendingList()
 	require.Equal(t, []int{1, 3}, []int{list[0].Row, list[1].Row})
@@ -287,6 +292,79 @@ func TestPendingOverlayLeavesTheBufferIntact(t *testing.T) {
 	buf.Unstage(1, 1)
 	require.Equal(t, 1, buf.PendingCount())
 	buf.ClearPending()
-	rows, _, _, _ = buf.Window(0, 5)
-	require.Equal(t, Cell{V: "orig"}, rows[3][1])
+	v, _ = buf.WindowView(0, 5)
+	require.Equal(t, Cell{V: "orig"}, v.Rows[3][1])
+}
+
+func TestNewRowsAndDeletesInTheView(t *testing.T) {
+	m := NewManager(1 << 30)
+	run := m.NewRun("r", "t")
+	buf := run.NewBuffer(nil)
+	for i := 0; i < 4; i++ {
+		buf.Append([]Cell{{V: int64(i)}, {V: "orig"}})
+	}
+	_, err := buf.AddNewRow(2)
+	require.Error(t, err, "mientras el resultado aún se lee no se puede añadir una fila nueva")
+	buf.Finish(false)
+
+	r1, err := buf.AddNewRow(2)
+	require.NoError(t, err)
+	require.Equal(t, 4, r1)
+	r2, _ := buf.AddNewRow(2)
+	require.Equal(t, 5, r2)
+	require.NoError(t, buf.SetNewCell(r1, 1, Cell{V: "nueva"}, "d"))
+
+	require.NoError(t, buf.MarkDelete(2, "borrar"))
+	require.NoError(t, buf.Stage(2, 1, Cell{V: "x"}, nil))
+	require.NoError(t, buf.MarkDelete(2, "borrar"), "marcar dos veces es inocuo")
+	require.Equal(t, 0, buf.PendingCount(), "borrar una fila descarta sus ediciones de celda")
+	require.Error(t, buf.MarkDelete(5, nil), "una fila nueva no se «marca»: se descarta")
+
+	v, err := buf.WindowView(0, 100)
+	require.NoError(t, err)
+	require.Equal(t, 6, v.Total, "el total incluye las filas nuevas")
+	require.Equal(t, 4, v.NewFrom)
+	require.Equal(t, []int{2}, v.Deleted)
+	require.Equal(t, Cell{V: "nueva", Edited: true}, v.Rows[4][1])
+	require.Equal(t, Cell{T: TDefault, Edited: true}, v.Rows[4][0], "sin valor se muestra como DEFAULT")
+	require.Equal(t, Cell{T: TDefault, Edited: true}, v.Rows[5][1])
+
+	w, _ := buf.WindowView(3, 2) // ventana a caballo entre filas reales y nuevas
+	require.Len(t, w.Rows, 2)
+	require.Equal(t, 4, w.NewFrom)
+	require.Empty(t, w.Deleted, "la fila 2 queda fuera de esta ventana")
+
+	raw, total, _, _ := buf.Window(0, 100)
+	require.Equal(t, 4, total, "Window (exportar) no ve filas nuevas")
+	require.Len(t, raw, 4)
+
+	require.Equal(t, 2, buf.InsertCount())
+	require.Equal(t, 1, buf.DeleteCount())
+	buf.UnsetNewCell(r1, 1)
+	require.Equal(t, TDefault, buf.NewRows()[0].Cells[1].T)
+	buf.RemoveNewRow(r1)
+	require.Equal(t, 1, buf.InsertCount())
+	require.Equal(t, 4, buf.NewRows()[0].Row, "al descartar una, la siguiente sube de índice")
+	buf.UnmarkDelete(2)
+	require.Equal(t, 0, buf.DeleteCount())
+}
+
+func TestRemoveRowsAndAppendRowAdjustMemory(t *testing.T) {
+	m := NewManager(1 << 30)
+	buf := m.NewRun("r", "t").NewBuffer(nil)
+	for i := 0; i < 3; i++ {
+		buf.Append([]Cell{{V: int64(i)}, {V: "x"}})
+	}
+	buf.Finish(false)
+	before := m.Total()
+	buf.RemoveRows([]int{1})
+	require.Less(t, m.Total(), before)
+	rows, total, _, _ := buf.Window(0, 10)
+	require.Equal(t, 2, total)
+	require.Equal(t, int64(2), rows[1][0].V, "las filas siguientes suben de índice")
+	buf.AppendRow([]Cell{{V: int64(9)}, {V: "nueva"}})
+	_, total, _, _ = buf.Window(0, 10)
+	require.Equal(t, 3, total)
+	buf.ClearPending()
+	require.Equal(t, 0, buf.InsertCount()+buf.DeleteCount()+buf.PendingCount())
 }

@@ -66,6 +66,10 @@ type RowWindow struct {
 	Rows     [][]results.Cell `json:"rows"`
 	Total    int64            `json:"total"`
 	Complete bool             `json:"complete"`
+	// Edición de filas (spec 14): índices absolutos de las filas de esta ventana marcadas para borrar, y el índice de la
+	// primera fila nueva sin aplicar (-1 si no hay). El Total ya incluye las filas nuevas.
+	Deleted []int `json:"deleted"`
+	NewFrom int   `json:"newFrom"`
 }
 
 // FullCell es el valor completo de una celda truncada.
@@ -512,14 +516,18 @@ func (s *QueryService) GetRows(queryID string, stmtIndex, offset, limit int) (Ro
 	if limit <= 0 || limit > maxWindow {
 		limit = maxWindow
 	}
-	rows, total, complete, err := buf.Window(offset, limit)
+	v, err := buf.WindowView(offset, limit)
 	if err != nil {
 		return RowWindow{}, toAppErr(err)
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	return RowWindow{Offset: offset, Rows: nonNilRows(rows), Total: int64(total), Complete: complete}, nil
+	deleted := v.Deleted
+	if deleted == nil {
+		deleted = []int{}
+	}
+	return RowWindow{Offset: offset, Rows: nonNilRows(v.Rows), Total: int64(v.Total), Complete: v.Complete, Deleted: deleted, NewFrom: v.NewFrom}, nil
 }
 
 func nonNilRows(r [][]results.Cell) [][]results.Cell {

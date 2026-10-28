@@ -52,6 +52,9 @@ type TableDetail struct {
 	Columns     []Column     `json:"columns"`
 	Indexes     []Index      `json:"indexes"`
 	ForeignKeys []ForeignKey `json:"foreignKeys"`
+	// IncomingFKs son las claves foráneas de OTRAS tablas que apuntan a esta (en ellas, RefSchema/RefTable/Columns describen
+	// la tabla que referencia). Sirven para avisar de lo que un DELETE puede arrastrar con CASCADE (spec 14).
+	IncomingFKs []ForeignKey `json:"incomingFks"`
 	CreateSQL   string       `json:"createSql"`
 }
 

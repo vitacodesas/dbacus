@@ -107,7 +107,7 @@ func (c *conn) Kill(ctx context.Context) error {
 	return mapError(err)
 }
 
-func (c *conn) Exec(ctx context.Context, stmt string, args ...any) (int64, error) {
+func (c *conn) Exec(ctx context.Context, stmt string, args ...any) (int64, int64, error) {
 	var (
 		res sql.Result
 		err error
@@ -118,10 +118,14 @@ func (c *conn) Exec(ctx context.Context, stmt string, args ...any) (int64, error
 		res, err = c.c.ExecContext(ctx, stmt, args...)
 	}
 	if err != nil {
-		return 0, mapError(err)
+		return 0, 0, mapError(err)
 	}
 	n, err := res.RowsAffected()
-	return n, mapError(err)
+	if err != nil {
+		return 0, 0, mapError(err)
+	}
+	id, _ := res.LastInsertId()
+	return n, id, nil
 }
 
 func (c *conn) Begin(ctx context.Context) error {

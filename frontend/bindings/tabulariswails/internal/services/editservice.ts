@@ -14,6 +14,17 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as edit$0 from "../edit/models.js";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
+/**
+ * AddRow añade una fila nueva vacía (todas las celdas en «DEFAULT») al final del resultado.
+ */
+export function AddRow(queryID: string, stmtIndex: number): $CancellablePromise<$models.AddRowResult> {
+    return $Call.ByID(2205995259, queryID, stmtIndex);
+}
+
 /**
  * Apply aplica los cambios pendientes en una transacción (spec 13): un UPDATE por fila con control optimista. Si alguna
  * fila no coincide (otra sesión la cambió o la borró) o el servidor rechaza algo, se revierte todo y no se aplica nada.
@@ -24,10 +35,19 @@ export function Apply(queryID: string, stmtIndex: number): $CancellablePromise<e
 }
 
 /**
- * Discard descarta todos los cambios pendientes del resultado.
+ * Discard descarta todos los cambios pendientes del resultado: ediciones, filas nuevas y marcas de borrado.
  */
 export function Discard(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Info> {
     return $Call.ByID(574935152, queryID, stmtIndex);
+}
+
+/**
+ * DuplicateRows crea una fila nueva por cada fila indicada, con los valores que se ven (D8 del spec 14): no se copian las
+ * columnas autoincrementales, generadas, binarias ni las de una clave no autoincremental (quedan vacías; las obligatorias
+ * se marcan en el grid). Sirve de origen tanto una fila existente como una fila nueva.
+ */
+export function DuplicateRows(queryID: string, stmtIndex: number, rows: number[] | null): $CancellablePromise<$models.AddRowResult> {
+    return $Call.ByID(539876770, queryID, stmtIndex, rows);
 }
 
 /**
@@ -45,6 +65,14 @@ export function GetEditInfo(queryID: string, stmtIndex: number): $CancellablePro
 }
 
 /**
+ * MarkDelete marca filas para borrar. En una fila nueva, «borrar» la descarta. Las ediciones pendientes de una fila
+ * marcada se pierden. Se captura la clave y los valores verificables para detectar, al aplicar, que otra sesión la cambió.
+ */
+export function MarkDelete(queryID: string, stmtIndex: number, rows: number[] | null): $CancellablePromise<edit$0.Info> {
+    return $Call.ByID(917768916, queryID, stmtIndex, rows);
+}
+
+/**
  * Preview devuelve el SQL de cada fila modificada, con los valores a la vista, para que el usuario lo revise antes de aplicar.
  */
 export function Preview(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Preview[] | null> {
@@ -53,14 +81,22 @@ export function Preview(queryID: string, stmtIndex: number): $CancellablePromise
 
 /**
  * Stage valida el valor escrito en una celda y lo deja como cambio pendiente (no toca el servidor). Si equivale al
- * original, retira el cambio que hubiera. El valor nuevo se ve en `GetRows` con `Cell.Edited`.
+ * original, retira el cambio que hubiera. El valor nuevo se ve en `GetRows` con `Cell.Edited`. Si `row` es una fila nueva
+ * (índice tras la última real), da valor a esa celda de la fila nueva.
  */
 export function Stage(queryID: string, stmtIndex: number, row: number, col: number, v: edit$0.Value): $CancellablePromise<edit$0.Info> {
     return $Call.ByID(458528560, queryID, stmtIndex, row, col, v);
 }
 
 /**
- * Unstage retira el cambio pendiente de una celda.
+ * UnmarkDelete quita la marca de borrado de las filas indicadas.
+ */
+export function UnmarkDelete(queryID: string, stmtIndex: number, rows: number[] | null): $CancellablePromise<edit$0.Info> {
+    return $Call.ByID(4024706379, queryID, stmtIndex, rows);
+}
+
+/**
+ * Unstage retira el cambio pendiente de una celda; en una fila nueva la devuelve a «DEFAULT».
  */
 export function Unstage(queryID: string, stmtIndex: number, row: number, col: number): $CancellablePromise<edit$0.Info> {
     return $Call.ByID(3159901181, queryID, stmtIndex, row, col);

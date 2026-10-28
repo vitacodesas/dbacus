@@ -6,6 +6,9 @@
 import * as apperr$0 from "../apperr/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as edit$0 from "../edit/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as export$0 from "../export/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -13,6 +16,17 @@ import * as model$0 from "../model/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as results$0 from "../results/models.js";
+
+/**
+ * AddRowResult es la fila nueva creada y el veredicto actualizado.
+ */
+export interface AddRowResult {
+    /**
+     * índices absolutos de las filas nuevas
+     */
+    "rows": number[] | null;
+    "info": edit$0.Info;
+}
 
 /**
  * ConnectionSecrets viaja solo de Vue a Go. Un puntero nil significa "sin cambios"; Clear nombra los que se borran.
@@ -202,6 +216,13 @@ export interface RowWindow {
     "rows": (results$0.Cell[] | null)[] | null;
     "total": number;
     "complete": boolean;
+
+    /**
+     * Edición de filas (spec 14): índices absolutos de las filas de esta ventana marcadas para borrar, y el índice de la
+     * primera fila nueva sin aplicar (-1 si no hay). El Total ya incluye las filas nuevas.
+     */
+    "deleted": number[] | null;
+    "newFrom": number;
 }
 
 /**

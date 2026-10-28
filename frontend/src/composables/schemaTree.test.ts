@@ -13,7 +13,7 @@ const tables: Record<string, Table[]> = {
   shop: [],
 };
 const detail: TableDetail = {
-  name: "users", schema: "app", type: "table", rowEstimate: null, comment: "", createSql: "",
+  name: "users", schema: "app", type: "table", rowEstimate: null, comment: "", createSql: "", incomingFks: [],
   columns: [
     { name: "id", dataType: "int", columnType: "int unsigned", nullable: false, default: null, isPrimaryKey: true, isAutoInc: true, isGenerated: false, comment: "", ordinal: 1 },
     { name: "email", dataType: "varchar", columnType: "varchar(190)", nullable: true, default: null, isPrimaryKey: false, isAutoInc: false, isGenerated: false, comment: "correo", ordinal: 2 },

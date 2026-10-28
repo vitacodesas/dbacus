@@ -20,6 +20,11 @@ const (
 	ReasonKeyNotSelected = "key_not_selected" // hay clave pero alguna de sus columnas no está en el resultado
 	ReasonExpired        = "expired"
 
+	// Motivos de InsertReason y de errores de filas nuevas/borradas (spec 14).
+	InsertMissingRequired = "missing_required" // alguna columna obligatoria no está en el resultado (o no se puede escribir)
+	ReasonRowDeleted      = "row_deleted"      // la fila está marcada para borrar
+	ReasonNotInsertable   = "not_insertable"   // la columna no se puede escribir en una fila nueva
+
 	ColKey           = "key"
 	ColAutoIncrement = "auto_increment"
 	ColGenerated     = "generated"
@@ -35,6 +40,10 @@ type Column struct {
 	Reason   string `json:"reason,omitempty"`
 	DataType string `json:"dataType"`
 	Nullable bool   `json:"nullable"`
+	// Insertable: se puede escribir en una fila nueva (más amplio que Editable: incluye una clave no autoincremental).
+	Insertable bool `json:"insertable"`
+	// Required: una fila nueva no se puede aplicar sin darle valor (NOT NULL sin DEFAULT, o parte de una clave no autoincremental).
+	Required bool `json:"required"`
 }
 
 // Info es el veredicto de edición de un resultado (spec 13).
@@ -45,11 +54,21 @@ type Info struct {
 	Table      string   `json:"table"`
 	KeyColumns []int    `json:"keyColumns"` // índices de columna del resultado que forman la clave
 	Columns    []Column `json:"columns"`    // una por columna del resultado
-	Pending    int      `json:"pending"`
+	// Pending es el total de cambios sin aplicar: celdas editadas + filas nuevas + filas a borrar.
+	Pending        int `json:"pending"`
+	PendingInserts int `json:"pendingInserts"`
+	PendingDeletes int `json:"pendingDeletes"`
+	// Spec 14: si se pueden añadir filas, y qué columnas obligatorias faltan en el resultado si no.
+	CanInsert     bool     `json:"canInsert"`
+	InsertReason  string   `json:"insertReason,omitempty"`
+	InsertMissing []string `json:"insertMissing"`
+	// DeleteAffects lista las tablas que un DELETE modificaría por claves foráneas entrantes con CASCADE/SET NULL/SET DEFAULT.
+	DeleteAffects []string `json:"deleteAffects"`
 }
 
 // Preview es un UPDATE listo para revisar (con los valores a la vista; nunca se ejecuta tal cual).
 type Preview struct {
+	Kind string `json:"kind"` // update | insert | delete
 	Row  int    `json:"row"`
 	Cols []int  `json:"cols"`
 	SQL  string `json:"sql"`
@@ -57,7 +76,9 @@ type Preview struct {
 
 // ApplyResult es el resultado de aplicar los cambios: o se aplicaron todos (Conflict == nil) o no se aplicó ninguno.
 type ApplyResult struct {
-	Applied  int       `json:"applied"` // filas actualizadas
+	Applied  int       `json:"applied"`  // filas actualizadas
+	Inserted int       `json:"inserted"` // filas nuevas
+	Deleted  int       `json:"deleted"`  // filas borradas
 	Conflict *Conflict `json:"conflict"`
 }
 
@@ -95,7 +116,7 @@ type Input struct {
 
 // Analyze aplica las reglas del spec 13 («Cuándo es editable un resultado»).
 func Analyze(in Input) Plan {
-	plan := Plan{Info: Info{KeyColumns: []int{}, Columns: make([]Column, len(in.Cols))}, TableCols: make([]string, len(in.Cols)), Meta: make([]model.Column, len(in.Cols))}
+	plan := Plan{Info: Info{KeyColumns: []int{}, InsertMissing: []string{}, DeleteAffects: []string{}, Columns: make([]Column, len(in.Cols))}, TableCols: make([]string, len(in.Cols)), Meta: make([]model.Column, len(in.Cols))}
 	deny := func(reason string) Plan {
 		plan.Reason = reason
 		return plan
@@ -191,9 +212,35 @@ func Analyze(in Input) Plan {
 			cc.Reason = reasons[i]
 			cc.DataType, cc.Nullable = in.Cols[i].DataType, in.Cols[i].Nullable
 		}
+		if tc := plan.TableCols[i]; tc != "" {
+			col := byName[strings.ToLower(tc)]
+			cc.Insertable = !col.IsAutoInc && !col.IsGenerated && !isBinaryType(col.DataType)
+			cc.Required = cc.Insertable && (isRequired(*col) || isKey[strings.ToLower(tc)])
+		}
 		plan.Columns[i] = cc
 	}
 	plan.Editable = true
+
+	// Insertar: toda columna obligatoria de la tabla debe estar en el resultado y poderse escribir.
+	for _, col := range detail.Columns {
+		if !isRequired(col) {
+			continue
+		}
+		at := -1
+		for i, tc := range plan.TableCols {
+			if strings.EqualFold(tc, col.Name) {
+				at = i
+			}
+		}
+		if at < 0 || !plan.Columns[at].Insertable {
+			plan.InsertMissing = append(plan.InsertMissing, col.Name)
+		}
+	}
+	plan.CanInsert = len(plan.InsertMissing) == 0
+	if !plan.CanInsert {
+		plan.InsertReason = InsertMissingRequired
+	}
+	plan.DeleteAffects = affectedByDelete(detail)
 	return plan
 }
 
@@ -259,6 +306,27 @@ func chooseKey(d model.TableDetail, mapped []string) ([]string, string) {
 		}
 	}
 	return nil, ReasonKeyNotSelected
+}
+
+// isRequired: una fila nueva necesita valor para esta columna (NOT NULL, sin DEFAULT y que el servidor no genere).
+func isRequired(c model.Column) bool {
+	return !c.Nullable && c.Default == nil && !c.IsAutoInc && !c.IsGenerated
+}
+
+// affectedByDelete devuelve las tablas que un DELETE de esta tabla modificaría por sus claves foráneas entrantes.
+func affectedByDelete(d model.TableDetail) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, fk := range d.IncomingFKs {
+		switch strings.ToUpper(fk.OnDelete) {
+		case "CASCADE", "SET NULL", "SET DEFAULT":
+			if name := fk.RefSchema + "." + fk.RefTable; !seen[name] { // en IncomingFKs, Ref* es la tabla que referencia
+				seen[name] = true
+				out = append(out, name)
+			}
+		}
+	}
+	return out
 }
 
 var binaryTypes = map[string]bool{

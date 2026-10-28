@@ -59,10 +59,11 @@ type Conn interface {
 	Use(ctx context.Context, database string) error
 	// Run ejecuta UNA sentencia. El llamador debe cerrar el RunResult.
 	Run(ctx context.Context, stmt string) (RunResult, error)
-	// Exec ejecuta UNA sentencia con parámetros (nunca interpolados) y devuelve las filas encontradas por la condición
+	// Exec ejecuta UNA sentencia con parámetros (nunca interpolados) y devuelve las filas encontradas por la condición y el
+	// último ID autoincremental generado (0 si no hubo)
 	// (con CLIENT_FOUND_ROWS, también las que ya tenían el valor). Dentro de una transacción abierta con Begin usa esa
 	// transacción. Solo lo usa la edición de celdas (spec 13); el SQL del usuario va por Run.
-	Exec(ctx context.Context, stmt string, args ...any) (rowsAffected int64, err error)
+	Exec(ctx context.Context, stmt string, args ...any) (rowsAffected, lastInsertID int64, err error)
 	// Begin/Commit/Rollback gestionan una transacción en esta conexión. Release la revierte si quedó abierta.
 	Begin(ctx context.Context) error
 	Commit(ctx context.Context) error

@@ -196,5 +196,11 @@ export interface TableDetail {
     "columns": Column[] | null;
     "indexes": Index[] | null;
     "foreignKeys": ForeignKey[] | null;
+
+    /**
+     * IncomingFKs son las claves foráneas de OTRAS tablas que apuntan a esta (en ellas, RefSchema/RefTable/Columns describen
+     * la tabla que referencia). Sirven para avisar de lo que un DELETE puede arrastrar con CASCADE (spec 14).
+     */
+    "incomingFks": ForeignKey[] | null;
     "createSql": string;
 }

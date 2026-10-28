@@ -13,6 +13,13 @@ type Quoter interface {
 	QuoteString(s string) string
 }
 
+// Tipos de sentencia generada.
+const (
+	KindUpdate = "update"
+	KindInsert = "insert"
+	KindDelete = "delete"
+)
+
 // Change es un cambio de celda pendiente, ya validado y convertido (solo vive en Go).
 type Change struct {
 	Row, Col int
@@ -27,9 +34,32 @@ type Change struct {
 	Key []any
 }
 
+// NewCell es el valor que el usuario dio a una celda de una fila nueva (Data del buffer).
+type NewCell struct {
+	Column string // columna de la tabla
+	Value  Value
+	Arg    any
+}
+
+// VerifyCol es un valor original que debe seguir igual en el servidor para poder borrar la fila (control optimista).
+type VerifyCol struct {
+	Column string
+	Arg    any
+	Null   bool
+}
+
+// DeleteChange es una fila marcada para borrar, con lo capturado al marcarla (Data del buffer).
+type DeleteChange struct {
+	Row    int
+	Key    []any // valores de la clave, en el orden de Plan.KeyTableCols
+	Verify []VerifyCol
+}
+
 // Statement es el UPDATE de una fila: SQL con parámetros para ejecutar y Review con los valores a la vista para que el
 // usuario lo revise (nunca se ejecuta el Review).
 type Statement struct {
+	Kind   string // KindUpdate | KindInsert | KindDelete
+	Key    []any  // clave de la fila (update y delete), para comprobar si sigue existiendo tras un conflicto
 	Row    int
 	Cols   []int
 	SQL    string
@@ -84,7 +114,7 @@ func BuildUpdates(q Quoter, db, table string, keyCols []string, changes []Change
 		}
 		sql := "UPDATE " + target + " SET " + strings.Join(set, ", ") + " WHERE " + strings.Join(where, " AND ")
 		all := append(args, whereArgs...)
-		out = append(out, Statement{Row: r, Cols: cols, SQL: sql, Args: all, Review: render(q, sql, all)})
+		out = append(out, Statement{Kind: KindUpdate, Key: cs[0].Key, Row: r, Cols: cols, SQL: sql, Args: all, Review: render(q, sql, all)})
 	}
 	return out
 }
@@ -136,4 +166,68 @@ func RowSelect(q Quoter, db, table string, cols, keyCols []string, key []any) st
 		where[i] = q.QuoteIdent(k) + " = " + literal(q, key[i])
 	}
 	return "SELECT " + sel + " FROM " + q.QuoteIdent(db) + "." + q.QuoteIdent(table) + " WHERE " + strings.Join(where, " AND ") + " LIMIT 1"
+}
+
+// InsertCell es el valor de una columna de una fila nueva.
+type InsertCell struct {
+	Col    int
+	Column string
+	Arg    any
+}
+
+// InsertRow es una fila nueva con las celdas que el usuario rellenó (las demás valen su DEFAULT).
+type InsertRow struct {
+	Row   int
+	Cells []InsertCell
+}
+
+// BuildInserts genera un INSERT por fila nueva, en orden, solo con las columnas rellenadas. Sin ninguna, `() VALUES ()`
+// (todo a su DEFAULT).
+func BuildInserts(q Quoter, db, table string, rows []InsertRow) []Statement {
+	target := q.QuoteIdent(db) + "." + q.QuoteIdent(table)
+	out := make([]Statement, 0, len(rows))
+	for _, r := range rows {
+		cols := make([]string, len(r.Cells))
+		marks := make([]string, len(r.Cells))
+		args := make([]any, len(r.Cells))
+		idx := make([]int, len(r.Cells))
+		for i, c := range r.Cells {
+			cols[i], marks[i], args[i], idx[i] = q.QuoteIdent(c.Column), "?", c.Arg, c.Col
+		}
+		sql := "INSERT INTO " + target + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(marks, ", ") + ")"
+		out = append(out, Statement{Kind: KindInsert, Row: r.Row, Cols: idx, SQL: sql, Args: args, Review: render(q, sql, args)})
+	}
+	return out
+}
+
+// BuildDeletes genera un DELETE por fila marcada, ordenado por fila:
+//
+//	DELETE FROM `db`.`t` WHERE `id` = ? AND `a` <=> ? LIMIT 1
+//
+// Como en el UPDATE, el WHERE lleva la clave y los valores originales verificables: si otra sesión cambió la fila, no
+// coincide y se informa como conflicto en vez de borrar algo distinto de lo que se vio.
+func BuildDeletes(q Quoter, db, table string, keyCols []string, ds []DeleteChange) []Statement {
+	sorted := append([]DeleteChange(nil), ds...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Row < sorted[j].Row })
+	target := q.QuoteIdent(db) + "." + q.QuoteIdent(table)
+	out := make([]Statement, 0, len(sorted))
+	for _, d := range sorted {
+		var where []string
+		var args []any
+		for i, k := range keyCols {
+			where = append(where, q.QuoteIdent(k)+" = ?")
+			args = append(args, d.Key[i])
+		}
+		for _, v := range d.Verify {
+			where = append(where, q.QuoteIdent(v.Column)+" <=> ?")
+			if v.Null {
+				args = append(args, nil)
+			} else {
+				args = append(args, v.Arg)
+			}
+		}
+		sql := "DELETE FROM " + target + " WHERE " + strings.Join(where, " AND ") + " LIMIT 1"
+		out = append(out, Statement{Kind: KindDelete, Key: d.Key, Row: d.Row, SQL: sql, Args: args, Review: render(q, sql, args)})
+	}
+	return out
 }
