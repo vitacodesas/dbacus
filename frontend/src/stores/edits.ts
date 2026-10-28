@@ -30,6 +30,9 @@ export const useEditsStore = defineStore("edits", () => {
   const review = ref<ReviewState | null>(null);
   const discardPrompt = ref<{ tabId: string; count: number; resolve: (ok: boolean) => void } | null>(null);
 
+  /** Petición al grid de seleccionar una fila (y abrir su editor) tras crearla; el grid la consume (spec 14). */
+  const focusRequest = ref<{ queryId: string; stmt: number; row: number } | null>(null);
+
   const infoOf = (queryId: string, stmt: number): EditInfo | null => infos.value[keyOf(queryId, stmt)] ?? null;
   const isEditable = (queryId: string, stmt: number, col: number) => {
     const i = infoOf(queryId, stmt);
@@ -87,6 +90,41 @@ export const useEditsStore = defineStore("edits", () => {
     }
   }
 
+  // ---- filas nuevas y borrados (spec 14) -------------------------------------------------------------------------------
+
+  /** Añade una fila nueva vacía al final (o copias de las filas indicadas) y pide al grid que se coloque en la primera. */
+  async function addRow(tabId: string, queryId: string, stmt: number, copyOf: number[] = []): Promise<AppError | null> {
+    try {
+      const res = copyOf.length ? await api.duplicateEditRows(queryId, stmt, copyOf) : await api.addEditRow(queryId, stmt);
+      setInfo(queryId, stmt, res.info);
+      await useResultsStore().reloadCached(tabId);
+      if (res.rows?.length) focusRequest.value = { queryId, stmt, row: res.rows[0] };
+      return null;
+    } catch (e) {
+      return asAppError(e);
+    }
+  }
+
+  /** Marca filas para borrar (en una fila nueva, la descarta). */
+  async function markDelete(tabId: string, queryId: string, stmt: number, rows: number[]): Promise<AppError | null> {
+    try {
+      setInfo(queryId, stmt, await api.markDeleteRows(queryId, stmt, rows));
+      await useResultsStore().reloadCached(tabId);
+      return null;
+    } catch (e) {
+      return asAppError(e);
+    }
+  }
+
+  async function unmarkDelete(tabId: string, queryId: string, stmt: number, rows: number[]) {
+    try {
+      setInfo(queryId, stmt, await api.unmarkDeleteRows(queryId, stmt, rows));
+      await useResultsStore().reloadCached(tabId);
+    } catch (e) {
+      useUiStore().toast("error", asAppError(e).message);
+    }
+  }
+
   /** «Aplicar»: con confirmación activada muestra el SQL; si no, aplica directamente. */
   async function requestApply(tabId: string, queryId: string, stmt: number, opts: { viewOnly?: boolean } = {}) {
     const ui = useUiStore();
@@ -111,7 +149,12 @@ export const useEditsStore = defineStore("edits", () => {
         r.conflict = res.conflict;
         return;
       }
-      useUiStore().toast("success", t("edit.applied", { n: res.applied }));
+      const parts = [
+        res.applied ? t("edit.appliedUpdated", { n: res.applied }) : "",
+        res.inserted ? t("edit.appliedInserted", { n: res.inserted }) : "",
+        res.deleted ? t("edit.appliedDeleted", { n: res.deleted }) : "",
+      ].filter(Boolean);
+      useUiStore().toast("success", `${t("edit.appliedTitle")}: ${parts.join(", ")}`);
       review.value = null;
       await load(r.queryId, r.stmt);
       await useResultsStore().reloadCached(r.tabId);
@@ -168,7 +211,7 @@ export const useEditsStore = defineStore("edits", () => {
   const reviewing = computed(() => review.value !== null);
 
   return {
-    infos, review, discardPrompt, reviewing, infoOf, isEditable, pendingFor, load, stage, unstage, discard, requestApply, apply, closeReview,
+    infos, review, discardPrompt, reviewing, focusRequest, addRow, markDelete, unmarkDelete, infoOf, isEditable, pendingFor, load, stage, unstage, discard, requestApply, apply, closeReview,
     handleApplied, confirmDiscard, answerDiscard,
   };
 });

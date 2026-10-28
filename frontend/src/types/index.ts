@@ -44,6 +44,7 @@ export type {
   ExportProgress,
   ExportDone,
   EditApplied,
+  AddRowResult as EditAddRowResult,
 } from "../../bindings/tabulariswails/internal/services";
 export type {
   Info as EditInfo,

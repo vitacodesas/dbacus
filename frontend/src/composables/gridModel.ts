@@ -56,11 +56,13 @@ export interface CellDisplay {
   numeric: boolean;
   isNull: boolean;
   /** Tipo visual para estilos: bytes/json/datetime. */
-  type: "" | "bytes" | "json" | "datetime" | "number" | "bool";
+  type: "" | "bytes" | "json" | "datetime" | "number" | "bool" | "default";
 }
 
 /** Cómo se muestra una celda. El texto largo se recorta con CSS; aquí solo se aplanan los saltos de línea. */
 export function displayCell(c: Cell | undefined): CellDisplay {
+  // Celda de una fila nueva a la que aún no se le ha dado valor: el servidor usará su DEFAULT.
+  if (c?.t === "default") return { text: "DEFAULT", numeric: false, isNull: true, type: "default" };
   if (!c || c.v === null || c.v === undefined) return { text: "NULL", numeric: false, isNull: true, type: "" };
   const v = c.v;
   switch (c.t) {

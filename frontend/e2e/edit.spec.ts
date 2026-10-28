@@ -36,7 +36,7 @@ test.describe("edición de celdas", () => {
     await expect(dialog.getByTestId("edit-sql")).toContainText("'Ana'");
     await dialog.getByTestId("edit-confirm").click();
 
-    await expect(page.getByText("Se aplicaron 1 filas")).toBeVisible();
+    await expect(page.getByText("Cambios aplicados: 1 actualizadas")).toBeVisible();
     await expect(page.getByTestId("edit-bar")).toBeHidden();
     await expect(cell(page, "Ana")).toBeVisible();
   });
@@ -111,6 +111,133 @@ test.describe("edición de celdas", () => {
   });
 });
 
+const row = (page: Page, state: "new" | "deleted") => grid(page).locator(`[data-row-state="${state}"]`);
+
+test.describe("filas nuevas, copias y borrados", () => {
+  test.beforeEach(async ({ app: page }) => {
+    await connect(page);
+    await runSql(page, "SELECT * FROM actor");
+    await expect(cell(page, "NOMBRE1")).toBeVisible();
+  });
+
+  test("Nueva fila: se rellena en el grid, se ve el INSERT y se aplica", async ({ app: page }) => {
+    await page.getByTestId("new-row").click();
+    await expect(row(page, "new")).toHaveCount(1);
+    const editor = page.getByTestId("cell-editor");
+    await expect(editor).toBeVisible(); // abre el editor en la primera columna obligatoria
+    await editor.fill("Ana");
+    await editor.press("Enter");
+    await expect(row(page, "new").getByRole("gridcell", { name: "Ana", exact: true })).toBeVisible();
+    // La segunda columna obligatoria (apellido) es la siguiente «DEFAULT» tras el id.
+    await row(page, "new").getByRole("gridcell", { name: "DEFAULT" }).nth(1).dblclick();
+    await page.getByTestId("cell-editor").fill("Pérez");
+    await page.getByTestId("cell-editor").press("Enter");
+
+    await expect(page.getByTestId("edit-pending-text")).toContainText("1 cambios sin aplicar · 1 filas nuevas");
+    await page.getByTestId("edit-apply").click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator('[data-kind="insert"]')).toContainText("INSERT INTO");
+    await dialog.getByTestId("edit-confirm").click();
+    await expect(page.getByText("Cambios aplicados: 1 nuevas")).toBeVisible();
+    await expect(row(page, "new")).toHaveCount(0);
+    await expect(cell(page, "Ana")).toBeVisible();
+  });
+
+  test("una fila nueva sin los valores obligatorios no se aplica y el motivo se ve en el diálogo", async ({ app: page }) => {
+    await page.getByTestId("new-row").click();
+    await page.getByTestId("cell-editor").press("Escape"); // se queda vacía
+    await page.getByTestId("edit-apply").click();
+    await page.getByTestId("edit-confirm").click();
+    await expect(page.getByTestId("edit-error")).toContainText("falta un valor");
+    await expect(page.getByTestId("edit-pending-text")).toContainText("1 filas nuevas");
+  });
+
+  test("Insertar nueva fila a partir de esta copia los valores y deja cambiar lo que se quiera", async ({ app: page }) => {
+    await cell(page, "NOMBRE1").click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Insertar nueva fila a partir de esta" }).click();
+    await expect(row(page, "new")).toHaveCount(1);
+    await expect(row(page, "new").getByRole("gridcell", { name: "NOMBRE1", exact: true })).toBeVisible();
+    await expect(row(page, "new").getByRole("gridcell", { name: "APELLIDO1", exact: true })).toBeVisible();
+    await expect(row(page, "new").getByRole("gridcell", { name: "DEFAULT" }).first()).toBeVisible(); // el autoincremental queda para el servidor
+
+    const editor = page.getByTestId("cell-editor");
+    await expect(editor).toHaveValue("NOMBRE1");
+    await editor.fill("Copia");
+    await editor.press("Enter");
+    await page.getByTestId("edit-apply").click();
+    await expect(page.getByRole("dialog").locator('[data-kind="insert"]')).toContainText("'Copia'");
+    await page.getByTestId("edit-confirm").click();
+    await expect(page.getByText("Cambios aplicados: 1 nuevas")).toBeVisible();
+    await expect(cell(page, "Copia")).toBeVisible();
+  });
+
+  test("Supr marca la fila para borrar, se puede restaurar y al aplicar desaparece", async ({ app: page }) => {
+    await cell(page, "NOMBRE1").click();
+    await page.keyboard.press("Delete");
+    await expect(row(page, "deleted")).toHaveCount(1);
+    await expect(page.getByTestId("edit-pending-text")).toContainText("1 filas a borrar");
+
+    await cell(page, "NOMBRE1").click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Restaurar fila(s)" }).click();
+    await expect(row(page, "deleted")).toHaveCount(0);
+    await expect(page.getByTestId("edit-bar")).toBeHidden();
+
+    await cell(page, "NOMBRE1").click();
+    await page.keyboard.press("Delete");
+    await page.getByTestId("edit-apply").click();
+    await expect(page.getByRole("dialog").locator('[data-kind="delete"]')).toContainText("DELETE FROM");
+    await page.getByTestId("edit-confirm").click();
+    await expect(page.getByText("Cambios aplicados: 1 borradas")).toBeVisible();
+    await expect(cell(page, "NOMBRE1")).toBeHidden();
+    await expect(cell(page, "NOMBRE2")).toBeVisible();
+    await expect(page.getByTestId("range")).toContainText("de 199");
+  });
+
+  test("una fila marcada para borrar no se edita y lo explica", async ({ app: page }) => {
+    await cell(page, "NOMBRE1").click();
+    await page.keyboard.press("Delete");
+    await expect(row(page, "deleted")).toHaveCount(1);
+    await cell(page, "NOMBRE1").dblclick();
+    await expect(page.getByTestId("cell-editor")).toBeHidden();
+    await expect(page.getByText("La fila está marcada para borrar")).toBeVisible();
+  });
+
+  test("borrar una fila nueva la descarta", async ({ app: page }) => {
+    await page.getByTestId("new-row").click();
+    await page.getByTestId("cell-editor").press("Escape");
+    await expect(row(page, "new")).toHaveCount(1);
+    await page.keyboard.press("Delete");
+    await expect(row(page, "new")).toHaveCount(0);
+    await expect(page.getByTestId("edit-bar")).toBeHidden();
+  });
+
+  test("un lote mixto muestra UPDATE, DELETE e INSERT en ese orden", async ({ app: page }) => {
+    await edit(page, "NOMBRE1", "Editada");
+    await cell(page, "NOMBRE2").click();
+    await page.keyboard.press("Delete");
+    await page.getByTestId("new-row").click();
+    await page.getByTestId("cell-editor").fill("Nueva");
+    await page.getByTestId("cell-editor").press("Enter");
+    await expect(row(page, "new").getByRole("gridcell", { name: "Nueva", exact: true })).toBeVisible();
+    await row(page, "new").getByRole("gridcell", { name: "DEFAULT" }).nth(1).dblclick();
+    await page.getByTestId("cell-editor").fill("Fila");
+    await page.getByTestId("cell-editor").press("Enter");
+
+    await page.getByTestId("edit-view-sql").click();
+    const kinds = await page.getByRole("dialog").locator("[data-kind]").evaluateAll((els) => els.map((e) => e.getAttribute("data-kind")));
+    expect(kinds).toEqual(["update", "delete", "insert"]);
+  });
+
+  test("borrar en una tabla con claves foráneas avisa de lo que se arrastra", async ({ app: page }) => {
+    await runSql(page, "SELECT * FROM film");
+    await expect(cell(page, "PELÍCULA 1")).toBeVisible();
+    await cell(page, "PELÍCULA 1").click();
+    await page.keyboard.press("Delete");
+    await page.getByTestId("edit-apply").click();
+    await expect(page.getByTestId("edit-cascade")).toContainText("sakila.film_actor");
+  });
+});
+
 test.describe("editor ampliado", () => {
   test("JSON: se edita en un diálogo, Go dice dónde falla y Formatear lo ordena", async ({ app: page }) => {
     await connect(page);
@@ -178,5 +305,6 @@ test.describe("conexión de solo lectura", () => {
     await expect(page.getByTestId("edit-note")).toContainText("solo lectura");
     await cell(page, "NOMBRE1").dblclick();
     await expect(page.getByTestId("cell-editor")).toBeHidden();
+    await expect(page.getByTestId("new-row")).toBeHidden(); // sin edición no hay «Nueva fila»
   });
 });

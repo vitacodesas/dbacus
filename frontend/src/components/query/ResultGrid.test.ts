@@ -5,7 +5,10 @@ import { i18n } from "../../i18n";
 
 const api = vi.hoisted(() => ({ execute: vi.fn(), cancel: vi.fn(), getRows: vi.fn(), getCell: vi.fn(), rowsAsInsert: vi.fn() }));
 vi.mock("../../api/queries", () => api);
-const editApi = vi.hoisted(() => ({ getEditInfo: vi.fn(), stageEdit: vi.fn(), unstageEdit: vi.fn(), discardEdits: vi.fn(), previewEdits: vi.fn(), applyEdits: vi.fn() }));
+const editApi = vi.hoisted(() => ({
+  getEditInfo: vi.fn(), stageEdit: vi.fn(), unstageEdit: vi.fn(), discardEdits: vi.fn(), previewEdits: vi.fn(), applyEdits: vi.fn(),
+  addEditRow: vi.fn(), duplicateEditRows: vi.fn(), markDeleteRows: vi.fn(), unmarkDeleteRows: vi.fn(),
+}));
 vi.mock("../../api/edits", () => editApi);
 
 import { useEditsStore } from "../../stores/edits";
@@ -211,6 +214,63 @@ describe("ResultGrid", () => {
       await flushPromises();
       expect(document.body.querySelector('[data-testid="cell-editor-modal-error"]')?.textContent).toContain("posición 2");
       expect(document.body.querySelector('[data-testid="cell-editor-textarea"]')).toBeTruthy();
+    });
+
+    it("pinta las filas nuevas y las marcadas para borrar, y las celdas sin valor como DEFAULT", async () => {
+      const { w, results } = await setupEditable();
+      api.getRows.mockResolvedValue({
+        offset: 0, total: 3, complete: true, deleted: [0], newFrom: 2,
+        rows: [[{ v: 1 }, { v: "borrada" }], [{ v: 2 }, { v: "normal" }], [{ v: null, t: "default", edited: true }, { v: null, t: "default", edited: true }]],
+      });
+      results.handleProgress({ queryId: "q1", stmtIndex: 0, rowCount: 3 });
+      await results.reloadCached(TAB);
+      await flushPromises();
+      const rows = w.findAll('[role="row"][aria-rowindex]');
+      expect(rows[0].attributes("data-row-state")).toBe("deleted");
+      expect(rows[0].classes().join(" ")).toContain("line-through");
+      expect(rows[1].attributes("data-row-state")).toBeUndefined();
+      expect(rows[2].attributes("data-row-state")).toBe("new");
+      expect(rows[2].findAll('[role="gridcell"]').map((c) => c.text())).toEqual(["DEFAULT", "DEFAULT"]);
+    });
+
+    it("Supr marca las filas seleccionadas para borrar", async () => {
+      editApi.markDeleteRows.mockResolvedValue({ ...editable, pending: 1, pendingDeletes: 1 });
+      const { w } = await setupEditable();
+      await key(w, "ArrowDown"); // selecciona la fila 2
+      await key(w, "Delete");
+      expect(editApi.markDeleteRows).toHaveBeenCalledWith("q1", 0, [1]);
+    });
+
+    it("Supr no hace nada si el resultado no es editable", async () => {
+      const { w } = await setupEditable({ ...editable, editable: false, reason: "view" });
+      await key(w, "ArrowDown");
+      await key(w, "Delete");
+      expect(editApi.markDeleteRows).not.toHaveBeenCalled();
+    });
+
+    it("una fila nueva se edita en las columnas escribibles y no en las autoincrementales", async () => {
+      editApi.stageEdit.mockResolvedValue({ ...editable, pending: 1, pendingInserts: 1 });
+      const { w, results } = await setupEditable();
+      api.getRows.mockResolvedValue({
+        offset: 0, total: 51, complete: true, deleted: [], newFrom: 50,
+        rows: Array.from({ length: 51 }, (_, i) => (i < 50 ? [{ v: i + 1 }, { v: `fila ${i + 1}` }] : [{ v: null, t: "default", edited: true }, { v: null, t: "default", edited: true }])),
+      });
+      results.handleProgress({ queryId: "q1", stmtIndex: 0, rowCount: 51 });
+      await results.reloadCached(TAB);
+      await w.setProps({ rowCount: 51 });
+      await flushPromises();
+      const grid = w.get('[role="grid"]');
+      (grid.element as HTMLElement).scrollTop = 49 * 24;
+      await grid.trigger("scroll");
+      await flushPromises();
+      for (let i = 0; i < 50; i++) await key(w, "ArrowDown"); // hasta la fila nueva
+      await key(w, "ArrowRight");
+      await key(w, "F2");
+      const input = w.get('[data-testid="cell-editor"]');
+      await input.setValue("Ana");
+      await input.trigger("keydown", { key: "Enter" });
+      await flushPromises();
+      expect(editApi.stageEdit).toHaveBeenCalledWith("q1", 0, 50, 1, { null: false, text: "Ana" });
     });
 
     it("marca las celdas con cambio pendiente", async () => {

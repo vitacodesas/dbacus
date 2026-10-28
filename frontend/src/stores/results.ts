@@ -40,6 +40,9 @@ interface CachedWindow {
   /** Ventana incompleta mientras la consulta sigue leyendo: se vuelve a pedir cuando llegan más filas. */
   partial: boolean;
   used: number;
+  /** Filas de esta ventana marcadas para borrar y primer índice de fila nueva (spec 14). */
+  deleted: Set<number>;
+  newFrom: number;
 }
 
 const fresh = (over: Partial<TabResult> = {}): TabResult => ({
@@ -213,7 +216,7 @@ export const useResultsStore = defineStore("results", () => {
       let cache = windows.get(tabId);
       if (!cache) windows.set(tabId, (cache = new Map()));
       const rows = (res.rows ?? []).map((row) => row ?? []);
-      cache.set(key, { rows, partial: !res.complete && rows.length < WINDOW, used: ++tick });
+      cache.set(key, { rows, partial: !res.complete && rows.length < WINDOW, used: ++tick, deleted: new Set(res.deleted ?? []), newFrom: res.newFrom ?? -1 });
       evict(cache);
       bump();
     } catch (e) {
@@ -244,12 +247,23 @@ export const useResultsStore = defineStore("results", () => {
         const res = await api.getRows(queryId, stmt, win * WINDOW, WINDOW);
         if (byTab.value[tabId]?.queryId !== queryId) return;
         const rows = (res.rows ?? []).map((row) => row ?? []);
-        cache.set(key, { rows, partial: !res.complete && rows.length < WINDOW, used: ++tick });
+        cache.set(key, { rows, partial: !res.complete && rows.length < WINDOW, used: ++tick, deleted: new Set(res.deleted ?? []), newFrom: res.newFrom ?? -1 });
+        // El total de Go incluye las filas nuevas y ya no cuenta las borradas: el grid usa ese número.
+        if (res.complete && byTab.value[tabId].rowCounts[stmt] !== res.total) byTab.value[tabId].rowCounts[stmt] = res.total;
       } catch {
         /* si el resultado expiró, el siguiente rowAt lo detecta */
       }
     }));
     bump();
+  }
+
+  /** Estado de una fila en el resultado (spec 14): marcada para borrar o fila nueva sin aplicar. */
+  function rowFlags(tabId: string, stmt: number, index: number): { deleted: boolean; isNew: boolean } {
+    void version.value;
+    const r = byTab.value[tabId];
+    const win = Math.floor(index / WINDOW);
+    const w = r?.queryId ? windows.get(tabId)?.get(`${r.queryId}:${stmt}:${win}`) : undefined;
+    return { deleted: !!w?.deleted.has(index), isNew: !!w && w.newFrom >= 0 && index >= w.newFrom };
   }
 
   function evict(cache: Map<string, CachedWindow>) {
@@ -289,6 +303,6 @@ export const useResultsStore = defineStore("results", () => {
   return {
     byTab, version, of, tabOfQuery, running, execute, cancel,
     handleStarted, handleStatement, handleProgress, handleDone, handleError,
-    rowAt, ensureWindow, reloadCached, fetchRange, setActiveStatement, forgetTab,
+    rowAt, rowFlags, ensureWindow, reloadCached, fetchRange, setActiveStatement, forgetTab,
   };
 });

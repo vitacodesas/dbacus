@@ -28,3 +28,6 @@ Go es la fuente de verdad de datos; Pinia guarda **proyecciones** para pintar y 
 
 ## Edición de celdas (T7.5)
 Store `edits`: `infos[queryId:stmt]` (el veredicto `EditInfo` de Go, con el contador de cambios pendientes), el diálogo de revisión (`review`) y la pregunta de descartar (`discardPrompt`). **No guarda valores**: lo escrito va a Go (`Stage`), que valida y lo superpone en `GetRows`; tras cada cambio `results.reloadCached` vuelve a pedir las ventanas en caché y las sustituye sin vaciarlas (sin parpadeo). `results.execute` y `queryTabs.closeTab` piden confirmación solo si hay cambios pendientes (sin ellos no esperan nada). Ajuste `confirmEdits` en `ui`.
+
+## Filas nuevas y borrados (T8.4)
+`edits` añade `addRow`/`markDelete`/`unmarkDelete` y `focusRequest` (el grid lo consume para seleccionar la fila creada y abrir su editor). `results` guarda por ventana las filas borradas y `newFrom` (`rowFlags`), y `reloadCached` sincroniza el total de filas con el de Go, que ya cuenta las nuevas y descuenta las borradas.

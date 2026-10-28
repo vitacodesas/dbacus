@@ -52,3 +52,6 @@ Toasts para acciones (guardado, copiado); errores de operación en panel context
 
 ## Edición de celdas (T7.5)
 Doble clic o `F2` sobre una celda editable abre un editor en la celda (`Enter` guarda y baja, `Tab` pasa a la siguiente columna editable, `Esc` cancela; si Go rechaza el valor el editor sigue abierto con el motivo). Menú contextual: «Editar celda», «Establecer NULL» (solo si la columna lo admite), «Revertir celda». Las celdas con cambio pendiente llevan fondo ámbar y una marca a la izquierda. Barra bajo el grid con «N cambios sin aplicar · Ver SQL · Descartar · Aplicar». Si el resultado no es editable, el pie del grid explica por qué y la cabecera de cada columna no editable lo indica en su tooltip.
+
+## Filas nuevas y borrados (T8.4)
+«Nueva fila» (barra del resultado), «Insertar nueva fila a partir de esta» y «Eliminar fila(s)»/«Restaurar» (menú contextual; `Supr`/`⌫` también elimina). Filas nuevas en verde, borradas en rojo y tachadas, celdas sin valor como «DEFAULT» y las obligatorias vacías con borde rojo. La barra de cambios dice «N cambios sin aplicar · M filas nuevas · K filas a borrar». El diálogo de revisión etiqueta cada sentencia (Modificar/Insertar/Borrar) y avisa en un texto fijo si un borrado arrastra filas de otras tablas por claves foráneas.

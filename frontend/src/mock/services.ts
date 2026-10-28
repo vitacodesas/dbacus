@@ -72,6 +72,9 @@ const asMeta = (cols: Any[]) => cols.map((c) => ({ name: c.name, dataType: c.dat
 interface Run {
   stmts: Any[]; data: Record<number, { rows: number; cell: (i: number, c: number) => Any; name?: string; sql?: string }>; canceled: boolean; cancelWake?: () => void
   sessionId?: string; pending: Record<number, Map<string, { row: number; col: number; value: Any }>>
+  // Spec 14: filas nuevas sin aplicar (col → valor), filas marcadas para borrar, y lo ya aplicado (quitadas y añadidas).
+  newRows: Record<number, Map<number, Any>[]>; deleted: Record<number, Set<number>>
+  removed: Record<number, number[]>; appended: Record<number, Any[][]>
 }
 const runs = new Map<string, Run>();
 
@@ -229,6 +232,20 @@ export const SchemaService = {
 const toCell = (c: Any) => ({ v: c.v, t: c.t ?? "", trunc: false });
 /** Valores ya aplicados con EditService.Apply: "tabla:fila:col" → valor. El servidor simulado «recuerda» lo editado. */
 const applied = new Map<string, Any>();
+/** Filas reales visibles: las del servidor menos las borradas ya aplicadas, más las insertadas ya aplicadas. */
+const realTotal = (run: Run, d: Any, stmt: number) => Math.min(d.rows, settings.maxRows) - (run.removed[stmt]?.length ?? 0) + (run.appended[stmt]?.length ?? 0);
+const originalIndex = (run: Run, stmt: number, i: number) => {
+  let idx = i;
+  for (const r of [...(run.removed[stmt] ?? [])].sort((a, b) => a - b)) {
+    if (r <= idx) idx++;
+    else break;
+  }
+  return idx;
+};
+const baseVisible = (run: Run, d: Any, stmt: number) => Math.min(d.rows, settings.maxRows) - (run.removed[stmt]?.length ?? 0);
+/** Valor (sin cambios pendientes) de la celda visible i,c. */
+const visibleCell = (run: Run, d: Any, stmt: number, i: number, c: number) =>
+  i < baseVisible(run, d, stmt) ? cellAt(d, originalIndex(run, stmt, i), c) : { v: run.appended[stmt][i - baseVisible(run, d, stmt)][c], t: "" };
 const cellAt = (d: Any, i: number, c: number) => {
   const k = `${d.name}:${i}:${c}`;
   return applied.has(k) ? { v: applied.get(k), t: "" } : d.cell(i, c);
@@ -242,7 +259,7 @@ export const QueryService = {
         throw fail("QUERY_FAILED", "Esta conexión es de solo lectura: solo se permiten SELECT, SHOW, DESCRIBE y EXPLAIN", "readonly");
       }
       const queryId = uid("q");
-      const run: Run = { stmts: [], data: {}, canceled: false, sessionId: req.sessionId, pending: {} };
+      const run: Run = { stmts: [], data: {}, canceled: false, sessionId: req.sessionId, pending: {}, newRows: {}, deleted: {}, removed: {}, appended: {} };
       runs.set(queryId, run);
       void runQuery(queryId, req, run);
       return { queryId };
@@ -257,20 +274,30 @@ export const QueryService = {
     }),
   GetRows: (queryId: string, stmt: number, offset: number, limit: number) =>
     cp(() => {
-      const d = runs.get(queryId)?.data[stmt];
-      if (!d) throw fail("RESULT_EXPIRED", "El resultado ya no está en memoria");
+      const run = runs.get(queryId);
+      const d = run?.data[stmt];
+      if (!run || !d) throw fail("RESULT_EXPIRED", "El resultado ya no está en memoria");
       const ncols = (d as Any).cols?.length || 1;
-      const total = Math.min(d.rows, settings.maxRows);
+      const real = realTotal(run, d, stmt);
+      const news = run.newRows[stmt] ?? [];
+      const total = real + news.length;
       const end = Math.min(offset + limit, total);
       const rows: Any[] = [];
-      const pend = runs.get(queryId)!.pending[stmt];
+      const deleted: number[] = [];
+      const pend = run.pending[stmt];
       for (let i = offset; i < end; i++) {
+        if (i >= real) {
+          const n = news[i - real];
+          rows.push(Array.from({ length: ncols }, (_, c) => (n.has(c) ? { v: n.get(c).null ? null : n.get(c).text, t: "", trunc: false, edited: true } : { v: null, t: "default", trunc: false, edited: true })));
+          continue;
+        }
+        if (run.deleted[stmt]?.has(i)) deleted.push(i);
         rows.push(Array.from({ length: ncols }, (_, c) => {
           const p = pend?.get(`${i}:${c}`);
-          return p ? { v: p.value.null ? null : p.value.text, t: "", trunc: false, edited: true } : toCell(cellAt(d, i, c));
+          return p ? { v: p.value.null ? null : p.value.text, t: "", trunc: false, edited: true } : toCell(visibleCell(run, d, stmt, i, c));
         }));
       }
-      return { offset, rows, total, complete: true };
+      return { offset, rows, total, complete: true, deleted, newFrom: news.length ? real : -1 };
     }),
   GetCell: (queryId: string, stmt: number, row: number, col: number) => cp(() => toCell(cellAt(runs.get(queryId)?.data[stmt] ?? { cell: () => ({ v: null }) }, row, col))),
   RowsAsInsert: (_q: string, _s: number, _o: number, _l: number, table: string) => cp(() => `INSERT INTO \`${table || "t"}\` VALUES (1);`),
@@ -287,8 +314,10 @@ export const QueryService = {
 };
 
 
-// ---- edición de celdas (spec 13), versión simplificada: la clave es siempre la primera columna ----------------------------
+// ---- edición de celdas y filas (spec 13 y 14), versión simplificada: la clave es siempre la primera columna autoincremental -----
 const NOT_NULL: Record<string, number[]> = { actor: [1, 2], film: [1], big_numbers: [1] };
+const MAX_LEN: Record<string, Record<number, number>> = { actor: { 1: 10, 2: 10 } };
+const CASCADES: Record<string, string[]> = { film: ["sakila.film_actor"] };
 const isJsonCol = (d: Any, c: number) => String(d.cols?.[c]?.dataType).toLowerCase() === "json";
 function checkJson(text: string) {
   try {
@@ -297,25 +326,44 @@ function checkJson(text: string) {
     throw fail("VALIDATION", `El valor no es JSON válido: ${(e as Error).message}`, "cell");
   }
 }
-const MAX_LEN: Record<string, Record<number, number>> = { actor: { 1: 10, 2: 10 } };
+function counts(run: Run, stmt: number) {
+  const inserts = run.newRows[stmt]?.length ?? 0;
+  const deletes = run.deleted[stmt]?.size ?? 0;
+  return { pendingInserts: inserts, pendingDeletes: deletes, pending: (run.pending[stmt]?.size ?? 0) + inserts + deletes };
+}
 function editPlan(queryId: string, stmt: number) {
   const run = runs.get(queryId);
   const d = run?.data[stmt];
   if (!run || !d) throw fail("RESULT_EXPIRED", "El resultado ya no está en memoria");
   const sess = sessions.find((s) => s.sessionId === run.sessionId);
   const ncols = (d as Any).cols?.length ?? 0;
-  const info = { editable: false, reason: "", database: "sakila", table: d.name ?? "", keyColumns: [] as number[], columns: [] as Any[], pending: run.pending[stmt]?.size ?? 0 };
-  const col = (editable: boolean, reason = "", c = 0) => ({ editable, reason, dataType: String((d as Any).cols?.[c]?.dataType ?? "varchar"), nullable: !(NOT_NULL[d.name ?? ""] ?? []).includes(c) });
-  info.columns = Array.from({ length: ncols }, (_, c) => col(false, "", c));
+  const notNull = NOT_NULL[d.name ?? ""] ?? [];
+  const col = (editable: boolean, reason = "", c = 0) => ({
+    editable, reason, dataType: String((d as Any).cols?.[c]?.dataType ?? "varchar"), nullable: !notNull.includes(c),
+    insertable: c > 0, required: notNull.includes(c),
+  });
+  const info: Any = {
+    editable: false, reason: "", database: "sakila", table: d.name ?? "", keyColumns: [] as number[], columns: Array.from({ length: ncols }, (_, c) => col(false, "", c)),
+    canInsert: false, insertReason: "", insertMissing: [], deleteAffects: CASCADES[d.name ?? ""] ?? [], ...counts(run, stmt),
+  };
   if (!d.name || !ncols) return { run, d, info: { ...info, reason: "no_single_table" } };
   if (profileOf(sess?.profileId)?.readOnly) return { run, d, info: { ...info, reason: "readonly_profile" } };
   if (/\bjoin\b/i.test(d.sql ?? "")) return { run, d, info: { ...info, reason: "no_single_table" } };
   info.editable = true;
+  info.canInsert = true;
   info.keyColumns = [0];
   info.columns = Array.from({ length: ncols }, (_, c) => (c === 0 ? col(false, "key", c) : col(true, "", c)));
   return { run, d, info };
 }
 const pendingKey = (row: number, c: number) => `${row}:${c}`;
+const origText = (run: Run, d: Any, stmt: number, row: number, col: number) => String(visibleCell(run, d, stmt, row, col).v ?? "");
+function validateValue(d: Any, col: number, v: Any) {
+  const notNull = NOT_NULL[d.name ?? ""] ?? [];
+  if (v.null && notNull.includes(col)) throw fail("VALIDATION", `La columna «${col}» no admite NULL`, "cell");
+  if (!v.null && isJsonCol(d, col)) checkJson(v.text);
+  const max = MAX_LEN[d.name ?? ""]?.[col];
+  if (!v.null && max && [...v.text].length > max) throw fail("VALIDATION", `El texto tiene ${[...v.text].length} caracteres y la columna admite ${max}`, "cell");
+}
 export const EditService = {
   FormatJSON: (text: string) =>
     cp(() => {
@@ -327,54 +375,147 @@ export const EditService = {
     cp(() => {
       const { run, d, info } = editPlan(queryId, stmt);
       if (!info.editable) throw fail("VALIDATION", "No se puede editar este resultado", info.reason);
+      const real = realTotal(run, d, stmt);
+      if (row >= real) {
+        // fila nueva
+        if (!info.columns[col]?.insertable) throw fail("VALIDATION", "Esta columna no se puede escribir en una fila nueva", "not_insertable");
+        validateValue(d, col, v);
+        run.newRows[stmt][row - real].set(col, v);
+        return { ...info, ...counts(run, stmt) };
+      }
       if (!info.columns[col]?.editable) throw fail("VALIDATION", "Esta columna no se puede editar", info.columns[col]?.reason || "col");
-      if (v.null && (NOT_NULL[d.name ?? ""] ?? []).includes(col)) throw fail("VALIDATION", `La columna «${col}» no admite NULL`, "cell");
-      if (!v.null && isJsonCol(d, col)) checkJson(v.text);
-      const max = MAX_LEN[d.name ?? ""]?.[col];
-      if (!v.null && max && [...v.text].length > max) throw fail("VALIDATION", `El texto tiene ${[...v.text].length} caracteres y la columna admite ${max}`, "cell");
+      if (run.deleted[stmt]?.has(row)) throw fail("VALIDATION", "La fila está marcada para borrar", "row_deleted");
+      validateValue(d, col, v);
       const map = (run.pending[stmt] ??= new Map());
-      const orig = String(cellAt(d, row, col).v ?? "");
-      if (!v.null && v.text === orig) map.delete(pendingKey(row, col));
+      if (!v.null && v.text === origText(run, d, stmt, row, col)) map.delete(pendingKey(row, col));
       else map.set(pendingKey(row, col), { row, col, value: v });
-      return { ...info, pending: map.size };
+      return { ...info, ...counts(run, stmt) };
     }),
   Unstage: (queryId: string, stmt: number, row: number, col: number) =>
     cp(() => {
-      const { run, info } = editPlan(queryId, stmt);
-      run.pending[stmt]?.delete(pendingKey(row, col));
-      return { ...info, pending: run.pending[stmt]?.size ?? 0 };
+      const { run, d, info } = editPlan(queryId, stmt);
+      const real = realTotal(run, d, stmt);
+      if (row >= real) run.newRows[stmt]?.[row - real]?.delete(col);
+      else run.pending[stmt]?.delete(pendingKey(row, col));
+      return { ...info, ...counts(run, stmt) };
     }),
   Discard: (queryId: string, stmt: number) =>
     cp(() => {
       const { run, info } = editPlan(queryId, stmt);
       run.pending[stmt]?.clear();
-      return { ...info, pending: 0 };
+      run.newRows[stmt] = [];
+      run.deleted[stmt]?.clear();
+      return { ...info, ...counts(run, stmt) };
+    }),
+  AddRow: (queryId: string, stmt: number) =>
+    cp(() => {
+      const { run, d, info } = editPlan(queryId, stmt);
+      if (!info.canInsert) throw fail("VALIDATION", "No se pueden añadir filas a este resultado", info.insertReason);
+      (run.newRows[stmt] ??= []).push(new Map());
+      return { rows: [realTotal(run, d, stmt) + run.newRows[stmt].length - 1], info: { ...info, ...counts(run, stmt) } };
+    }),
+  DuplicateRows: (queryId: string, stmt: number, rows: number[]) =>
+    cp(() => {
+      const { run, d, info } = editPlan(queryId, stmt);
+      if (!info.canInsert) throw fail("VALIDATION", "No se pueden añadir filas a este resultado", info.insertReason);
+      const real = realTotal(run, d, stmt);
+      const list = (run.newRows[stmt] ??= []);
+      const out: number[] = [];
+      for (const src of rows) {
+        const n = new Map<number, Any>();
+        for (let c = 1; c < info.columns.length; c++) {
+          if (src >= real) {
+            if (list[src - real]?.has(c)) n.set(c, list[src - real].get(c));
+            continue;
+          }
+          const p = run.pending[stmt]?.get(pendingKey(src, c));
+          if (p) n.set(c, p.value);
+          else {
+            const v = visibleCell(run, d, stmt, src, c).v;
+            n.set(c, v == null ? { null: true, text: "" } : { null: false, text: String(v) });
+          }
+        }
+        list.push(n);
+        out.push(real + list.length - 1);
+      }
+      return { rows: out, info: { ...info, ...counts(run, stmt) } };
+    }),
+  MarkDelete: (queryId: string, stmt: number, rows: number[]) =>
+    cp(() => {
+      const { run, d, info } = editPlan(queryId, stmt);
+      if (!info.editable) throw fail("VALIDATION", "No se puede editar este resultado", info.reason);
+      const real = realTotal(run, d, stmt);
+      for (const r of [...rows].sort((a, b) => b - a)) {
+        if (r >= real) run.newRows[stmt].splice(r - real, 1);
+        else {
+          (run.deleted[stmt] ??= new Set()).add(r);
+          for (const k of [...(run.pending[stmt]?.keys() ?? [])]) if (k.startsWith(`${r}:`)) run.pending[stmt].delete(k);
+        }
+      }
+      return { ...info, ...counts(run, stmt) };
+    }),
+  UnmarkDelete: (queryId: string, stmt: number, rows: number[]) =>
+    cp(() => {
+      const { run, info } = editPlan(queryId, stmt);
+      rows.forEach((r) => run.deleted[stmt]?.delete(r));
+      return { ...info, ...counts(run, stmt) };
     }),
   Preview: (queryId: string, stmt: number) =>
     cp(() => {
       const { run, d } = editPlan(queryId, stmt);
+      const lit = (v: Any) => (v.null ? "NULL" : `'${v.text}'`);
       const byRow = new Map<number, Any[]>();
       for (const p of run.pending[stmt]?.values() ?? []) byRow.set(p.row, [...(byRow.get(p.row) ?? []), p]);
-      return [...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([row, ps]) => ({
-        row, cols: ps.map((p) => p.col),
-        sql: `UPDATE \`sakila\`.\`${d.name}\` SET ${ps.map((p) => `\`c${p.col}\` = ${p.value.null ? "NULL" : `'${p.value.text}'`}`).join(", ")} WHERE \`id\` = ${cellAt(d, row, 0).v}`,
+      const out: Any[] = [...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([row, ps]) => ({
+        kind: "update", row, cols: ps.map((p) => p.col),
+        sql: `UPDATE \`sakila\`.\`${d.name}\` SET ${ps.map((p) => `\`c${p.col}\` = ${lit(p.value)}`).join(", ")} WHERE \`id\` = ${visibleCell(run, d, stmt, row, 0).v}`,
       }));
+      for (const row of [...(run.deleted[stmt] ?? [])].sort((a, b) => a - b)) {
+        out.push({ kind: "delete", row, cols: [], sql: `DELETE FROM \`sakila\`.\`${d.name}\` WHERE \`id\` = ${visibleCell(run, d, stmt, row, 0).v} LIMIT 1` });
+      }
+      const real = realTotal(run, d, stmt);
+      (run.newRows[stmt] ?? []).forEach((n, i) => {
+        const cols = [...n.keys()].sort((a, b) => a - b);
+        out.push({ kind: "insert", row: real + i, cols, sql: `INSERT INTO \`sakila\`.\`${d.name}\` (${cols.map((c) => `\`c${c}\``).join(", ")}) VALUES (${cols.map((c) => lit(n.get(c))).join(", ")})` });
+      });
+      return out;
     }),
   Apply: (queryId: string, stmt: number) =>
     cp(() => {
       const { run, d, info } = editPlan(queryId, stmt);
       if (!info.editable) throw fail("QUERY_FAILED", "Esta conexión es de solo lectura: no se pueden aplicar cambios", "readonly");
-      const map = run.pending[stmt];
-      if (!map?.size) return { applied: 0, conflict: null };
-      if ((window as Any).__mock.forceConflict) {
-        const first = [...map.values()].sort((a, b) => a.row - b.row)[0];
-        return { applied: 0, conflict: { row: first.row, reason: (window as Any).__mock.forceConflict } };
+      const edits = run.pending[stmt];
+      const news = run.newRows[stmt] ?? [];
+      const dels = [...(run.deleted[stmt] ?? [])].sort((a, b) => a - b);
+      if (!edits?.size && !news.length && !dels.length) return { applied: 0, inserted: 0, deleted: 0, conflict: null };
+      for (const [i, n] of news.entries()) {
+        for (const [c, col] of info.columns.entries()) {
+          if (col.required && !n.has(c)) throw fail("VALIDATION", `Fila nueva ${i + 1}: falta un valor para «${c}»`, "required");
+        }
       }
-      const rows = new Set([...map.values()].map((p) => p.row));
-      for (const p of map.values()) applied.set(`${d.name}:${p.row}:${p.col}`, p.value.null ? null : p.value.text);
-      map.clear();
-      Events.Emit("edit:applied", { queryId, stmtIndex: stmt, rows: rows.size });
-      return { applied: rows.size, conflict: null };
+      if ((window as Any).__mock.forceConflict) {
+        const first = [...(edits?.values() ?? [])].sort((a, b) => a.row - b.row)[0]?.row ?? dels[0] ?? 0;
+        return { applied: 0, inserted: 0, deleted: 0, conflict: { row: first, reason: (window as Any).__mock.forceConflict } };
+      }
+      const rows = new Set([...(edits?.values() ?? [])].map((p) => p.row));
+      // 1) ediciones: se guardan por fila original; 2) borrados; 3) filas nuevas.
+      for (const p of edits?.values() ?? []) {
+        applied.set(`${d.name}:${originalIndex(run, stmt, p.row)}:${p.col}`, p.value.null ? null : p.value.text);
+      }
+      const origs = dels.map((r) => originalIndex(run, stmt, r));
+      const visibleBase = baseVisible(run, d, stmt);
+      const appendedDel = dels.filter((r) => r >= visibleBase).map((r) => r - visibleBase);
+      run.removed[stmt] = [...(run.removed[stmt] ?? []), ...dels.filter((r) => r < visibleBase).map((_, i) => origs[i])];
+      if (appendedDel.length) run.appended[stmt] = run.appended[stmt].filter((_, i) => !appendedDel.includes(i));
+      for (const n of news) {
+        const cells = Array.from({ length: info.columns.length }, (_, c) => (c === 0 ? 1000 + (run.appended[stmt]?.length ?? 0) : n.has(c) ? (n.get(c).null ? null : n.get(c).text) : null));
+        (run.appended[stmt] ??= []).push(cells);
+      }
+      run.pending[stmt]?.clear();
+      run.newRows[stmt] = [];
+      run.deleted[stmt]?.clear();
+      Events.Emit("edit:applied", { queryId, stmtIndex: stmt, rows: rows.size + dels.length + news.length });
+      return { applied: rows.size, inserted: news.length, deleted: dels.length, conflict: null };
     }),
 };
 

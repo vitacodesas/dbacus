@@ -137,6 +137,13 @@ export default {
     invalid: { maxRows: "Entre 1 000 y 10 000 000", maxResultMemoryMiB: "Entre 64 y 16 384", historyRetention: "Entre 0 y 100 000" },
   },
   edit: {
+    appliedTitle: "Cambios aplicados", appliedUpdated: "{n} actualizadas", appliedInserted: "{n} nuevas", appliedDeleted: "{n} borradas",
+    pendingInserts: "{n} filas nuevas", pendingDeletes: "{n} filas a borrar", newRow: "Nueva fila", newRowFrom: "Insertar nueva fila a partir de esta",
+    newRowFromMany: "Insertar nuevas filas a partir de estas {n}", deleteRows: "Eliminar fila", deleteRowsMany: "Eliminar {n} filas", restoreRows: "Restaurar fila(s)",
+    insertMissing: "No se pueden añadir filas: faltan columnas obligatorias en el SELECT ({cols})", required: "Obligatorio: la fila nueva no se puede aplicar sin este valor",
+    kind: { update: "Modificar", insert: "Insertar", delete: "Borrar" },
+    cascadeWarning: "Borrar estas filas también modificará filas de otras tablas por sus claves foráneas: {tables}.",
+    reasonsMore: { not_insertable: "Esta columna no se escribe en una fila nueva (la asigna el servidor)", row_deleted: "La fila está marcada para borrar" },
     expandedTitle: "Editar {name}", expandedHint: "Ctrl/⌘+Intro guarda. Go valida el valor antes de dejarlo como cambio pendiente.", format: "Formatear JSON", saveChange: "Guardar cambio", pending: "{n} cambios sin aplicar", apply: "Aplicar", discard: "Descartar", viewSql: "Ver SQL", applied: "Se aplicaron {n} filas",
     editCell: "Editar celda", setNull: "Establecer NULL", revert: "Revertir celda", edited: "Valor modificado: aún no se ha aplicado",
     reviewTitle: "Aplicar cambios", reviewIntro: "Se ejecutarán estas sentencias en una sola transacción. Si alguna falla, no se aplica ninguna.",

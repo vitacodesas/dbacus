@@ -9,7 +9,7 @@ import {
   toTSV, visibleColumns, visibleRows, type Selection,
 } from "../../composables/gridModel";
 import { useEditsStore } from "../../stores/edits";
-import { MAX_COPY_ROWS, useResultsStore } from "../../stores/results";
+import { MAX_COPY_ROWS, useResultsStore, WINDOW } from "../../stores/results";
 import { useUiStore } from "../../stores/ui";
 import type { Cell, ColumnMeta } from "../../types";
 import BaseContextMenu, { type MenuItem } from "../ui/BaseContextMenu.vue";
@@ -36,6 +36,15 @@ const sel = ref<Selection | null>(null);
 // ---- edición de celdas (spec 13): Go valida y guarda los cambios pendientes; aquí solo se captura el texto ------------------
 const editInfo = computed(() => edits.infoOf(props.queryId, props.stmtIndex));
 const canEdit = (c: number) => edits.isEditable(props.queryId, props.stmtIndex, c);
+const flagsOf = (r: number) => results.rowFlags(props.tabId, props.stmtIndex, r);
+/** Una celda es editable según la fila: en una fila nueva basta con que la columna se pueda escribir; en una marcada para borrar, nunca. */
+function canEditAt(r: number, c: number): boolean {
+  const f = flagsOf(r);
+  if (f.deleted) return false;
+  if (f.isNew) return !!editInfo.value?.editable && !!editInfo.value.columns?.[c]?.insertable;
+  return canEdit(c);
+}
+const canInsert = computed(() => !!editInfo.value?.editable && !!editInfo.value.canInsert);
 const editing = ref<{ r: number; c: number; text: string; error: string | null; saving: boolean } | null>(null);
 const editorEl = ref<HTMLInputElement | null>(null);
 const expanded = ref<CellEditTarget | null>(null);
@@ -167,6 +176,13 @@ async function onKey(e: KeyboardEvent) {
     case "F2":
       e.preventDefault();
       return void startEdit();
+    case "Delete":
+    case "Backspace":
+      if (editInfo.value?.editable && sel.value) {
+        e.preventDefault();
+        return void deleteSelectedRows();
+      }
+      return;
     case "Enter":
     case " ":
       e.preventDefault();
@@ -183,14 +199,14 @@ async function onKey(e: KeyboardEvent) {
 
 function startEdit(): boolean {
   const s = sel.value;
-  if (!s || !canEdit(s.fc)) return false;
+  if (!s || !canEditAt(s.fr, s.fc)) return false;
   const cell = rowAt(s.fr)?.[s.fc];
   if (!cell) return false;
   if (cell.trunc) {
     ui.toast("info", t("edit.reasons.truncated"));
     return true;
   }
-  const text = cell.v == null ? "" : String(cell.v);
+  const text = cell.v == null || cell.t === "default" ? "" : String(cell.v);
   // JSON, textos con saltos de línea o que no caben en la celda se editan en un diálogo ampliado, no en una línea.
   if (needsExpandedEditor(text, props.columns[s.fc]?.dataType ?? "", widths.value[s.fc] ?? 0)) {
     expanded.value = {
@@ -257,10 +273,59 @@ function onDblClick() {
   if (startEdit()) return;
   // En un resultado editable, doble clic sobre una columna que no lo es explica el motivo (antes solo abría el visor).
   const s = sel.value;
-  const reason = s && editInfo.value?.editable ? editInfo.value.columns?.[s.fc]?.reason : "";
-  if (reason) ui.toast("info", t(`edit.reasons.${reason}`));
+  let reason = "";
+  if (s && editInfo.value?.editable) {
+    const f = flagsOf(s.fr);
+    if (f.deleted) reason = "reasonsMore.row_deleted";
+    else if (f.isNew) reason = "reasonsMore.not_insertable";
+    else if (editInfo.value.columns?.[s.fc]?.reason) reason = `reasons.${editInfo.value.columns[s.fc].reason}`;
+  }
+  if (reason) ui.toast("info", t(`edit.${reason}`));
   viewCurrent();
 }
+
+// ---- filas nuevas y borrados (spec 14) ------------------------------------------------------------------------------
+
+const selectedRowList = (): number[] => {
+  if (!sel.value) return [];
+  const b = selectionBounds(sel.value);
+  return Array.from({ length: Math.min(b.r1 - b.r0 + 1, 1000) }, (_, i) => b.r0 + i);
+};
+
+async function deleteSelectedRows() {
+  const rows = selectedRowList();
+  if (!rows.length) return;
+  const err = await edits.markDelete(props.tabId, props.queryId, props.stmtIndex, rows);
+  if (err) ui.toast("error", err.message);
+}
+
+async function duplicateSelectedRows() {
+  const rows = selectedRowList();
+  if (!rows.length) return;
+  const err = await edits.addRow(props.tabId, props.queryId, props.stmtIndex, rows);
+  if (err) ui.toast("error", err.message);
+}
+
+// Tras crear una fila nueva (botón «Nueva fila» o «insertar a partir de esta») el grid se coloca en ella y abre el editor.
+watch(
+  () => edits.focusRequest,
+  async (req) => {
+    if (!req || req.queryId !== props.queryId || req.stmt !== props.stmtIndex) return;
+    edits.focusRequest = null;
+    await results.ensureWindow(props.tabId, props.stmtIndex, Math.floor(req.row / WINDOW));
+    await nextTick();
+    const info = editInfo.value;
+    // Primera columna obligatoria vacía; si no hay, la primera que se pueda escribir.
+    const cols = info?.columns ?? [];
+    let c = cols.findIndex((x) => x.insertable && x.required);
+    if (c < 0) c = cols.findIndex((x) => x.insertable);
+    if (c < 0) c = 0;
+    sel.value = { ar: req.row, ac: c, fr: req.row, fc: c };
+    ensureVisible(req.row, c);
+    root.value?.focus();
+    startEdit();
+  },
+);
 
 async function setNull() {
   const s = sel.value;
@@ -314,6 +379,7 @@ function viewCurrent() {
   if (!sel.value) return;
   const r = sel.value.fr;
   const c = sel.value.fc;
+  if (flagsOf(r).isNew) return; // una fila nueva aún no existe en el servidor: no hay valor completo que pedir
   const cell = rowAt(r)?.[c];
   if (cell) viewing.value = { queryId: props.queryId, stmt: props.stmtIndex, row: r, col: c, name: props.columns[c]?.name ?? "", cell };
 }
@@ -326,11 +392,19 @@ const menu = computed<MenuItem[]>(() => {
   ];
   if (sel.value) items.push({ id: "view", label: t("query.menu.viewCell"), separatorBefore: true });
   const cur = sel.value ? rowAt(sel.value.fr)?.[sel.value.fc] : undefined;
-  if (sel.value && canEdit(sel.value.fc)) {
+  if (sel.value && canEditAt(sel.value.fr, sel.value.fc)) {
     items.push({ id: "editCell", label: t("edit.editCell"), separatorBefore: true });
     if (editInfo.value?.columns?.[sel.value.fc]?.nullable) items.push({ id: "setNull", label: t("edit.setNull") });
   }
   if (cur?.edited) items.push({ id: "revert", label: t("edit.revert") });
+  if (editInfo.value?.editable && sel.value) {
+    const rows = selectedRowList();
+    if (canInsert.value) {
+      items.push({ id: "dupRows", label: rows.length > 1 ? t("edit.newRowFromMany", { n: rows.length }) : t("edit.newRowFrom"), separatorBefore: true });
+    }
+    items.push({ id: "delRows", label: rows.length > 1 ? t("edit.deleteRowsMany", { n: rows.length }) : t("edit.deleteRows"), separatorBefore: !canInsert.value });
+    if (rows.some((r) => flagsOf(r).deleted)) items.push({ id: "restoreRows", label: t("edit.restoreRows") });
+  }
   return items;
 });
 function onMenu(id: string) {
@@ -340,6 +414,9 @@ function onMenu(id: string) {
   else if (id === "view") viewCurrent();
   else if (id === "editCell") startEdit();
   else if (id === "setNull") void setNull();
+  else if (id === "dupRows") void duplicateSelectedRows();
+  else if (id === "delRows") void deleteSelectedRows();
+  else if (id === "restoreRows") void edits.unmarkDelete(props.tabId, props.queryId, props.stmtIndex, selectedRowList());
   else if (id === "revert" && sel.value) void edits.unstage(props.tabId, props.queryId, props.stmtIndex, sel.value.fr, sel.value.fc);
 }
 function onContextMenu(e: MouseEvent) {
@@ -384,15 +461,18 @@ const rowsVm = computed(() =>
     const row = rowAt(r);
     const s = sel.value;
     const selectedRow = !!s && s.ac === 0 && s.fc === lastCol() && inSelection(s, r, 0);
-    if (!row) return { r, selectedRow, cells: null };
+    if (!row) return { r, selectedRow, cells: null, rowCls: [] };
+    const flags = flagsOf(r);
     const cells = visibleColumnIdx.value.map((c) => {
       const d = displayCell(row[c]);
+      const missing = flags.isNew && d.type === "default" && !!editInfo.value?.columns?.[c]?.required;
       return {
-        c, text: d.text, cls: cellClass(r, c, d, !!row[c].edited), mono: d.numeric || d.type === "bytes" || d.type === "json",
-        title: row[c].edited ? t("edit.edited") : d.text.length > 40 ? copyText(row[c]).slice(0, 500) : undefined,
+        c, text: d.text, mono: d.numeric || d.type === "bytes" || d.type === "json",
+        cls: [cellClass(r, c, d, !!row[c].edited && !flags.isNew), missing && "outline outline-1 -outline-offset-1 outline-danger"],
+        title: missing ? t("edit.required") : row[c].edited ? t("edit.edited") : d.text.length > 40 ? copyText(row[c]).slice(0, 500) : undefined,
       };
     });
-    return { r, selectedRow, cells };
+    return { r, selectedRow, cells, rowCls: [flags.isNew && "bg-success/10", flags.deleted && "bg-danger/10 text-muted line-through"] };
   }),
 );
 </script>
@@ -473,7 +553,7 @@ const rowsVm = computed(() =>
 
         <!-- Filas visibles -->
         <div class="absolute left-0" :style="{ top: `${HEADER_HEIGHT + rowRange[0] * ROW_HEIGHT}px`, width: `${totalWidth}px` }">
-          <div v-for="row in rowsVm" :key="row.r" class="flex border-b border-border/50" :style="{ height: `${ROW_HEIGHT}px` }" role="row" :aria-rowindex="row.r + 2">
+          <div v-for="row in rowsVm" :key="row.r" class="flex border-b border-border/50" :class="row.rowCls" :data-row-state="flagsOf(row.r).deleted ? 'deleted' : flagsOf(row.r).isNew ? 'new' : undefined" :style="{ height: `${ROW_HEIGHT}px` }" role="row" :aria-rowindex="row.r + 2">
             <div
               class="font-data sticky left-0 z-10 shrink-0 border-r border-border bg-hover px-2 text-right text-xs leading-6 text-muted"
               :class="row.selectedRow && 'bg-accent/30'"

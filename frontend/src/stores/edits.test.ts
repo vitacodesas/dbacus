@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
-const api = vi.hoisted(() => ({ getEditInfo: vi.fn(), stageEdit: vi.fn(), unstageEdit: vi.fn(), discardEdits: vi.fn(), previewEdits: vi.fn(), applyEdits: vi.fn() }));
+const api = vi.hoisted(() => ({
+  getEditInfo: vi.fn(), stageEdit: vi.fn(), unstageEdit: vi.fn(), discardEdits: vi.fn(), previewEdits: vi.fn(), applyEdits: vi.fn(),
+  addEditRow: vi.fn(), duplicateEditRows: vi.fn(), markDeleteRows: vi.fn(), unmarkDeleteRows: vi.fn(),
+}));
 vi.mock("../api/edits", () => api);
 const queries = vi.hoisted(() => ({ execute: vi.fn(), cancel: vi.fn(), getRows: vi.fn() }));
 vi.mock("../api/queries", () => queries);
@@ -170,5 +173,59 @@ describe("edits store", () => {
     await run;
     expect(queries.execute).not.toHaveBeenCalled(); // se quedó como estaba
     expect(results.of("t1").queryId).toBe("q1");
+  });
+
+  describe("filas nuevas y borrados", () => {
+    it("addRow crea la fila en Go y pide al grid que se coloque en ella", async () => {
+      await openResult();
+      const edits = useEditsStore();
+      api.addEditRow.mockResolvedValue({ rows: [200], info: info({ pending: 1, pendingInserts: 1 }) });
+      expect(await edits.addRow("t1", "q1", 0)).toBeNull();
+      expect(edits.infoOf("q1", 0)).toMatchObject({ pending: 1, pendingInserts: 1 });
+      expect(edits.focusRequest).toEqual({ queryId: "q1", stmt: 0, row: 200 });
+      expect(api.duplicateEditRows).not.toHaveBeenCalled();
+    });
+
+    it("con filas de origen usa «duplicar» y se coloca en la primera copia", async () => {
+      await openResult();
+      const edits = useEditsStore();
+      api.duplicateEditRows.mockResolvedValue({ rows: [200, 201], info: info({ pending: 2, pendingInserts: 2 }) });
+      await edits.addRow("t1", "q1", 0, [3, 4]);
+      expect(api.duplicateEditRows).toHaveBeenCalledWith("q1", 0, [3, 4]);
+      expect(edits.focusRequest?.row).toBe(200);
+    });
+
+    it("devuelve el error de Go sin dejar nada pendiente (p. ej. faltan columnas obligatorias)", async () => {
+      await openResult();
+      const edits = useEditsStore();
+      api.addEditRow.mockRejectedValue(apiError("No se pueden añadir filas a este resultado"));
+      const err = await edits.addRow("t1", "q1", 0);
+      expect(err?.message).toContain("No se pueden añadir");
+      expect(edits.focusRequest).toBeNull();
+    });
+
+    it("markDelete y unmarkDelete actualizan los contadores", async () => {
+      await openResult();
+      const edits = useEditsStore();
+      api.markDeleteRows.mockResolvedValue(info({ pending: 2, pendingDeletes: 2 }));
+      expect(await edits.markDelete("t1", "q1", 0, [1, 2])).toBeNull();
+      expect(api.markDeleteRows).toHaveBeenCalledWith("q1", 0, [1, 2]);
+      expect(edits.infoOf("q1", 0)?.pendingDeletes).toBe(2);
+      expect(edits.pendingFor("t1")).toBe(2);
+      api.unmarkDeleteRows.mockResolvedValue(info());
+      await edits.unmarkDelete("t1", "q1", 0, [1, 2]);
+      expect(edits.pendingFor("t1")).toBe(0);
+    });
+
+    it("el aviso de aplicar resume lo actualizado, insertado y borrado", async () => {
+      await openResult();
+      const edits = useEditsStore();
+      api.previewEdits.mockResolvedValue([{ kind: "update", row: 0, cols: [1], sql: "UPDATE …" }]);
+      api.applyEdits.mockResolvedValue({ applied: 2, inserted: 1, deleted: 3, conflict: null });
+      api.getEditInfo.mockResolvedValue(info());
+      await edits.requestApply("t1", "q1", 0);
+      await edits.apply();
+      expect(useUiStore().toasts.at(-1)?.message).toBe("Cambios aplicados: 2 actualizadas, 1 nuevas, 3 borradas");
+    });
   });
 });

@@ -139,6 +139,13 @@ const en: typeof es = {
     invalid: { maxRows: "Between 1,000 and 10,000,000", maxResultMemoryMiB: "Between 64 and 16,384", historyRetention: "Between 0 and 100,000" },
   },
   edit: {
+    appliedTitle: "Changes applied", appliedUpdated: "{n} updated", appliedInserted: "{n} new", appliedDeleted: "{n} deleted",
+    pendingInserts: "{n} new rows", pendingDeletes: "{n} rows to delete", newRow: "New row", newRowFrom: "Insert new row based on this one",
+    newRowFromMany: "Insert new rows based on these {n}", deleteRows: "Delete row", deleteRowsMany: "Delete {n} rows", restoreRows: "Restore row(s)",
+    insertMissing: "Rows cannot be added: required columns are missing from the SELECT ({cols})", required: "Required: the new row cannot be applied without this value",
+    kind: { update: "Update", insert: "Insert", delete: "Delete" },
+    cascadeWarning: "Deleting these rows will also modify rows in other tables through foreign keys: {tables}.",
+    reasonsMore: { not_insertable: "This column is not written in a new row (the server assigns it)", row_deleted: "The row is marked for deletion" },
     expandedTitle: "Edit {name}", expandedHint: "Ctrl/⌘+Enter saves. Go validates the value before it becomes a pending change.", format: "Format JSON", saveChange: "Save change", pending: "{n} unapplied changes", apply: "Apply", discard: "Discard", viewSql: "View SQL", applied: "{n} rows updated",
     editCell: "Edit cell", setNull: "Set NULL", revert: "Revert cell", edited: "Modified value: not applied yet",
     reviewTitle: "Apply changes", reviewIntro: "These statements run in a single transaction. If one fails, none is applied.",

@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useEditsStore } from "../../stores/edits";
 import { useResultsStore } from "../../stores/results";
 import { useUiStore } from "../../stores/ui";
-import { Download } from "lucide-vue-next";
+import { Download, Plus } from "lucide-vue-next";
 import ExportDialog from "../export/ExportDialog.vue";
 import BaseButton from "../ui/BaseButton.vue";
 import BaseEmptyState from "../ui/BaseEmptyState.vue";
@@ -45,11 +45,27 @@ watch(
   },
   { immediate: true },
 );
-const pending = computed(() => (res.value.queryId ? (edits.infoOf(res.value.queryId, current.value)?.pending ?? 0) : 0));
-const editNote = computed(() => {
-  const i = res.value.queryId ? edits.infoOf(res.value.queryId, current.value) : null;
-  return i && !i.editable && i.reason ? t(`edit.reasons.${i.reason}`) : "";
+const editInfo = computed(() => (res.value.queryId ? edits.infoOf(res.value.queryId, current.value) : null));
+const pending = computed(() => editInfo.value?.pending ?? 0);
+const pendingText = computed(() => {
+  const i = editInfo.value;
+  if (!i) return "";
+  const parts = [t("edit.pending", { n: i.pending })];
+  if (i.pendingInserts) parts.push(t("edit.pendingInserts", { n: i.pendingInserts }));
+  if (i.pendingDeletes) parts.push(t("edit.pendingDeletes", { n: i.pendingDeletes }));
+  return parts.join(" · ");
 });
+const editNote = computed(() => {
+  const i = editInfo.value;
+  if (!i) return "";
+  if (!i.editable) return i.reason ? t(`edit.reasons.${i.reason}`) : "";
+  return i.canInsert ? "" : t("edit.insertMissing", { cols: (i.insertMissing ?? []).join(", ") });
+});
+async function newRow() {
+  if (!res.value.queryId) return;
+  const err = await edits.addRow(props.tabId, res.value.queryId, current.value);
+  if (err) ui.toast("error", err.message);
+}
 
 // Cronómetro mientras corre
 const now = ref(Date.now());
@@ -130,6 +146,17 @@ const summary = (i: number) => {
           </template>
           <span class="font-data">{{ t("query.took", { ms: fmt(elapsed) }) }}</span>
         </span>
+        <BaseButton
+          v-if="showGrid && res.status !== 'running' && editInfo?.editable"
+          size="sm"
+          variant="ghost"
+          data-testid="new-row"
+          :disabled="!editInfo.canInsert"
+          :title="editInfo.canInsert ? t('edit.newRow') : t('edit.insertMissing', { cols: (editInfo.insertMissing ?? []).join(', ') })"
+          @click="newRow"
+        >
+          <Plus class="size-3.5" />{{ t("edit.newRow") }}
+        </BaseButton>
         <BaseButton v-if="showGrid && res.status !== 'running' && res.queryId" size="sm" variant="ghost" data-testid="export-open" :title="t('export.button')" @click="exportOpen = true">
           <Download class="size-3.5" />{{ t("export.button") }}
         </BaseButton>
@@ -186,7 +213,7 @@ const summary = (i: number) => {
 
       <!-- Cambios de celdas sin aplicar -->
       <div v-if="pending > 0 && res.queryId" class="flex shrink-0 items-center gap-2 border-t border-border bg-warning/10 px-3 py-1.5 text-sm" role="status" data-testid="edit-bar">
-        <span>{{ t("edit.pending", { n: pending }) }}</span>
+        <span data-testid="edit-pending-text">{{ pendingText }}</span>
         <span class="ml-auto flex items-center gap-1">
           <BaseButton size="sm" variant="ghost" data-testid="edit-view-sql" @click="edits.requestApply(tabId, res.queryId, current, { viewOnly: true })">{{ t("edit.viewSql") }}</BaseButton>
           <BaseButton size="sm" variant="ghost" data-testid="edit-discard" @click="edits.discard(tabId, res.queryId, current)">{{ t("edit.discard") }}</BaseButton>

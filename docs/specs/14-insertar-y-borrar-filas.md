@@ -1,6 +1,6 @@
 # 14 — Insertar y borrar filas (etapa 2, borrador)
 
-> Estado: **borrador para aprobar**. Las decisiones ⚑ son propuestas con un valor por defecto. Continúa el spec 13 (edición de celdas): reutiliza su elegibilidad, sus cambios pendientes en Go, la revisión del SQL, la transacción y el control optimista. No hay código de esto todavía.
+> Estado: **implementado** en T8.1–T8.5 (decisiones D1–D8 aprobadas tal como estaban). Falta el smoke manual en la app nativa (`docs/smoke-manual.md`). Continúa el spec 13: reutiliza su elegibilidad, sus cambios pendientes en Go, la revisión del SQL, la transacción y el control optimista.
 
 ## Objetivo
 Añadir filas nuevas y borrar filas desde el grid de un resultado editable, como cambios pendientes que se revisan y se aplican juntos (con las ediciones de celdas) en **una sola transacción**.
@@ -46,6 +46,16 @@ Tras el commit: se releen las filas insertadas por su clave (o `LAST_INSERT_ID()
 - La barra de cambios dice «N cambios · M filas nuevas · K filas a borrar».
 - Re-ejecutar o cerrar la pestaña con cualquiera de estos cambios pide confirmación (spec 13).
 
+## Implementación (diferencias respecto al borrador)
+- **API**: no hay `StageNew`/`DiscardNew`/`UnstageNew`. `Stage`, `Unstage` y `MarkDelete` aceptan también el índice de una fila nueva (índices ≥ nº de filas reales): dar valor a una celda de fila nueva, devolverla a «DEFAULT» y descartar la fila. Métodos nuevos: `AddRow`, `DuplicateRows` (devuelven `{rows, info}`), `MarkDelete`, `UnmarkDelete`. `GetRows` usa la vista con cambios (`Buffer.WindowView`); exportar y «copiar como INSERT» siguen leyendo el buffer sin cambios pendientes (`Buffer.Window`).
+- **`RowWindow`**: `deleted` son índices **absolutos** de las filas marcadas dentro de la ventana; `newFrom` es el índice de la primera fila nueva o -1; `total` incluye las filas nuevas. Las celdas sin valor de una fila nueva llevan `t: "default"` (se pintan «DEFAULT»).
+- **`edit.Info`**: `pending` es el total (celdas editadas + filas nuevas + filas a borrar) y se desglosa en `pendingInserts`/`pendingDeletes`; `canInsert`, `insertReason`, `insertMissing` y `deleteAffects`. Por columna: `insertable` y `required`.
+- **FKs entrantes**: `TableDetail.incomingFks` (nueva consulta a `information_schema`); `deleteAffects` lista las tablas con `ON DELETE CASCADE/SET NULL/SET DEFAULT`.
+- **Driver**: `Conn.Exec` devuelve también el último ID autoincremental (`rowsAffected, lastInsertID, err`).
+- **Aplicar** valida antes de abrir ninguna conexión que toda columna `required` de cada fila nueva tenga valor (`VALIDATION`, `Detail: required`). `ApplyResult` añade `inserted` y `deleted`. Una fila nueva se relee por su clave (o por el ID autoincremental); si no se puede, se conserva lo escrito.
+- **Hallazgo**: un `INSERT` fallido (p. ej. clave única duplicada) **consume** el contador `AUTO_INCREMENT` aunque se revierta; el siguiente ID salta. Es comportamiento del servidor, ya anotado más abajo.
+- **UI**: botón «Nueva fila» en la barra del resultado (deshabilitado con el motivo si faltan columnas obligatorias en el SELECT, que además se anota en el pie del grid); `Supr`/`⌫` o menú para eliminar; menú «Insertar nueva fila a partir de esta» (una o varias filas); las filas nuevas llevan fondo verde y las borradas, rojo y tachado; las celdas obligatorias sin valor se marcan en rojo. Tras crear una fila el grid se coloca en ella y abre el editor en su primera columna obligatoria vacía (o en la primera escribible).
+
 ## Seguridad y casos borde
 - Un perfil de solo lectura no ofrece nada de esto y `Apply` lo rechaza (ya cubierto).
 - Borrar con FK: el servidor decide (`RESTRICT` falla y revierte todo; `CASCADE` borra también filas de otras tablas **sin que la app lo sepa**: el diálogo de revisión avisa en un texto fijo cuando la tabla tiene FKs entrantes con `CASCADE`).
@@ -55,19 +65,19 @@ Tras el commit: se releen las filas insertadas por su clave (o `LAST_INSERT_ID()
 - Un `INSERT` en una tabla con `AUTO_INCREMENT` consume el contador aunque se revierta: es comportamiento del servidor.
 
 ## Criterios de aceptación
-- [ ] «Nueva fila» + rellenar + aplicar inserta una fila y el grid la muestra con los valores que dejó el servidor (autoincrement, `DEFAULT`, triggers).
-- [ ] Clic derecho sobre una fila → «Insertar nueva fila a partir de esta» crea una fila nueva con los mismos valores (incluido `NULL`), salvo las columnas autoincrementales, generadas, binarias y las de una clave no autoincremental, que quedan vacías; se puede cambiar lo que se quiera y aplicar.
-- [ ] Con varias filas seleccionadas se crean varias filas nuevas, en el mismo orden.
-- [ ] Copiar una fila cuya clave es natural (no autoincremental) no se puede aplicar hasta rellenar la clave; el motivo se ve en la celda.
-- [ ] Copiar una fila con un valor único repetido (p. ej. un correo) devuelve el error del servidor indicando la fila nueva, sin aplicar nada.
-- [ ] Una tabla con una columna `NOT NULL` sin `DEFAULT` que no está en el `SELECT` no ofrece «Nueva fila» y dice cuál falta.
-- [ ] Borrar una o varias filas y aplicar las elimina; el grid pierde esas filas y el total baja.
-- [ ] Si otra sesión cambió la fila que se iba a borrar, `Apply` da conflicto y no se aplica **nada** del lote (incluidas las inserciones y ediciones).
-- [ ] Borrar y reinsertar la misma clave única en un lote funciona (D3).
-- [ ] Una clave duplicada o una FK incumplida revierte todo y el mensaje indica la fila.
-- [ ] Las filas nuevas distinguen vacío (`DEFAULT`), `NULL` y cadena vacía.
-- [ ] Re-ejecutar o cerrar con filas nuevas o borradas pide confirmación.
-- [ ] Probado en MySQL 8.0/8.4 y MariaDB 10.11 con claves compuestas, `BIGINT UNSIGNED` y `AUTO_INCREMENT`.
+- [x] «Nueva fila» + rellenar + aplicar inserta una fila y el grid la muestra con los valores que dejó el servidor (autoincrement, `DEFAULT`, triggers).
+- [x] Clic derecho sobre una fila → «Insertar nueva fila a partir de esta» crea una fila nueva con los mismos valores (incluido `NULL`), salvo las columnas autoincrementales, generadas, binarias y las de una clave no autoincremental, que quedan vacías; se puede cambiar lo que se quiera y aplicar.
+- [x] Con varias filas seleccionadas se crean varias filas nuevas, en el mismo orden.
+- [x] Copiar una fila cuya clave es natural (no autoincremental) no se puede aplicar hasta rellenar la clave; el motivo se ve en la celda.
+- [x] Copiar una fila con un valor único repetido (p. ej. un correo) devuelve el error del servidor indicando la fila nueva, sin aplicar nada. (`TestEditRowsIntegration`)
+- [x] Una tabla con una columna `NOT NULL` sin `DEFAULT` que no está en el `SELECT` no ofrece «Nueva fila» y dice cuál falta.
+- [x] Borrar una o varias filas y aplicar las elimina; el grid pierde esas filas y el total baja.
+- [x] Si otra sesión cambió la fila que se iba a borrar, `Apply` da conflicto y no se aplica **nada** del lote (incluidas las inserciones y ediciones).
+- [x] Borrar y reinsertar la misma clave única en un lote funciona (D3).
+- [x] Una clave duplicada o una FK incumplida revierte todo y el mensaje indica la fila.
+- [x] Las filas nuevas distinguen vacío (`DEFAULT`), `NULL` y cadena vacía.
+- [x] Re-ejecutar o cerrar con filas nuevas o borradas pide confirmación.
+- [x] Probado en MySQL 8.0/8.4 y MariaDB 10.11 con claves compuestas, `BIGINT UNSIGNED` y `AUTO_INCREMENT`.
 
 ## Pruebas
 Unitarias: generación de `INSERT`/`DELETE`, orden del lote, validación de obligatorias, superposición en `GetRows`. Integración (`-tags integration`): inserción con autoincrement y triggers, borrado con conflicto, atomicidad de un lote mixto, FK `RESTRICT`/`CASCADE`. E2E con el mock y smoke manual.

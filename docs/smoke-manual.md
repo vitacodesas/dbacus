@@ -49,6 +49,18 @@ Hacerlo contra una base y tabla de pruebas, no contra datos compartidos.
 - [ ] Ajustes → «Confirmar con el SQL a la vista»: desactivado, «Aplicar» aplica sin diálogo.
 - [ ] Zona horaria: editar un `TIMESTAMP` con la sesión en una zona distinta de la del servidor (limitación conocida, spec 13).
 
+## Insertar, duplicar y borrar filas (spec 14)
+Hacerlo contra una tabla de pruebas (idealmente con un `AUTO_INCREMENT`, un índice único y una clave foránea).
+- [ ] «Nueva fila»: aparece al final en verde con las celdas en «DEFAULT» y el editor abierto en la primera columna obligatoria. Rellenar, «Ver SQL» (un `INSERT` solo con las columnas rellenadas) y aplicar: la fila queda con el ID que asignó el servidor y lo que dejó un trigger o un `DEFAULT`.
+- [ ] Sin las columnas obligatorias, «Aplicar» lo dice y no envía nada.
+- [ ] Un `SELECT` sin una columna obligatoria de la tabla: «Nueva fila» queda deshabilitado y el pie del grid dice cuál falta.
+- [ ] Clic derecho en una fila → «Insertar nueva fila a partir de esta»: copia los valores (salvo autoincremental y clave natural), se puede cambiar lo que se quiera. Con varias filas seleccionadas crea varias.
+- [ ] Copiar una fila con un valor `UNIQUE` repetido: el error del servidor señala «Fila nueva N» y no se aplica nada del lote.
+- [ ] `Supr` sobre una fila la marca (rojo, tachada); «Restaurar» la desmarca; al aplicar desaparece y el contador de filas baja.
+- [ ] Borrar una fila cuyo valor cambió otra sesión: conflicto y **nada** del lote se aplica.
+- [ ] Borrar una fila con hijos `ON DELETE CASCADE`: el diálogo avisa de las tablas afectadas; con `RESTRICT` el servidor rechaza y se revierte todo.
+- [ ] Lote mixto (editar + borrar + insertar): se ve en ese orden y es atómico.
+
 ## Ajustes e interfaz
 - [ ] Cambiar tema/idioma en Ajustes (`⌘/Ctrl+,`) y reabrir: se conserva. Ancho del panel y del divisor también.
 - [ ] Un límite de filas bajo (p. ej. 1 000) aplica a la siguiente consulta; uno fuera de rango se rechaza en el campo.
