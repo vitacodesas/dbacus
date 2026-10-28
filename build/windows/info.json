@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "Laika",
+			"FileDescription": "Cliente SQL de escritorio",
+			"LegalCopyright": "© 2026 Laika",
+			"ProductName": "Tabularis Clon",
+			"Comments": "This is a comment"
+		}
+	}
+}

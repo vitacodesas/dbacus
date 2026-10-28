@@ -1,0 +1,48 @@
+// Re-exporta los tipos generados por Wails; el resto del front importa de aquí, no de bindings/.
+export type {
+  ConnectionProfile,
+  TLSConfig,
+  SSHConfig,
+  Database,
+  Table,
+  TableDetail,
+  Column,
+  Index,
+  ForeignKey,
+  CompletionCatalog,
+  CatalogTable,
+  CatalogColumn,
+  ColumnMeta,
+  TabState,
+  HistoryEntry,
+} from "../../bindings/tabulariswails/internal/model";
+export type {
+  ConnectionSecrets,
+  SessionInfo,
+  SessionClosed,
+  SchemaInvalidated,
+  ExecuteRequest,
+  StatementResult,
+  RowWindow,
+  FullCell,
+  StatementRange,
+  QueryStarted,
+  QueryStatement,
+  QueryProgress,
+  QueryDone,
+  QueryError,
+  TestResult,
+  TestStep,
+  DriverInfo,
+  ParsedDSN,
+  HistoryQuery,
+  HistoryPage,
+  HistoryAdded,
+  ExportRequest,
+  ExportStart,
+  ExportProgress,
+  ExportDone,
+} from "../../bindings/tabulariswails/internal/services";
+export type { AppError } from "../../bindings/tabulariswails/internal/apperr";
+export type { Cell } from "../../bindings/tabulariswails/internal/results";
+export type { Options as ExportOptions } from "../../bindings/tabulariswails/internal/export";

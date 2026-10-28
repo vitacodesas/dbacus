@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Tokens de diseño (spec 08); se amplían en T0.5 */
+:root {
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --border: #e2e8f0;
+  --fg: #0f172a;
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #d97706;
+  --muted: #64748b;
+  --hover: #f1f5f9;
+}
+.dark {
+  --bg: #0f172a;
+  --panel: #111c33;
+  --border: #243049;
+  --fg: #e2e8f0;
+  --accent: #6366f1;
+  --accent-fg: #ffffff;
+  --danger: #f87171;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --muted: #94a3b8;
+  --hover: #1a2742;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-muted: var(--muted);
+  --color-hover: var(--hover);
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius-md: 6px;
+}
+
+html, body, #app { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; }
+
+/* Foco visible siempre (a11y, spec 08) */
+:where(button, [role="tab"], [role="switch"], [role="separator"], input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Los datos nunca usan ligaduras */
+.font-data { font-family: var(--font-mono); font-variant-ligatures: none; }

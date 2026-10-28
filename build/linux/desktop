@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Tabularis Clon
+Comment=Cliente SQL de escritorio
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/tabularis-clon %u
+Terminal=false
+Type=Application
+Icon=tabularis-clon
+Categories=Utility;
+StartupWMClass=tabularis-clon
+
+ 
