@@ -41,6 +41,7 @@ Hacerlo contra una base y tabla de pruebas, no contra datos compartidos.
 - [ ] Conflicto: cargar el resultado, cambiar esa fila desde otro cliente, aplicar → mensaje de conflicto y **ningún** cambio del lote aplicado.
 - [ ] Valores extremos: texto con emoji y comillas, cadena vacía frente a NULL (menú «Establecer NULL»), `BIGINT UNSIGNED` máximo, `DECIMAL`, `DATETIME(6)`.
 - [ ] Un texto demasiado largo o un entero inválido se rechaza en la celda, sin llegar al servidor.
+- [ ] JSON y textos largos o con saltos de línea: doble clic abre el diálogo ampliado; «Formatear JSON» ordena el valor; un JSON inválido dice la posición; `⌘/Ctrl+Intro` guarda.
 - [ ] Columnas no editables: clave, `AUTO_INCREMENT`, generadas y binarias muestran el motivo en el tooltip de la cabecera.
 - [ ] `JOIN`, alias, vistas y tablas sin clave: no se ofrece edición y el pie del grid explica por qué.
 - [ ] Volver a ejecutar o cerrar la pestaña con cambios pendientes pide confirmación (`⌘/Ctrl+W` incluido: **sin probar con el atajo real**, el E2E usa el botón).

@@ -396,3 +396,9 @@ func (s *EditService) record(t target, st edit.Statement, started time.Time, err
 	}
 	s.d.History(e)
 }
+
+// FormatJSON da formato (sangría) a un texto JSON para el editor ampliado de celdas. No toca el servidor.
+func (s *EditService) FormatJSON(_ context.Context, text string) (string, error) {
+	out, err := edit.FormatJSON(text)
+	return out, toAppErr(err)
+}

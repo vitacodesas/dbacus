@@ -137,7 +137,7 @@ export default {
     invalid: { maxRows: "Entre 1 000 y 10 000 000", maxResultMemoryMiB: "Entre 64 y 16 384", historyRetention: "Entre 0 y 100 000" },
   },
   edit: {
-    pending: "{n} cambios sin aplicar", apply: "Aplicar", discard: "Descartar", viewSql: "Ver SQL", applied: "Se aplicaron {n} filas",
+    expandedTitle: "Editar {name}", expandedHint: "Ctrl/⌘+Intro guarda. Go valida el valor antes de dejarlo como cambio pendiente.", format: "Formatear JSON", saveChange: "Guardar cambio", pending: "{n} cambios sin aplicar", apply: "Aplicar", discard: "Descartar", viewSql: "Ver SQL", applied: "Se aplicaron {n} filas",
     editCell: "Editar celda", setNull: "Establecer NULL", revert: "Revertir celda", edited: "Valor modificado: aún no se ha aplicado",
     reviewTitle: "Aplicar cambios", reviewIntro: "Se ejecutarán estas sentencias en una sola transacción. Si alguna falla, no se aplica ninguna.",
     applying: "Aplicando…", close: "Cerrar", discardAndReload: "Descartar y volver a ejecutar",

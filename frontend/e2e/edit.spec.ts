@@ -111,6 +111,40 @@ test.describe("edición de celdas", () => {
   });
 });
 
+test.describe("editor ampliado", () => {
+  test("JSON: se edita en un diálogo, Go dice dónde falla y Formatear lo ordena", async ({ app: page }) => {
+    await connect(page);
+    await runSql(page, "SELECT * FROM film");
+    const json = cell(page, '{"id": 1, "host": ["lk-stg-internal"]}');
+    await expect(json).toBeVisible();
+    await json.dblclick();
+
+    const area = page.getByTestId("cell-editor-textarea");
+    await expect(area).toBeVisible();
+    await expect(page.getByTestId("cell-editor")).toBeHidden(); // no es el editor de una línea
+
+    await area.fill('{“id": 1}'); // comillas tipográficas, como las que mete el sistema al escribir
+    await page.getByTestId("cell-editor-save").click();
+    await expect(page.getByTestId("cell-editor-modal-error")).toContainText("no es JSON válido");
+    await expect(area).toBeVisible();
+
+    await area.fill('{"id": 1, "host": ["a"]}');
+    await page.getByTestId("cell-editor-format").click();
+    await expect(area).toHaveValue(/\n {2}"id": 1,/);
+    await page.getByTestId("cell-editor-save").click();
+    await expect(area).toBeHidden();
+    await expect(page.getByTestId("edit-bar")).toContainText("1 cambios sin aplicar");
+  });
+
+  test("un texto corto se sigue editando en la propia celda", async ({ app: page }) => {
+    await connect(page);
+    await runSql(page, "SELECT * FROM film");
+    await cell(page, "PELÍCULA 1").dblclick();
+    await expect(page.getByTestId("cell-editor")).toBeVisible();
+    await expect(page.getByTestId("cell-editor-textarea")).toBeHidden();
+  });
+});
+
 test.describe("lo que no se puede editar", () => {
   test("un JOIN explica por qué", async ({ app: page }) => {
     await connect(page);

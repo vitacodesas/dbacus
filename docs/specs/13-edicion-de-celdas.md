@@ -87,6 +87,9 @@ El front envía texto; Go convierte según el tipo de columna y rechaza antes de
 - Aplicar abre un diálogo con el SQL (`Preview`) y confirmar/cancelar. Conflicto → mensaje con la fila y opción de recargar el resultado.
 - Store `edits` (Pinia): solo `info` y contadores por resultado; nada de valores.
 
+### Editor ampliado (smoke manual, 2026-10-28)
+Las columnas `JSON`, los textos con saltos de línea y los que no caben en el ancho de la celda se editan en un **diálogo con área de texto** (`CellEditorModal`) en vez de en una línea; los cortos siguen editándose en la propia celda. El diálogo tiene «Formatear JSON» (lo hace Go: `EditService.FormatJSON`), «Establecer NULL» si la columna lo admite, `⌘/Ctrl+Intro` para guardar, y se queda abierto con el motivo si Go rechaza el valor. El error de JSON incluye la posición y el carácter que falló (`edit.CheckJSON`): el caso real fueron comillas tipográficas «“» sustituidas por el sistema, que a la vista parecen normales. Los campos de edición desactivan la autocorrección (`autocorrect`, `spellcheck`). Sin resaltado de sintaxis (es un `<textarea>`; Monaco con el servicio de JSON queda como mejora).
+
 ## Seguridad y casos borde
 - Identificadores escapados por el driver (`QuoteIdent`); valores siempre como parámetros (D5). La tabla y la base salen del análisis de Go + `DescribeTable`, **nunca** de texto enviado por Vue.
 - Perfil de solo lectura: `Editable=false` y `Apply` lo rechaza aunque alguien llame al servicio directamente.

@@ -139,7 +139,7 @@ const en: typeof es = {
     invalid: { maxRows: "Between 1,000 and 10,000,000", maxResultMemoryMiB: "Between 64 and 16,384", historyRetention: "Between 0 and 100,000" },
   },
   edit: {
-    pending: "{n} unapplied changes", apply: "Apply", discard: "Discard", viewSql: "View SQL", applied: "{n} rows updated",
+    expandedTitle: "Edit {name}", expandedHint: "Ctrl/⌘+Enter saves. Go validates the value before it becomes a pending change.", format: "Format JSON", saveChange: "Save change", pending: "{n} unapplied changes", apply: "Apply", discard: "Discard", viewSql: "View SQL", applied: "{n} rows updated",
     editCell: "Edit cell", setNull: "Set NULL", revert: "Revert cell", edited: "Modified value: not applied yet",
     reviewTitle: "Apply changes", reviewIntro: "These statements run in a single transaction. If one fails, none is applied.",
     applying: "Applying…", close: "Close", discardAndReload: "Discard and run again",

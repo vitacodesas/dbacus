@@ -11,3 +11,5 @@ export const unstageEdit = (queryId: string, stmt: number, row: number, col: num
 export const discardEdits = (queryId: string, stmt: number): Promise<EditInfo> => wrap(EditService.Discard(queryId, stmt));
 export const previewEdits = async (queryId: string, stmt: number): Promise<EditPreview[]> => (await wrap(EditService.Preview(queryId, stmt))) ?? [];
 export const applyEdits = (queryId: string, stmt: number): Promise<EditApplyResult> => wrap(EditService.Apply(queryId, stmt));
+/** Da formato (sangría) a un JSON en Go; error de validación con la posición si no es válido. */
+export const formatJson = (text: string): Promise<string> => wrap(EditService.FormatJSON(text));

@@ -57,8 +57,8 @@ const TABLES: Record<string, { rows: number; cols: Any[]; cell: (i: number, c: n
   },
   film: {
     rows: 1000,
-    cols: [col("film_id", "smallint", { isPrimaryKey: true }), col("title", "varchar"), col("description", "text", { nullable: true })],
-    cell: (i, c) => [{ v: i + 1 }, { v: `PELÍCULA ${i + 1}` }, i % 5 === 0 ? { v: null } : { v: `Descripción ${i + 1}` }][c],
+    cols: [col("film_id", "smallint", { isPrimaryKey: true }), col("title", "varchar"), col("description", "text", { nullable: true }), col("extra", "json", { nullable: true })],
+    cell: (i, c) => [{ v: i + 1 }, { v: `PELÍCULA ${i + 1}` }, i % 5 === 0 ? { v: null } : { v: `Descripción ${i + 1}` }, { v: `{"id": ${i + 1}, "host": ["lk-stg-internal"]}`, t: "json" }][c],
   },
   big_numbers: {
     rows: 1_000_000,
@@ -289,6 +289,14 @@ export const QueryService = {
 
 // ---- edición de celdas (spec 13), versión simplificada: la clave es siempre la primera columna ----------------------------
 const NOT_NULL: Record<string, number[]> = { actor: [1, 2], film: [1], big_numbers: [1] };
+const isJsonCol = (d: Any, c: number) => String(d.cols?.[c]?.dataType).toLowerCase() === "json";
+function checkJson(text: string) {
+  try {
+    JSON.parse(text);
+  } catch (e) {
+    throw fail("VALIDATION", `El valor no es JSON válido: ${(e as Error).message}`, "cell");
+  }
+}
 const MAX_LEN: Record<string, Record<number, number>> = { actor: { 1: 10, 2: 10 } };
 function editPlan(queryId: string, stmt: number) {
   const run = runs.get(queryId);
@@ -297,7 +305,7 @@ function editPlan(queryId: string, stmt: number) {
   const sess = sessions.find((s) => s.sessionId === run.sessionId);
   const ncols = (d as Any).cols?.length ?? 0;
   const info = { editable: false, reason: "", database: "sakila", table: d.name ?? "", keyColumns: [] as number[], columns: [] as Any[], pending: run.pending[stmt]?.size ?? 0 };
-  const col = (editable: boolean, reason = "", c = 0) => ({ editable, reason, dataType: "varchar", nullable: !(NOT_NULL[d.name ?? ""] ?? []).includes(c) });
+  const col = (editable: boolean, reason = "", c = 0) => ({ editable, reason, dataType: String((d as Any).cols?.[c]?.dataType ?? "varchar"), nullable: !(NOT_NULL[d.name ?? ""] ?? []).includes(c) });
   info.columns = Array.from({ length: ncols }, (_, c) => col(false, "", c));
   if (!d.name || !ncols) return { run, d, info: { ...info, reason: "no_single_table" } };
   if (profileOf(sess?.profileId)?.readOnly) return { run, d, info: { ...info, reason: "readonly_profile" } };
@@ -309,6 +317,11 @@ function editPlan(queryId: string, stmt: number) {
 }
 const pendingKey = (row: number, c: number) => `${row}:${c}`;
 export const EditService = {
+  FormatJSON: (text: string) =>
+    cp(() => {
+      checkJson(text);
+      return JSON.stringify(JSON.parse(text), null, 2);
+    }),
   GetEditInfo: (queryId: string, stmt: number) => cp(() => editPlan(queryId, stmt).info),
   Stage: (queryId: string, stmt: number, row: number, col: number, v: Any) =>
     cp(() => {
@@ -316,6 +329,7 @@ export const EditService = {
       if (!info.editable) throw fail("VALIDATION", "No se puede editar este resultado", info.reason);
       if (!info.columns[col]?.editable) throw fail("VALIDATION", "Esta columna no se puede editar", info.columns[col]?.reason || "col");
       if (v.null && (NOT_NULL[d.name ?? ""] ?? []).includes(col)) throw fail("VALIDATION", `La columna «${col}» no admite NULL`, "cell");
+      if (!v.null && isJsonCol(d, col)) checkJson(v.text);
       const max = MAX_LEN[d.name ?? ""]?.[col];
       if (!v.null && max && [...v.text].length > max) throw fail("VALIDATION", `El texto tiene ${[...v.text].length} caracteres y la columna admite ${max}`, "cell");
       const map = (run.pending[stmt] ??= new Map());

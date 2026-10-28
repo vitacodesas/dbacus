@@ -177,6 +177,38 @@ describe("ResultGrid", () => {
       expect(w.findAll('[data-testid="col-locked"]')).toHaveLength(0);
     });
 
+    it("JSON y textos que no caben en la celda se editan en el diálogo ampliado, los cortos en la celda", async () => {
+      editApi.stageEdit.mockResolvedValue({ ...editable, pending: 1 });
+      const { w } = await setupEditable();
+      await w.setProps({ columns: [columns[0], { ...columns[1], dataType: "JSON" }] });
+      await toNameCell(w);
+      await key(w, "F2");
+      expect(w.find('[data-testid="cell-editor"]').exists()).toBe(false);
+      const area = document.body.querySelector('[data-testid="cell-editor-textarea"]') as HTMLTextAreaElement;
+      expect(area).toBeTruthy();
+      expect(area.value).toBe("fila 2");
+      expect(document.body.querySelector('[data-testid="cell-editor-format"]')).toBeTruthy(); // solo en JSON
+
+      area.value = "{}";
+      area.dispatchEvent(new Event("input"));
+      (document.body.querySelector('[data-testid="cell-editor-save"]') as HTMLButtonElement).click();
+      await flushPromises();
+      expect(editApi.stageEdit).toHaveBeenCalledWith("q1", 0, 1, 1, { null: false, text: "{}" });
+      expect(document.body.querySelector('[data-testid="cell-editor-textarea"]')).toBeNull(); // se cierra al guardar
+    });
+
+    it("el diálogo ampliado se queda abierto con el motivo si Go rechaza el valor", async () => {
+      editApi.stageEdit.mockRejectedValue(Object.assign(new Error("x"), { cause: JSON.stringify({ code: "VALIDATION", message: "El valor no es JSON válido: invalid character '“' (posición 2)", detail: "cell", retryable: false }) }));
+      const { w } = await setupEditable();
+      await w.setProps({ columns: [columns[0], { ...columns[1], dataType: "JSON" }] });
+      await toNameCell(w);
+      await key(w, "F2");
+      (document.body.querySelector('[data-testid="cell-editor-save"]') as HTMLButtonElement).click();
+      await flushPromises();
+      expect(document.body.querySelector('[data-testid="cell-editor-modal-error"]')?.textContent).toContain("posición 2");
+      expect(document.body.querySelector('[data-testid="cell-editor-textarea"]')).toBeTruthy();
+    });
+
     it("marca las celdas con cambio pendiente", async () => {
       const { w } = await setup(50);
       api.getRows.mockImplementation(async () => ({ offset: 0, total: 50, complete: true, rows: [[{ v: 1 }, { v: "editado", edited: true }]] }));

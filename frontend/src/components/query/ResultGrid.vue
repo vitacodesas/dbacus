@@ -13,6 +13,7 @@ import { MAX_COPY_ROWS, useResultsStore } from "../../stores/results";
 import { useUiStore } from "../../stores/ui";
 import type { Cell, ColumnMeta } from "../../types";
 import BaseContextMenu, { type MenuItem } from "../ui/BaseContextMenu.vue";
+import CellEditorModal, { type CellEditTarget } from "./CellEditorModal.vue";
 import CellViewerModal from "./CellViewerModal.vue";
 
 const props = defineProps<{ tabId: string; queryId: string; stmtIndex: number; columns: ColumnMeta[]; rowCount: number }>();
@@ -37,6 +38,10 @@ const editInfo = computed(() => edits.infoOf(props.queryId, props.stmtIndex));
 const canEdit = (c: number) => edits.isEditable(props.queryId, props.stmtIndex, c);
 const editing = ref<{ r: number; c: number; text: string; error: string | null; saving: boolean } | null>(null);
 const editorEl = ref<HTMLInputElement | null>(null);
+const expanded = ref<CellEditTarget | null>(null);
+const CHAR_WIDTH = 7.5; // ancho aproximado de un carácter monoespaciado a 14 px
+const needsExpandedEditor = (text: string, dataType: string, width: number) =>
+  dataType.toLowerCase() === "json" || text.includes("\n") || text.length * CHAR_WIDTH > Math.max(0, width - 24);
 
 // Anchos por columna; se reinician con cada resultado nuevo.
 const widths = ref<number[]>([]);
@@ -185,7 +190,16 @@ function startEdit(): boolean {
     ui.toast("info", t("edit.reasons.truncated"));
     return true;
   }
-  editing.value = { r: s.fr, c: s.fc, text: cell.v == null ? "" : String(cell.v), error: null, saving: false };
+  const text = cell.v == null ? "" : String(cell.v);
+  // JSON, textos con saltos de línea o que no caben en la celda se editan en un diálogo ampliado, no en una línea.
+  if (needsExpandedEditor(text, props.columns[s.fc]?.dataType ?? "", widths.value[s.fc] ?? 0)) {
+    expanded.value = {
+      tabId: props.tabId, queryId: props.queryId, stmt: props.stmtIndex, row: s.fr, col: s.fc, name: props.columns[s.fc]?.name ?? "",
+      dataType: props.columns[s.fc]?.dataType ?? "", nullable: !!editInfo.value?.columns?.[s.fc]?.nullable, text,
+    };
+    return true;
+  }
+  editing.value = { r: s.fr, c: s.fc, text, error: null, saving: false };
   void nextTick(() => editorEl.value?.select());
   return true;
 }
@@ -436,6 +450,10 @@ const rowsVm = computed(() =>
             :class="editing.error && 'border-danger'"
             :style="{ top: `${HEADER_HEIGHT + editing.r * ROW_HEIGHT}px`, left: `${GUTTER_WIDTH + offsets[editing.c]}px`, width: `${widths[editing.c]}px`, height: `${ROW_HEIGHT}px` }"
             data-testid="cell-editor"
+            spellcheck="false"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
             :aria-label="t('edit.editCell')"
             @keydown.stop="onEditorKey"
             @mousedown.stop
@@ -486,4 +504,5 @@ const rowsVm = computed(() =>
     </div>
   </BaseContextMenu>
   <CellViewerModal :target="viewing" @close="viewing = null" />
+  <CellEditorModal :target="expanded" @close="expanded = null; root?.focus()" />
 </template>

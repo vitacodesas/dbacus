@@ -75,6 +75,7 @@ func TestConvertRejects(t *testing.T) {
 		{"fecha y hora inválidas", mcol("datetime", "datetime", false), txt("ayer"), "formato"},
 		{"hora inválida", mcol("time", "time", false), txt("25:61:00"), "formato"},
 		{"json inválido", mcol("json", "json", false), txt("{a:1}"), "JSON"},
+		{"json con comillas tipográficas dice dónde", mcol("json", "json", false), txt("{“host\": 1}"), "posición 2"},
 		{"NULL en NOT NULL", mcol("int", "int", false), Value{Null: true}, "no admite NULL"},
 		{"varchar demasiado largo", mcol("varchar", "varchar(3)", false), txt("abcd"), "admite 3"},
 		{"UTF-8 inválido", mcol("text", "text", false), txt("a\xffb"), "UTF-8"},
@@ -154,4 +155,12 @@ func TestBuildUpdates(t *testing.T) {
 	require.Contains(t, got[1].Review, "`note` = 'o''brien'")
 	require.Contains(t, got[1].Review, "`note` <=> NULL")
 	require.Contains(t, got[1].Review, "`ratio` = 1.5")
+}
+
+func TestFormatJSON(t *testing.T) {
+	out, err := FormatJSON(`{"a":[1,2],"b":{"c":null}}`)
+	require.NoError(t, err)
+	require.Equal(t, "{\n  \"a\": [\n    1,\n    2\n  ],\n  \"b\": {\n    \"c\": null\n  }\n}", out)
+	_, err = FormatJSON(`{"a": }`)
+	require.ErrorContains(t, err, "no es JSON válido")
 }

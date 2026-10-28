@@ -1,7 +1,9 @@
 package edit
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -108,8 +110,8 @@ func Convert(col model.Column, v Value) (any, error) {
 		}
 		return text, nil
 	case "json":
-		if !json.Valid([]byte(v.Text)) {
-			return nil, invalid("El valor no es JSON válido")
+		if err := CheckJSON(v.Text); err != nil {
+			return nil, err
 		}
 		return v.Text, nil
 	case "char", "varchar", "tinytext", "text", "mediumtext", "longtext", "enum", "set":
@@ -229,4 +231,31 @@ func Same(col model.Column, newV Value, orig results.Cell) bool {
 		return err == nil && fmt.Sprint(a) == o
 	}
 	return newV.Text == o
+}
+
+// CheckJSON valida un texto JSON y, si no lo es, dice dónde falla y qué carácter encontró (p. ej. unas comillas
+// tipográficas «“» que el sistema sustituyó al escribir, que a simple vista parecen normales).
+func CheckJSON(text string) error {
+	var v json.RawMessage
+	err := json.Unmarshal([]byte(text), &v)
+	if err == nil {
+		return nil
+	}
+	var se *json.SyntaxError
+	if errors.As(err, &se) {
+		return invalid("El valor no es JSON válido: %s (posición %d)", se.Error(), se.Offset)
+	}
+	return invalid("El valor no es JSON válido")
+}
+
+// FormatJSON devuelve el JSON con sangría de dos espacios (error si no es válido).
+func FormatJSON(text string) (string, error) {
+	if err := CheckJSON(text); err != nil {
+		return "", err
+	}
+	var out bytes.Buffer
+	if err := json.Indent(&out, []byte(text), "", "  "); err != nil {
+		return "", invalid("No se pudo dar formato al JSON")
+	}
+	return out.String(), nil
 }

@@ -31,6 +31,13 @@ export function Discard(queryID: string, stmtIndex: number): $CancellablePromise
 }
 
 /**
+ * FormatJSON da formato (sangría) a un texto JSON para el editor ampliado de celdas. No toca el servidor.
+ */
+export function FormatJSON(text: string): $CancellablePromise<string> {
+    return $Call.ByID(2229656579, text);
+}
+
+/**
  * GetEditInfo dice si el resultado `stmtIndex` de la ejecución `queryID` se puede editar y qué columnas.
  */
 export function GetEditInfo(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Info> {

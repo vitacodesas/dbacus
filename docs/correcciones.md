@@ -23,3 +23,6 @@ Fallos encontrados en el uso real (smoke manual) que aún no se han arreglado. A
 
 ## C4 · Doble clic en la columna clave abría el visor sin explicar nada (2026-10-28)
 > Smoke manual de edición: «me abre el modal pero no me permite modificar». Era la columna clave (no editable por diseño, D4), pero la interfaz no lo decía. Ahora las columnas no editables de un resultado editable llevan un candado en la cabecera y el doble clic muestra el motivo («Columna de la clave: no se edita») antes de abrir el visor. Tests: `ResultGrid.test.ts` y E2E «la columna clave no se edita».
+
+## C5 · Editar JSON: error sin pista y editor de una línea (2026-10-28)
+> Smoke manual: al añadir una letra a un JSON salía «El valor no es JSON válido» sin más, y un JSON largo no se puede editar cómodamente en una línea. Ahora el error dice la posición y el carácter (probable causa: comillas tipográficas «“» que el sistema sustituyó al escribir), los campos desactivan la autocorrección, y JSON/textos largos/multilínea se editan en un diálogo ampliado con «Formatear JSON». **Sin confirmar** si las comillas tipográficas eran la causa real: depende de lo que escribió el sistema; con el mensaje nuevo se verá en la posición indicada.
