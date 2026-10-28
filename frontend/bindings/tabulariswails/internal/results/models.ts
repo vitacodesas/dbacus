@@ -8,4 +8,9 @@ export interface Cell {
     "v": any;
     "t"?: string;
     "trunc"?: boolean;
+
+    /**
+     * Edited marca una celda con un cambio pendiente de aplicar (spec 13): V es el valor nuevo, no el del servidor.
+     */
+    "edited"?: boolean;
 }

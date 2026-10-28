@@ -48,9 +48,18 @@ type Info struct {
 	Pending    int      `json:"pending"`
 }
 
+// Preview es un UPDATE listo para revisar (con los valores a la vista; nunca se ejecuta tal cual).
+type Preview struct {
+	Row  int    `json:"row"`
+	Cols []int  `json:"cols"`
+	SQL  string `json:"sql"`
+}
+
 // Plan es Info más lo que el servidor necesita internamente (no viaja a Vue).
 type Plan struct {
 	Info
+	// Meta[i] es la columna de la tabla que corresponde a la columna i del resultado (vacía si ninguna).
+	Meta []model.Column
 	// TableCols[i] es el nombre de la columna de la tabla que corresponde a la columna i del resultado ("" si ninguna).
 	TableCols []string
 	// KeyTableCols son los nombres de las columnas de la clave, en el orden de la clave.
@@ -69,7 +78,7 @@ type Input struct {
 
 // Analyze aplica las reglas del spec 13 («Cuándo es editable un resultado»).
 func Analyze(in Input) Plan {
-	plan := Plan{Info: Info{KeyColumns: []int{}, Columns: make([]Column, len(in.Cols))}, TableCols: make([]string, len(in.Cols))}
+	plan := Plan{Info: Info{KeyColumns: []int{}, Columns: make([]Column, len(in.Cols))}, TableCols: make([]string, len(in.Cols)), Meta: make([]model.Column, len(in.Cols))}
 	deny := func(reason string) Plan {
 		plan.Reason = reason
 		return plan
@@ -125,6 +134,7 @@ func Analyze(in Input) Plan {
 		default:
 			used[strings.ToLower(col.Name)] = true
 			plan.TableCols[i] = col.Name
+			plan.Meta[i] = *col
 		}
 	}
 

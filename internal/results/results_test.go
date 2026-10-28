@@ -251,3 +251,42 @@ func TestSetLimitAffectsNextAppend(t *testing.T) {
 	m.SetLimit(10)
 	require.False(t, b.Append([]Cell{{V: int64(1)}}))
 }
+
+func TestPendingOverlayLeavesTheBufferIntact(t *testing.T) {
+	m := NewManager(1 << 30)
+	buf := m.NewRun("r", "t").NewBuffer(nil)
+	for i := 0; i < 5; i++ {
+		buf.Append([]Cell{{V: int64(i)}, {V: "orig"}})
+	}
+	buf.Finish(false)
+
+	require.NoError(t, buf.Stage(1, 1, Cell{V: "nuevo"}, "dato"))
+	require.NoError(t, buf.Stage(3, 1, Cell{}, nil)) // NULL pendiente
+	require.Error(t, buf.Stage(9, 0, Cell{}, nil), "fuera de rango")
+	require.Error(t, buf.Stage(0, 5, Cell{}, nil), "fuera de rango")
+	require.Equal(t, 2, buf.PendingCount())
+
+	rows, _, _, err := buf.Window(0, 5)
+	require.NoError(t, err)
+	require.Equal(t, Cell{V: "nuevo", Edited: true}, rows[1][1])
+	require.Equal(t, Cell{V: nil, Edited: true}, rows[3][1])
+	require.Equal(t, Cell{V: "orig"}, rows[0][1], "las filas sin cambios no se tocan")
+
+	orig, err := buf.Cell(1, 1)
+	require.NoError(t, err)
+	require.Equal(t, Cell{V: "orig"}, orig, "el original sigue intacto para comprobar conflictos")
+
+	sub, _, _, _ := buf.Window(2, 2) // ventana que solo incluye la fila 3
+	require.Equal(t, Cell{V: nil, Edited: true}, sub[1][1])
+	require.Equal(t, Cell{V: "orig"}, sub[0][1])
+
+	list := buf.PendingList()
+	require.Equal(t, []int{1, 3}, []int{list[0].Row, list[1].Row})
+	require.Equal(t, "dato", list[0].Data)
+
+	buf.Unstage(1, 1)
+	require.Equal(t, 1, buf.PendingCount())
+	buf.ClearPending()
+	rows, _, _, _ = buf.Window(0, 5)
+	require.Equal(t, Cell{V: "orig"}, rows[3][1])
+}

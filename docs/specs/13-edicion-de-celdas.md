@@ -52,6 +52,10 @@ type EditConflict struct{ Row int; Reason string /* "changed" | "missing" */ }
 ```
 `EditService`: `GetEditInfo`, `Stage(queryId, stmt, row, col, EditValue) → EditInfo` (valida y convierte; error por celda), `Unstage(queryId, stmt, row, col)`, `Discard(queryId, stmt)`, `Preview(queryId, stmt) → []EditStatement`, `Apply(queryId, stmt) → ApplyResult`. Evento `edit:applied {queryId, stmtIndex, rows}` para refrescar el grid.
 
+> Implementado en T7.3: `EditService.Stage/Unstage/Discard/Preview` (`Preview` devuelve `edit.Preview{Row, Cols, SQL}` con valores a la vista; los parámetros reales nunca viajan a Vue). Los cambios viven en `results.Buffer` (`Stage`, `PendingList`…), así mueren con el resultado, y `GetRows` los superpone con `Cell.Edited`. Escribir el valor original retira el cambio. Tope: `MaxPending = 1000`.
+>
+> **Control optimista y tipos** (hallazgo de diseño): el WHERE solo compara el valor original de columnas *verificables* (enteros, `DECIMAL`, texto, `ENUM/SET`, `DATE`, `DATETIME`, `TIME`, `YEAR`). En `FLOAT/DOUBLE` (un FLOAT no coincide con el texto que lo representa), `JSON` (se compara como valor JSON) y `TIMESTAMP` (depende de la zona horaria) la fila se localiza solo por la clave: se puede pisar un cambio ajeno de esa columna. Los enteros se envían tipados (`int64`/`uint64`), no como texto.
+
 ## Conversión y validación (Go)
 El front envía texto; Go convierte según el tipo de columna y rechaza antes de tocar el servidor:
 - Enteros (con signo/sin signo y rango), `DECIMAL` (texto numérico, sin pasar por float), `FLOAT/DOUBLE`, `BIT/BOOL`.

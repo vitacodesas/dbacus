@@ -34,6 +34,8 @@ type Cell struct {
 	V     any    `json:"v"`
 	T     string `json:"t,omitempty"`
 	Trunc bool   `json:"trunc,omitempty"`
+	// Edited marca una celda con un cambio pendiente de aplicar (spec 13): V es el valor nuevo, no el del servidor.
+	Edited bool `json:"edited,omitempty"`
 
 	full string // valor completo si Trunc; no viaja a Vue
 }

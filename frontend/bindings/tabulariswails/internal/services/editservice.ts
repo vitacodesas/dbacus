@@ -15,8 +15,37 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as edit$0 from "../edit/models.js";
 
 /**
+ * Discard descarta todos los cambios pendientes del resultado.
+ */
+export function Discard(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Info> {
+    return $Call.ByID(574935152, queryID, stmtIndex);
+}
+
+/**
  * GetEditInfo dice si el resultado `stmtIndex` de la ejecución `queryID` se puede editar y qué columnas.
  */
 export function GetEditInfo(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Info> {
     return $Call.ByID(1354692286, queryID, stmtIndex);
+}
+
+/**
+ * Preview devuelve el SQL de cada fila modificada, con los valores a la vista, para que el usuario lo revise antes de aplicar.
+ */
+export function Preview(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Preview[] | null> {
+    return $Call.ByID(269030410, queryID, stmtIndex);
+}
+
+/**
+ * Stage valida el valor escrito en una celda y lo deja como cambio pendiente (no toca el servidor). Si equivale al
+ * original, retira el cambio que hubiera. El valor nuevo se ve en `GetRows` con `Cell.Edited`.
+ */
+export function Stage(queryID: string, stmtIndex: number, row: number, col: number, v: edit$0.Value): $CancellablePromise<edit$0.Info> {
+    return $Call.ByID(458528560, queryID, stmtIndex, row, col, v);
+}
+
+/**
+ * Unstage retira el cambio pendiente de una celda.
+ */
+export function Unstage(queryID: string, stmtIndex: number, row: number, col: number): $CancellablePromise<edit$0.Info> {
+    return $Call.ByID(3159901181, queryID, stmtIndex, row, col);
 }

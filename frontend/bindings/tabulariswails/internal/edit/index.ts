@@ -3,5 +3,7 @@
 
 export type {
     Column,
-    Info
+    Info,
+    Preview,
+    Value
 } from "./models.js";

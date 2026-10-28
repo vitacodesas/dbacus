@@ -31,3 +31,20 @@ export interface Info {
     "columns": Column[] | null;
     "pending": number;
 }
+
+/**
+ * Preview es un UPDATE listo para revisar (con los valores a la vista; nunca se ejecuta tal cual).
+ */
+export interface Preview {
+    "row": number;
+    "cols": number[] | null;
+    "sql": string;
+}
+
+/**
+ * Value es lo que el usuario escribe en una celda: NULL explícito o texto (la cadena vacía NO es NULL).
+ */
+export interface Value {
+    "null": boolean;
+    "text": string;
+}
