@@ -51,7 +51,7 @@ Hacerlo contra una base y tabla de pruebas, no contra datos compartidos.
 
 ## Insertar, duplicar y borrar filas (spec 14)
 Hacerlo contra una tabla de pruebas (idealmente con un `AUTO_INCREMENT`, un índice único y una clave foránea).
-- [ ] «Nueva fila»: aparece al final en verde con las celdas en «DEFAULT» y el editor abierto en la primera columna obligatoria. Rellenar, «Ver SQL» (un `INSERT` solo con las columnas rellenadas) y aplicar: la fila queda con el ID que asignó el servidor y lo que dejó un trigger o un `DEFAULT`.
+- [x] «Nueva fila» (probada en la app nativa, 2026-10-28): aparece al final en verde con las celdas en «DEFAULT» y el editor abierto en la primera columna obligatoria. Rellenar, «Ver SQL» (un `INSERT` solo con las columnas rellenadas) y aplicar: la fila queda con el ID que asignó el servidor y lo que dejó un trigger o un `DEFAULT`.
 - [ ] Sin las columnas obligatorias, «Aplicar» lo dice y no envía nada.
 - [ ] Un `SELECT` sin una columna obligatoria de la tabla: «Nueva fila» queda deshabilitado y el pie del grid dice cuál falta.
 - [ ] Clic derecho en una fila → «Insertar nueva fila a partir de esta»: copia los valores (salvo autoincremental y clave natural), se puede cambiar lo que se quiera. Con varias filas seleccionadas crea varias.
@@ -71,3 +71,4 @@ Hacerlo contra una tabla de pruebas (idealmente con un `AUTO_INCREMENT`, un índ
 ## Registro
 - 2026-10-28 (tarde, macOS): verificado el modo solo lectura con la sesión abierta (protección al instante, aviso «Reconectar», candado visible), el llavero (la entrada se crea al guardar y desaparece al borrar la conexión) y la corrección C1 (base por pestaña tras reconectar).
 - 2026-10-28 (macOS, `wails3 dev`, MySQL de prueba): verificado el bloque de exportación completo y la cancelación de SLEEP. Hallazgo: la exportación con LIMIT automático exportaba solo lo cargado; corregido (spec 07). Pendiente: llavero, SSH/TLS, solo lectura en la app nativa, CSP en la ventana nativa, fluidez del scroll con 1 M de filas.
+- 2026-10-28 (noche, macOS): verificado «Nueva fila» y la reapertura de la conexión de la pestaña tras detener una consulta (C7). Pendiente de probar en la app nativa: insertar a partir de una fila existente, eliminar/restaurar, conflictos de borrado, CASCADE/RESTRICT y el lote mixto.
