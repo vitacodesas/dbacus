@@ -31,6 +31,7 @@ export const useUiStore = defineStore("ui", () => {
   const sidebarView = ref<SidebarView>("connections");
   const locale = ref<Locale>("es");
   const showSystemDatabases = ref(false);
+  const confirmEdits = ref(true);
   const maxRows = ref(100_000);
   const maxResultMemoryMiB = ref(512);
   const historyRetention = ref(5000);
@@ -79,7 +80,7 @@ export const useUiStore = defineStore("ui", () => {
 
   const snapshot = (): Settings => ({
     theme: theme.value, locale: locale.value, maxRows: maxRows.value, maxResultMemoryMiB: maxResultMemoryMiB.value,
-    historyRetention: historyRetention.value, showSystemDatabases: showSystemDatabases.value,
+    historyRetention: historyRetention.value, showSystemDatabases: showSystemDatabases.value, confirmEdits: confirmEdits.value,
     sidebarWidth: sidebarWidth.value, splitRatio: splitRatio.value,
   });
   function apply(s: Settings) {
@@ -89,6 +90,7 @@ export const useUiStore = defineStore("ui", () => {
     maxResultMemoryMiB.value = s.maxResultMemoryMiB;
     historyRetention.value = s.historyRetention;
     showSystemDatabases.value = s.showSystemDatabases;
+    confirmEdits.value = s.confirmEdits;
     sidebarWidth.value = s.sidebarWidth;
     splitRatio.value = s.splitRatio;
   }
@@ -135,7 +137,7 @@ export const useUiStore = defineStore("ui", () => {
 
   return {
     theme, systemDark, resolvedTheme, sidebarWidth, sidebarCollapsed, splitRatio, sidebarView, locale, autoLimit, toasts,
-    showSystemDatabases, maxRows, maxResultMemoryMiB, historyRetention, settingsOpen, load, saveSettings,
+    showSystemDatabases, confirmEdits, maxRows, maxResultMemoryMiB, historyRetention, settingsOpen, load, saveSettings,
     setSidebarWidth, resizeSidebar, setSplitRatio, toggleSidebar, selectSidebarView, toast, dismissToast,
   };
 });

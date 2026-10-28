@@ -2,6 +2,7 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import * as api from "../api/queries";
 import { asAppError } from "../api/errors";
+import { useEditsStore } from "./edits";
 import { useResultsStore } from "./results";
 import type { TabState } from "../types";
 
@@ -73,8 +74,12 @@ export const useQueryTabsStore = defineStore("queryTabs", () => {
   async function closeTab(id: string) {
     const i = tabs.value.findIndex((t) => t.id === id);
     if (i < 0) return;
-    tabs.value.splice(i, 1);
-    if (activeTabId.value === id) activeTabId.value = (tabs.value[i] ?? tabs.value[i - 1])?.id ?? null;
+    const edits = useEditsStore();
+    if (edits.pendingFor(id) > 0 && !(await edits.confirmDiscard(id))) return; // ediciones de celdas sin aplicar (spec 13)
+    const at = tabs.value.findIndex((t) => t.id === id);
+    if (at < 0) return;
+    tabs.value.splice(at, 1);
+    if (activeTabId.value === id) activeTabId.value = (tabs.value[at] ?? tabs.value[at - 1])?.id ?? null;
     useResultsStore().forgetTab(id);
     schedulePersist();
     try {

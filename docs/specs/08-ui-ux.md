@@ -49,3 +49,6 @@ Toasts para acciones (guardado, copiado); errores de operación en panel context
 - [ ] Todo flujo del spec 04 y 06 es completable solo con teclado.
 - [ ] Cambiar tema no recarga Monaco ni pierde estado.
 - [ ] Ventana mínima 960×600 sin solapamientos.
+
+## Edición de celdas (T7.5)
+Doble clic o `F2` sobre una celda editable abre un editor en la celda (`Enter` guarda y baja, `Tab` pasa a la siguiente columna editable, `Esc` cancela; si Go rechaza el valor el editor sigue abierto con el motivo). Menú contextual: «Editar celda», «Establecer NULL» (solo si la columna lo admite), «Revertir celda». Las celdas con cambio pendiente llevan fondo ámbar y una marca a la izquierda. Barra bajo el grid con «N cambios sin aplicar · Ver SQL · Descartar · Aplicar». Si el resultado no es editable, el pie del grid explica por qué y la cabecera de cada columna no editable lo indica en su tooltip.

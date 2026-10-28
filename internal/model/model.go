@@ -66,6 +66,7 @@ type Settings struct {
 	MaxResultMemoryMiB  int     `json:"maxResultMemoryMiB"`
 	HistoryRetention    int     `json:"historyRetention"`
 	ShowSystemDatabases bool    `json:"showSystemDatabases"`
+	ConfirmEdits        bool    `json:"confirmEdits"` // pedir confirmación (con el SQL a la vista) antes de aplicar ediciones de celdas
 	SidebarWidth        int     `json:"sidebarWidth"`
 	SplitRatio          float64 `json:"splitRatio"`
 }
@@ -77,6 +78,7 @@ func DefaultSettings() Settings {
 		MaxRows:            100_000,
 		MaxResultMemoryMiB: 512,
 		HistoryRetention:   5000,
+		ConfirmEdits:       true,
 		SidebarWidth:       300,
 		SplitRatio:         0.5,
 	}

@@ -143,6 +143,11 @@ export interface Settings {
     "maxResultMemoryMiB": number;
     "historyRetention": number;
     "showSystemDatabases": boolean;
+
+    /**
+     * pedir confirmación (con el SQL a la vista) antes de aplicar ediciones de celdas
+     */
+    "confirmEdits": boolean;
     "sidebarWidth": number;
     "splitRatio": number;
 }

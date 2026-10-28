@@ -43,7 +43,16 @@ export type {
   ExportStart,
   ExportProgress,
   ExportDone,
+  EditApplied,
 } from "../../bindings/tabulariswails/internal/services";
+export type {
+  Info as EditInfo,
+  Column as EditColumn,
+  Value as EditValue,
+  Preview as EditPreview,
+  ApplyResult as EditApplyResult,
+  Conflict as EditConflict,
+} from "../../bindings/tabulariswails/internal/edit";
 export type { AppError } from "../../bindings/tabulariswails/internal/apperr";
 export type { Cell } from "../../bindings/tabulariswails/internal/results";
 export type { Options as ExportOptions } from "../../bindings/tabulariswails/internal/export";

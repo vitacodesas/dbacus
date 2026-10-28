@@ -2,6 +2,8 @@
 import { useUiStore } from "../../stores/ui";
 import BaseSplitter from "../ui/BaseSplitter.vue";
 import BaseToast from "../ui/BaseToast.vue";
+import EditDiscardDialog from "../query/EditDiscardDialog.vue";
+import EditReviewDialog from "../query/EditReviewDialog.vue";
 import SettingsDialog from "../settings/SettingsDialog.vue";
 import ConnectDialogs from "../connections/ConnectDialogs.vue";
 import ConnectionFormDialog from "../connections/ConnectionFormDialog.vue";
@@ -35,6 +37,8 @@ const ui = useUiStore();
     <DeleteConnectionDialog />
     <ConnectDialogs />
     <SettingsDialog />
+    <EditReviewDialog />
+    <EditDiscardDialog />
     <BaseToast />
   </div>
 </template>

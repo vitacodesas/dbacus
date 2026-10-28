@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import * as api from "../api/queries";
 import { asAppError, ErrorCode } from "../api/errors";
 import { omit } from "../utils/record";
+import { useEditsStore } from "./edits";
 import type { AppError, Cell, QueryDone, QueryError, QueryProgress, QueryStarted, QueryStatement, StatementResult } from "../types";
 
 export type RunStatus = "idle" | "running" | "done" | "error" | "canceled";
@@ -77,6 +78,10 @@ export const useResultsStore = defineStore("results", () => {
 
   /** Lanza una ejecución. Lo que llegue por eventos se asocia a la pestaña por `tabId`/`queryId`. */
   async function execute(p: { tabId: string; sessionId: string; sql: string; baseOffset: number; database: string; autoLimit: number }) {
+    // Una ejecución nueva sustituye el resultado: si tenía ediciones sin aplicar, se pide confirmación (spec 13).
+    // (Sin cambios pendientes no se espera nada: el estado de la pestaña debe quedar listo en el mismo tick.)
+    const edits = useEditsStore();
+    if (edits.pendingFor(p.tabId) > 0 && !(await edits.confirmDiscard(p.tabId))) return;
     releaseCurrent(p.tabId);
     byTab.value = { ...byTab.value, [p.tabId]: fresh({ status: "running", startedAt: Date.now(), sessionId: p.sessionId, baseOffset: p.baseOffset, database: p.database }) };
     try {
@@ -221,6 +226,32 @@ export const useResultsStore = defineStore("results", () => {
     }
   }
 
+  /**
+   * Vuelve a pedir las ventanas que ya están en caché y las sustituye cuando llegan (sin vaciarlas antes, para que el grid
+   * no parpadee). Se usa tras cambiar celdas pendientes o aplicar ediciones: Go superpone los cambios en `GetRows`.
+   */
+  async function reloadCached(tabId: string) {
+    const r = byTab.value[tabId];
+    const cache = windows.get(tabId);
+    if (!r?.queryId || !cache) return;
+    const queryId = r.queryId;
+    const entries = [...cache.keys()].map((key) => {
+      const [, stmt, win] = key.split(":");
+      return { key, stmt: Number(stmt), win: Number(win) };
+    });
+    await Promise.all(entries.map(async ({ key, stmt, win }) => {
+      try {
+        const res = await api.getRows(queryId, stmt, win * WINDOW, WINDOW);
+        if (byTab.value[tabId]?.queryId !== queryId) return;
+        const rows = (res.rows ?? []).map((row) => row ?? []);
+        cache.set(key, { rows, partial: !res.complete && rows.length < WINDOW, used: ++tick });
+      } catch {
+        /* si el resultado expiró, el siguiente rowAt lo detecta */
+      }
+    }));
+    bump();
+  }
+
   function evict(cache: Map<string, CachedWindow>) {
     while (cache.size > MAX_CACHED_WINDOWS) {
       let oldest: string | null = null;
@@ -258,6 +289,6 @@ export const useResultsStore = defineStore("results", () => {
   return {
     byTab, version, of, tabOfQuery, running, execute, cancel,
     handleStarted, handleStatement, handleProgress, handleDone, handleError,
-    rowAt, ensureWindow, fetchRange, setActiveStatement, forgetTab,
+    rowAt, ensureWindow, reloadCached, fetchRange, setActiveStatement, forgetTab,
   };
 });

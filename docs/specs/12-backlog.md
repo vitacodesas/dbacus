@@ -69,8 +69,8 @@ Alcance: goroutine por run, eventos, throttling, `KILL QUERY`, LIMIT automático
 **T7.2 ✅ · Driver: ejecución parametrizada** — Dep: T7.1 · Specs: 03, 13 · Alcance: `Conn.Exec(ctx, stmt, args...)` y transacción (`Begin/Commit/Rollback`) en `driver.Conn`, implementación MySQL y fake. DoD: tests unitarios + integración en 3 motores.
 **T7.3 ✅ · Cambios pendientes y conversión** — Dep: T7.1 · Specs: 13, 02 · Alcance: `Stage/Unstage/Discard/Preview`, conversión por tipo, superposición en `GetRows` (`Cell.Edited`), límite de 1 000. DoD: tests por tipo, sin valores en logs/eventos.
 **T7.4 ✅ · Aplicar** — Dep: T7.2, T7.3 · Specs: 13, 10 · Alcance: `Apply` atómico con control optimista, relectura y reemplazo en el buffer, historial, rechazo en solo lectura, evento `edit:applied`. DoD: integración con conflicto, rollback, clave compuesta y valores extremos en MySQL 8.0/8.4 y MariaDB 10.11.
-**T7.5 · UI** — Dep: T7.3, T7.4 · Specs: 13, 08, 09 · Alcance: editor en celda, barra de cambios, diálogo de SQL, menú contextual, store `edits`, confirmación al descartar. DoD: tests de componente.
-**T7.6 · E2E y cierre** — Dep: T7.5 · Specs: 11 · Alcance: mock del servicio, E2E, guion de smoke manual, actualizar specs 02/05/06/07/09.
+**T7.5 ✅ · UI** — Dep: T7.3, T7.4 · Specs: 13, 08, 09 · Alcance: editor en celda, barra de cambios, diálogo de SQL, menú contextual, store `edits`, confirmación al descartar. DoD: tests de componente.
+**T7.6 ✅ · E2E y cierre** — Dep: T7.5 · Specs: 11 · Alcance: mock del servicio, E2E, guion de smoke manual, actualizar specs 02/05/06/07/09.
 > Quedan **fuera** de la épica 7: insertar/borrar filas, BLOB, vistas, JOIN y DDL (épica 8 propuesta).
 
 ## Grafo resumido

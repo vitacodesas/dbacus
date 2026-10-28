@@ -25,3 +25,6 @@ Go es la fuente de verdad de datos; Pinia guarda **proyecciones** para pintar y 
 
 ## Ajustes (T6.1)
 `ui` carga `SettingsService.Get()` al arrancar y proyecta tema, idioma, anchos y límites. Tema, idioma, anchos de panel y «mostrar bases del sistema» se guardan solos con debounce de 500 ms **solo después de una carga correcta** (si no, el primer redimensionado pisaría lo guardado con los valores por defecto). El diálogo (`⌘/Ctrl+,` o el engranaje) edita una copia y guarda con `ui.saveSettings`: si Go devuelve `VALIDATION`, el error se pinta en el campo `Detail` y no cambia nada. `schema.showSystem` es una vista de `ui.showSystemDatabases`.
+
+## Edición de celdas (T7.5)
+Store `edits`: `infos[queryId:stmt]` (el veredicto `EditInfo` de Go, con el contador de cambios pendientes), el diálogo de revisión (`review`) y la pregunta de descartar (`discardPrompt`). **No guarda valores**: lo escrito va a Go (`Stage`), que valida y lo superpone en `GetRows`; tras cada cambio `results.reloadCached` vuelve a pedir las ventanas en caché y las sustituye sin vaciarlas (sin parpadeo). `results.execute` y `queryTabs.closeTab` piden confirmación solo si hay cambios pendientes (sin ellos no esperan nada). Ajuste `confirmEdits` en `ui`.

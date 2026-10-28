@@ -15,3 +15,5 @@ Fallos encontrados en el uso real (smoke manual) que aún no se han arreglado. A
 - **Síntoma**: 1 fallo en 48 ejecuciones con 6 procesos de test en paralelo (`INTERNAL: Error interno inesperado (EOF)`); sin carga no se ha visto fallar en más de 50 ejecuciones.
 - **Alcance**: test del túnel SSH con el servidor de prueba (`internal/testutil/sshsrv`); no relacionado con los cambios de solo lectura ni de base por pestaña. Sin investigar la causa (¿carrera entre el cierre del servidor de prueba y la lectura del cliente?).
 - **Riesgo**: un CI cargado podría marcarlo en rojo sin que haya un fallo real. Si aparece en CI, investigar antes de añadir reintentos.
+
+> Actualización: `TestProbeViaSSH` (C2) volvió a fallar una vez en una ejecución normal de `go test -race ./...` (2026-10-28, al compilar T7.3), no solo bajo carga artificial. Sigue sin investigar; si se repite, tratarlo como prioridad antes de confiar en el CI.

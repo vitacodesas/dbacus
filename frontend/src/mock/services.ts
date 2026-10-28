@@ -34,7 +34,7 @@ const fail = (code: string, message: string, detail = "") =>
 const profiles: Any[] = (seed.profiles ?? []).map((p) => ({ ...blankProfile(), ...p }));
 const sessions: Any[] = [];
 const history: Any[] = [];
-let settings: Any = { theme: "light", locale: "es", maxRows: 100_000, maxResultMemoryMiB: 512, historyRetention: 5000, showSystemDatabases: false, sidebarWidth: 300, splitRatio: 0.5 };
+let settings: Any = { theme: "light", locale: "es", maxRows: 100_000, maxResultMemoryMiB: 512, historyRetention: 5000, showSystemDatabases: false, confirmEdits: true, sidebarWidth: 300, splitRatio: 0.5 };
 let tabs: Any[] = [];
 
 function blankProfile(): Any {
@@ -69,7 +69,10 @@ const TABLES: Record<string, { rows: number; cols: Any[]; cell: (i: number, c: n
 const asMeta = (cols: Any[]) => cols.map((c) => ({ name: c.name, dataType: c.dataType, nullable: c.nullable, precision: null, scale: null }));
 
 // ---- consultas ------------------------------------------------------------------------------------------------------------
-interface Run { stmts: Any[]; data: Record<number, { rows: number; cell: (i: number, c: number) => Any }>; canceled: boolean; cancelWake?: () => void }
+interface Run {
+  stmts: Any[]; data: Record<number, { rows: number; cell: (i: number, c: number) => Any; name?: string; sql?: string }>; canceled: boolean; cancelWake?: () => void
+  sessionId?: string; pending: Record<number, Map<string, { row: number; col: number; value: Any }>>
+}
 const runs = new Map<string, Run>();
 
 function planStatement(sql: string, index: number, start: number, maxRows: number, autoLimit: number) {
@@ -85,7 +88,7 @@ function planStatement(sql: string, index: number, start: number, maxRows: numbe
     const limit = autoLimit > 0 && !/\blimit\b/.test(lower) ? autoLimit : 0;
     const cap = limit > 0 ? Math.min(maxRows, limit) : maxRows;
     const total = Math.min(t.rows, cap);
-    return { stmt: { ...base, columns: asMeta(t.cols), rowCount: total, truncated: limit === 0 && t.rows > maxRows, limitApplied: limit > 0 && t.rows > limit ? limit : limit > 0 ? limit : 0 }, table: { ...t, rows: total } };
+    return { tableName: name, stmt: { ...base, columns: asMeta(t.cols), rowCount: total, truncated: limit === 0 && t.rows > maxRows, limitApplied: limit > 0 && t.rows > limit ? limit : limit > 0 ? limit : 0 }, table: { ...t, rows: total } };
   }
   if (lower.startsWith("select")) {
     const label = text.replace(/^select\s+/i, "").replace(/;$/, "") || "1";
@@ -118,7 +121,7 @@ async function runQuery(queryId: string, req: Any, run: Run) {
       addHistory(req, part.text, false, 0, 0, e.message, Date.now() - t0);
       return;
     }
-    if (plan.table) run.data[idx] = plan.table;
+    if (plan.table) run.data[idx] = { ...plan.table, name: plan.tableName, sql: part.text.trim() };
     Events.Emit("query:statement", { queryId, result: plan.stmt });
     if (plan.sleep) {
       await new Promise<void>((resolve) => {
@@ -224,6 +227,12 @@ export const SchemaService = {
 };
 
 const toCell = (c: Any) => ({ v: c.v, t: c.t ?? "", trunc: false });
+/** Valores ya aplicados con EditService.Apply: "tabla:fila:col" → valor. El servidor simulado «recuerda» lo editado. */
+const applied = new Map<string, Any>();
+const cellAt = (d: Any, i: number, c: number) => {
+  const k = `${d.name}:${i}:${c}`;
+  return applied.has(k) ? { v: applied.get(k), t: "" } : d.cell(i, c);
+};
 export const QueryService = {
   Execute: (req: Any) =>
     cp(() => {
@@ -233,7 +242,7 @@ export const QueryService = {
         throw fail("QUERY_FAILED", "Esta conexión es de solo lectura: solo se permiten SELECT, SHOW, DESCRIBE y EXPLAIN", "readonly");
       }
       const queryId = uid("q");
-      const run: Run = { stmts: [], data: {}, canceled: false };
+      const run: Run = { stmts: [], data: {}, canceled: false, sessionId: req.sessionId, pending: {} };
       runs.set(queryId, run);
       void runQuery(queryId, req, run);
       return { queryId };
@@ -254,10 +263,16 @@ export const QueryService = {
       const total = Math.min(d.rows, settings.maxRows);
       const end = Math.min(offset + limit, total);
       const rows: Any[] = [];
-      for (let i = offset; i < end; i++) rows.push(Array.from({ length: ncols }, (_, c) => toCell(d.cell(i, c))));
+      const pend = runs.get(queryId)!.pending[stmt];
+      for (let i = offset; i < end; i++) {
+        rows.push(Array.from({ length: ncols }, (_, c) => {
+          const p = pend?.get(`${i}:${c}`);
+          return p ? { v: p.value.null ? null : p.value.text, t: "", trunc: false, edited: true } : toCell(cellAt(d, i, c));
+        }));
+      }
       return { offset, rows, total, complete: true };
     }),
-  GetCell: (queryId: string, stmt: number, row: number, col: number) => cp(() => toCell(runs.get(queryId)?.data[stmt]?.cell(row, col) ?? { v: null })),
+  GetCell: (queryId: string, stmt: number, row: number, col: number) => cp(() => toCell(cellAt(runs.get(queryId)?.data[stmt] ?? { cell: () => ({ v: null }) }, row, col))),
   RowsAsInsert: (_q: string, _s: number, _o: number, _l: number, table: string) => cp(() => `INSERT INTO \`${table || "t"}\` VALUES (1);`),
   ReleaseResult: (queryId: string) => cp(() => void runs.delete(queryId)),
   CloseTab: () => cp(() => undefined),
@@ -269,6 +284,84 @@ export const QueryService = {
   FormatSQL: (sql: string) => cp(() => sql.replace(/\bselect\b/gi, "SELECT").replace(/\bfrom\b/gi, "FROM")),
   SaveTabs: (t: Any[]) => cp(() => void (tabs = t ?? [])),
   LoadTabs: () => cp(() => tabs),
+};
+
+
+// ---- edición de celdas (spec 13), versión simplificada: la clave es siempre la primera columna ----------------------------
+const NOT_NULL: Record<string, number[]> = { actor: [1, 2], film: [1], big_numbers: [1] };
+const MAX_LEN: Record<string, Record<number, number>> = { actor: { 1: 10, 2: 10 } };
+function editPlan(queryId: string, stmt: number) {
+  const run = runs.get(queryId);
+  const d = run?.data[stmt];
+  if (!run || !d) throw fail("RESULT_EXPIRED", "El resultado ya no está en memoria");
+  const sess = sessions.find((s) => s.sessionId === run.sessionId);
+  const ncols = (d as Any).cols?.length ?? 0;
+  const info = { editable: false, reason: "", database: "sakila", table: d.name ?? "", keyColumns: [] as number[], columns: [] as Any[], pending: run.pending[stmt]?.size ?? 0 };
+  const col = (editable: boolean, reason = "", c = 0) => ({ editable, reason, dataType: "varchar", nullable: !(NOT_NULL[d.name ?? ""] ?? []).includes(c) });
+  info.columns = Array.from({ length: ncols }, (_, c) => col(false, "", c));
+  if (!d.name || !ncols) return { run, d, info: { ...info, reason: "no_single_table" } };
+  if (profileOf(sess?.profileId)?.readOnly) return { run, d, info: { ...info, reason: "readonly_profile" } };
+  if (/\bjoin\b/i.test(d.sql ?? "")) return { run, d, info: { ...info, reason: "no_single_table" } };
+  info.editable = true;
+  info.keyColumns = [0];
+  info.columns = Array.from({ length: ncols }, (_, c) => (c === 0 ? col(false, "key", c) : col(true, "", c)));
+  return { run, d, info };
+}
+const pendingKey = (row: number, c: number) => `${row}:${c}`;
+export const EditService = {
+  GetEditInfo: (queryId: string, stmt: number) => cp(() => editPlan(queryId, stmt).info),
+  Stage: (queryId: string, stmt: number, row: number, col: number, v: Any) =>
+    cp(() => {
+      const { run, d, info } = editPlan(queryId, stmt);
+      if (!info.editable) throw fail("VALIDATION", "No se puede editar este resultado", info.reason);
+      if (!info.columns[col]?.editable) throw fail("VALIDATION", "Esta columna no se puede editar", info.columns[col]?.reason || "col");
+      if (v.null && (NOT_NULL[d.name ?? ""] ?? []).includes(col)) throw fail("VALIDATION", `La columna «${col}» no admite NULL`, "cell");
+      const max = MAX_LEN[d.name ?? ""]?.[col];
+      if (!v.null && max && [...v.text].length > max) throw fail("VALIDATION", `El texto tiene ${[...v.text].length} caracteres y la columna admite ${max}`, "cell");
+      const map = (run.pending[stmt] ??= new Map());
+      const orig = String(cellAt(d, row, col).v ?? "");
+      if (!v.null && v.text === orig) map.delete(pendingKey(row, col));
+      else map.set(pendingKey(row, col), { row, col, value: v });
+      return { ...info, pending: map.size };
+    }),
+  Unstage: (queryId: string, stmt: number, row: number, col: number) =>
+    cp(() => {
+      const { run, info } = editPlan(queryId, stmt);
+      run.pending[stmt]?.delete(pendingKey(row, col));
+      return { ...info, pending: run.pending[stmt]?.size ?? 0 };
+    }),
+  Discard: (queryId: string, stmt: number) =>
+    cp(() => {
+      const { run, info } = editPlan(queryId, stmt);
+      run.pending[stmt]?.clear();
+      return { ...info, pending: 0 };
+    }),
+  Preview: (queryId: string, stmt: number) =>
+    cp(() => {
+      const { run, d } = editPlan(queryId, stmt);
+      const byRow = new Map<number, Any[]>();
+      for (const p of run.pending[stmt]?.values() ?? []) byRow.set(p.row, [...(byRow.get(p.row) ?? []), p]);
+      return [...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([row, ps]) => ({
+        row, cols: ps.map((p) => p.col),
+        sql: `UPDATE \`sakila\`.\`${d.name}\` SET ${ps.map((p) => `\`c${p.col}\` = ${p.value.null ? "NULL" : `'${p.value.text}'`}`).join(", ")} WHERE \`id\` = ${cellAt(d, row, 0).v}`,
+      }));
+    }),
+  Apply: (queryId: string, stmt: number) =>
+    cp(() => {
+      const { run, d, info } = editPlan(queryId, stmt);
+      if (!info.editable) throw fail("QUERY_FAILED", "Esta conexión es de solo lectura: no se pueden aplicar cambios", "readonly");
+      const map = run.pending[stmt];
+      if (!map?.size) return { applied: 0, conflict: null };
+      if ((window as Any).__mock.forceConflict) {
+        const first = [...map.values()].sort((a, b) => a.row - b.row)[0];
+        return { applied: 0, conflict: { row: first.row, reason: (window as Any).__mock.forceConflict } };
+      }
+      const rows = new Set([...map.values()].map((p) => p.row));
+      for (const p of map.values()) applied.set(`${d.name}:${p.row}:${p.col}`, p.value.null ? null : p.value.text);
+      map.clear();
+      Events.Emit("edit:applied", { queryId, stmtIndex: stmt, rows: rows.size });
+      return { applied: rows.size, conflict: null };
+    }),
 };
 
 export const HistoryService = {
@@ -306,4 +399,4 @@ export const SettingsService = {
 export const PingService = { Hello: (name: string) => cp(() => `Hola, ${name}`), PickFile: () => cp(() => "") };
 
 /** Para que las pruebas lean el estado interno si lo necesitan. */
-(window as Any).__mock = { profiles, sessions, history, exports: [] as Any[], get settings() { return settings; } };
+(window as Any).__mock = { profiles, sessions, history, exports: [] as Any[], forceConflict: "" as string, get settings() { return settings; } };

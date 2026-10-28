@@ -1,6 +1,6 @@
 # 13 — Edición de celdas (etapa 2)
 
-> Estado: **aprobado** (decisiones D1–D6 aceptadas tal como están, 2026-10-28). Aún no hay código de esta etapa.
+> Estado: **implementado** en T7.1–T7.6 (decisiones D1–D6 aceptadas tal como estaban, 2026-10-28). Falta el smoke manual en la app nativa (ver `docs/smoke-manual.md`).
 
 ## Objetivo
 Editar valores directamente en el grid de resultados (doble clic o `F2` sobre una celda), revisar los cambios como SQL y aplicarlos al servidor en una sola operación atómica. Sigue la regla de oro: **Go decide, valida, genera el SQL y lo ejecuta; Vue solo captura la intención y pinta**.
@@ -96,16 +96,16 @@ El front envía texto; Go convierte según el tipo de columna y rechaza antes de
 - Zona horaria: con D3 los `TIMESTAMP` se interpretan en la zona de la conexión efímera; se avisa en el diálogo si difiere de la de la pestaña (`@@time_zone`).
 
 ## Criterios de aceptación
-- [ ] Editar una celda de `SELECT * FROM t` (tabla con PK) y aplicar actualiza solo esa fila; el grid muestra el valor nuevo sin re-ejecutar.
-- [ ] Una consulta con `JOIN`, alias, `GROUP BY` o una vista no ofrece edición y explica por qué.
-- [ ] Tabla sin clave primaria ni índice único: no editable, con mensaje claro.
-- [ ] Clave compuesta: el `WHERE` incluye todas sus columnas.
-- [ ] Si otra sesión cambió la fila entre medias, `Apply` devuelve conflicto y **no se aplica ningún cambio** del lote (atomicidad).
-- [ ] Conexión de solo lectura: no se puede editar y `Apply` directo falla con `QUERY_FAILED`/`readonly`.
-- [ ] `NULL` explícito, cadena vacía, `BIGINT UNSIGNED` máximo, `DECIMAL`, `DATETIME(6)`, `JSON` y emojis se guardan sin pérdida (integración en MySQL 8.0/8.4 y MariaDB 10.11).
-- [ ] Valores inválidos (texto en un entero, `NULL` en `NOT NULL`) se rechazan en la celda sin llegar al servidor.
-- [ ] Re-ejecutar o cerrar la pestaña con cambios pendientes pide confirmación.
-- [ ] Los valores editados no aparecen en logs ni en eventos (ampliar `TestSecretsNeverReachDBLogsOrEvents`).
+- [x] Editar una celda de `SELECT * FROM t` (tabla con PK) y aplicar actualiza solo esa fila; el grid muestra el valor nuevo sin re-ejecutar. (`TestEditApplyIntegration`, E2E «editar, revisar el SQL y aplicar»)
+- [x] Una consulta con `JOIN`, alias, `GROUP BY` o una vista no ofrece edición y explica por qué. (`TestEditEligibilityIntegration`, E2E «un JOIN explica por qué»)
+- [x] Tabla sin clave primaria ni índice único: no editable, con mensaje claro.
+- [x] Clave compuesta: el `WHERE` incluye todas sus columnas.
+- [x] Si otra sesión cambió la fila entre medias, `Apply` devuelve conflicto y **no se aplica ningún cambio** del lote (atomicidad). (integración en los 3 motores)
+- [x] Conexión de solo lectura: no se puede editar y `Apply` directo falla con `QUERY_FAILED`/`readonly`.
+- [x] `NULL` explícito, cadena vacía, `BIGINT UNSIGNED` máximo, `DECIMAL`, `DATETIME(6)`, `JSON`, `DOUBLE` y emojis se guardan sin pérdida (integración en MySQL 8.0/8.4 y MariaDB 10.11).
+- [x] Valores inválidos (texto en un entero, `NULL` en `NOT NULL`) se rechazan en la celda sin llegar al servidor.
+- [x] Re-ejecutar o cerrar la pestaña con cambios pendientes pide confirmación. (E2E; el atajo `⌘/Ctrl+W` real sin probar)
+- [x] Los valores editados no aparecen en logs ni en eventos (`TestEditedValuesNeverReachLogsOrEvents`).
 
 ## Pruebas
 Unitarias: análisis de `SimpleSelectTable` (tabla de casos), elegibilidad, conversión por tipo, generación del `UPDATE`. Integración (`-tags integration`): lo anterior contra servidores reales, incluidos conflicto, rollback y clave compuesta. E2E con el mock: editar, ver la barra, revisar SQL, aplicar y conflicto. Smoke manual: edición real, conflicto con dos pestañas y conexión de solo lectura.

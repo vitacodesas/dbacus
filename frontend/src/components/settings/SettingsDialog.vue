@@ -21,7 +21,7 @@ const saving = ref(false);
 function currentSettings(): Settings {
   return {
     theme: ui.theme, locale: ui.locale, maxRows: ui.maxRows, maxResultMemoryMiB: ui.maxResultMemoryMiB,
-    historyRetention: ui.historyRetention, showSystemDatabases: ui.showSystemDatabases,
+    historyRetention: ui.historyRetention, showSystemDatabases: ui.showSystemDatabases, confirmEdits: ui.confirmEdits,
     sidebarWidth: ui.sidebarWidth, splitRatio: ui.splitRatio,
   };
 }
@@ -67,6 +67,7 @@ async function save() {
       <BaseInput :model-value="draft.historyRetention" type="number" mono :label="t('settings.retention')" :error="errorFor('historyRetention')" @update:model-value="draft.historyRetention = num($event)" />
       <p class="-mt-2 text-xs text-muted">{{ t("settings.hint") }}</p>
       <BaseToggle v-model="draft.showSystemDatabases" :label="t('settings.showSystem')" />
+      <BaseToggle v-model="draft.confirmEdits" :label="t('settings.confirmEdits')" />
       <p v-if="message && !field" class="text-xs text-danger" role="alert">{{ message }}</p>
     </form>
     <template #footer>

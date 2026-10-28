@@ -55,7 +55,7 @@ describe("ui store", () => {
   describe("ajustes", () => {
     const saved: Settings = {
       theme: "dark", locale: "en", maxRows: 5000, maxResultMemoryMiB: 128, historyRetention: 100,
-      showSystemDatabases: true, sidebarWidth: 280, splitRatio: 0.4,
+      showSystemDatabases: true, confirmEdits: false, sidebarWidth: 280, splitRatio: 0.4,
     };
     beforeEach(() => Object.values(api).forEach((f) => f.mockReset()));
 

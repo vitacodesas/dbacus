@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useEditsStore } from "../../stores/edits";
 import { useResultsStore } from "../../stores/results";
 import { useUiStore } from "../../stores/ui";
 import { Download } from "lucide-vue-next";
@@ -15,6 +16,7 @@ const emit = defineEmits<{ cancel: []; rerun: [] }>();
 
 const { t } = useI18n();
 const results = useResultsStore();
+const edits = useEditsStore();
 const ui = useUiStore();
 
 const res = computed(() => results.of(props.tabId));
@@ -34,6 +36,20 @@ const current = computed(() =>
 const stmt = computed(() => res.value.statements[current.value]);
 const rowCount = computed(() => res.value.rowCounts[current.value] ?? stmt.value?.rowCount ?? 0);
 const showGrid = computed(() => current.value !== MESSAGES && stmt.value?.kind === "rows" && (stmt.value.columns?.length ?? 0) > 0);
+
+// Edición de celdas (spec 13): Go da el veredicto cuando el resultado ya está completo; aquí solo se pide y se pinta.
+watch(
+  () => [res.value.queryId, current.value, res.value.status, showGrid.value] as const,
+  ([queryId, stmtIndex, status, grid]) => {
+    if (queryId && grid && (status === "done" || status === "canceled")) void edits.load(queryId, stmtIndex);
+  },
+  { immediate: true },
+);
+const pending = computed(() => (res.value.queryId ? (edits.infoOf(res.value.queryId, current.value)?.pending ?? 0) : 0));
+const editNote = computed(() => {
+  const i = res.value.queryId ? edits.infoOf(res.value.queryId, current.value) : null;
+  return i && !i.editable && i.reason ? t(`edit.reasons.${i.reason}`) : "";
+});
 
 // Cronómetro mientras corre
 const now = ref(Date.now());
@@ -168,10 +184,21 @@ const summary = (i: number) => {
         </div>
       </div>
 
+      <!-- Cambios de celdas sin aplicar -->
+      <div v-if="pending > 0 && res.queryId" class="flex shrink-0 items-center gap-2 border-t border-border bg-warning/10 px-3 py-1.5 text-sm" role="status" data-testid="edit-bar">
+        <span>{{ t("edit.pending", { n: pending }) }}</span>
+        <span class="ml-auto flex items-center gap-1">
+          <BaseButton size="sm" variant="ghost" data-testid="edit-view-sql" @click="edits.requestApply(tabId, res.queryId, current, { viewOnly: true })">{{ t("edit.viewSql") }}</BaseButton>
+          <BaseButton size="sm" variant="ghost" data-testid="edit-discard" @click="edits.discard(tabId, res.queryId, current)">{{ t("edit.discard") }}</BaseButton>
+          <BaseButton size="sm" variant="primary" data-testid="edit-apply" @click="edits.requestApply(tabId, res.queryId, current)">{{ t("edit.apply") }}</BaseButton>
+        </span>
+      </div>
+
       <!-- Estado del grid -->
       <footer v-if="showGrid" class="flex shrink-0 items-center gap-4 border-t border-border px-3 py-1 text-xs text-muted">
         <span data-testid="range">{{ rangeText }}</span>
         <span v-if="stmt?.limitApplied" class="text-warning">{{ t("query.limitApplied", { n: stmt.limitApplied }) }}</span>
+        <span v-if="editNote" class="truncate" data-testid="edit-note" :title="editNote">{{ editNote }}</span>
         <span v-if="res.database" class="font-data ml-auto">{{ res.database }}</span>
       </footer>
     </template>

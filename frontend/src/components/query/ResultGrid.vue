@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { rowsAsInsert } from "../../api/queries";
 import { asAppError } from "../../api/errors";
@@ -7,6 +7,7 @@ import {
   clampWidth, columnOffsets, copyText, defaultWidth, displayCell, GUTTER_WIDTH, HEADER_HEIGHT, inSelection, ROW_HEIGHT, selectionBounds,
   toTSV, visibleColumns, visibleRows, type Selection,
 } from "../../composables/gridModel";
+import { useEditsStore } from "../../stores/edits";
 import { MAX_COPY_ROWS, useResultsStore } from "../../stores/results";
 import { useUiStore } from "../../stores/ui";
 import type { Cell, ColumnMeta } from "../../types";
@@ -18,6 +19,7 @@ const emit = defineEmits<{ visibleRange: [first: number, last: number]; cancel: 
 
 const { t } = useI18n();
 const results = useResultsStore();
+const edits = useEditsStore();
 const ui = useUiStore();
 
 const root = ref<HTMLElement | null>(null);
@@ -29,11 +31,18 @@ let observer: ResizeObserver | null = null;
 // Selección actual (declarada antes de los watchers inmediatos que la reinician).
 const sel = ref<Selection | null>(null);
 
+// ---- edición de celdas (spec 13): Go valida y guarda los cambios pendientes; aquí solo se captura el texto ------------------
+const editInfo = computed(() => edits.infoOf(props.queryId, props.stmtIndex));
+const canEdit = (c: number) => edits.isEditable(props.queryId, props.stmtIndex, c);
+const editing = ref<{ r: number; c: number; text: string; error: string | null; saving: boolean } | null>(null);
+const editorEl = ref<HTMLInputElement | null>(null);
+
 // Anchos por columna; se reinician con cada resultado nuevo.
 const widths = ref<number[]>([]);
 watch(() => [props.queryId, props.stmtIndex, props.columns], () => {
   widths.value = props.columns.map(defaultWidth);
   sel.value = null;
+  editing.value = null;
   if (root.value) root.value.scrollTop = root.value.scrollLeft = 0;
 }, { immediate: true });
 
@@ -149,6 +158,9 @@ async function onKey(e: KeyboardEvent) {
       if (results.running(props.tabId)) emit("cancel");
       else sel.value = null;
       return;
+    case "F2":
+      e.preventDefault();
+      return void startEdit();
     case "Enter":
     case " ":
       e.preventDefault();
@@ -161,6 +173,80 @@ async function onKey(e: KeyboardEvent) {
     e.preventDefault();
     await copy(e.shiftKey);
   }
+}
+
+function startEdit(): boolean {
+  const s = sel.value;
+  if (!s || !canEdit(s.fc)) return false;
+  const cell = rowAt(s.fr)?.[s.fc];
+  if (!cell) return false;
+  if (cell.trunc) {
+    ui.toast("info", t("edit.reasons.truncated"));
+    return true;
+  }
+  editing.value = { r: s.fr, c: s.fc, text: cell.v == null ? "" : String(cell.v), error: null, saving: false };
+  void nextTick(() => editorEl.value?.select());
+  return true;
+}
+
+async function commitEdit(then: "down" | "right" | "stay") {
+  const e = editing.value;
+  if (!e || e.saving) return;
+  e.saving = true;
+  const err = await edits.stage(props.tabId, props.queryId, props.stmtIndex, e.r, e.c, { null: false, text: e.text });
+  if (err) { // se queda abierto con el motivo, para corregirlo
+    e.error = err.message;
+    e.saving = false;
+    void nextTick(() => editorEl.value?.focus());
+    return;
+  }
+  editing.value = null;
+  root.value?.focus();
+  if (then === "down") move(1, 0, false);
+  else if (then === "right") nextEditableColumn(e.r, e.c);
+}
+
+function nextEditableColumn(r: number, from: number) {
+  for (let c = from + 1; c <= lastCol(); c++) {
+    if (canEdit(c)) {
+      sel.value = { ar: r, ac: c, fr: r, fc: c };
+      ensureVisible(r, c);
+      return;
+    }
+  }
+}
+
+function cancelEdit() {
+  editing.value = null;
+  root.value?.focus();
+}
+
+function onEditorKey(e: KeyboardEvent) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    void commitEdit("down");
+  } else if (e.key === "Tab") {
+    e.preventDefault();
+    void commitEdit("right");
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    cancelEdit();
+  }
+}
+
+function onEditorBlur() {
+  if (editing.value && !editing.value.saving && !editing.value.error) void commitEdit("stay");
+}
+
+function onDblClick() {
+  if (!startEdit()) viewCurrent();
+}
+
+async function setNull() {
+  const s = sel.value;
+  if (!s) return;
+  const err = await edits.stage(props.tabId, props.queryId, props.stmtIndex, s.fr, s.fc, { null: true, text: "" });
+  if (err) ui.toast("error", err.message);
 }
 
 // ---- copiar -------------------------------------------------------------------------------------------------------
@@ -219,6 +305,12 @@ const menu = computed<MenuItem[]>(() => {
     { id: "copyInsert", label: t("query.menu.copyInsert") },
   ];
   if (sel.value) items.push({ id: "view", label: t("query.menu.viewCell"), separatorBefore: true });
+  const cur = sel.value ? rowAt(sel.value.fr)?.[sel.value.fc] : undefined;
+  if (sel.value && canEdit(sel.value.fc)) {
+    items.push({ id: "editCell", label: t("edit.editCell"), separatorBefore: true });
+    if (editInfo.value?.columns?.[sel.value.fc]?.nullable) items.push({ id: "setNull", label: t("edit.setNull") });
+  }
+  if (cur?.edited) items.push({ id: "revert", label: t("edit.revert") });
   return items;
 });
 function onMenu(id: string) {
@@ -226,6 +318,9 @@ function onMenu(id: string) {
   else if (id === "copyHeaders") void copy(true);
   else if (id === "copyInsert") void copyInsert();
   else if (id === "view") viewCurrent();
+  else if (id === "editCell") startEdit();
+  else if (id === "setNull") void setNull();
+  else if (id === "revert" && sel.value) void edits.unstage(props.tabId, props.queryId, props.stmtIndex, sel.value.fr, sel.value.fc);
 }
 function onContextMenu(e: MouseEvent) {
   // El clic derecho sobre una celda fuera de la selección actual la selecciona (como en un explorador de archivos).
@@ -248,7 +343,14 @@ function doResize(e: PointerEvent) {
 }
 const endResize = () => (resizing = null);
 
-const cellClass = (r: number, c: number, d: ReturnType<typeof displayCell>) => [
+const headerTitle = (c: number) => {
+  const base = `${props.columns[c].name} · ${props.columns[c].dataType}`;
+  const col = editInfo.value?.columns?.[c];
+  return editInfo.value?.editable && col && !col.editable && col.reason ? `${base}\n${t(`edit.reasons.${col.reason}`)}` : base;
+};
+
+const cellClass = (r: number, c: number, d: ReturnType<typeof displayCell>, edited: boolean) => [
+  edited && "bg-warning/20 shadow-[inset_3px_0_0_var(--color-warning)]",
   inSelection(sel.value, r, c) && "bg-accent/20",
   sel.value && sel.value.fr === r && sel.value.fc === c && "outline outline-1 -outline-offset-1 outline-accent",
   d.numeric && "justify-end text-right",
@@ -266,8 +368,8 @@ const rowsVm = computed(() =>
     const cells = visibleColumnIdx.value.map((c) => {
       const d = displayCell(row[c]);
       return {
-        c, text: d.text, cls: cellClass(r, c, d), mono: d.numeric || d.type === "bytes" || d.type === "json",
-        title: d.text.length > 40 ? copyText(row[c]).slice(0, 500) : undefined,
+        c, text: d.text, cls: cellClass(r, c, d, !!row[c].edited), mono: d.numeric || d.type === "bytes" || d.type === "json",
+        title: row[c].edited ? t("edit.edited") : d.text.length > 40 ? copyText(row[c]).slice(0, 500) : undefined,
       };
     });
     return { r, selectedRow, cells };
@@ -290,7 +392,7 @@ const rowsVm = computed(() =>
       @mousedown="onMouseDown"
       @mousemove="onMouseMove"
       @contextmenu="onContextMenu"
-      @dblclick="viewCurrent"
+      @dblclick="onDblClick"
       @keydown="onKey"
     >
       <div :style="{ width: `${totalWidth}px`, height: `${totalHeight}px` }" class="relative">
@@ -304,7 +406,7 @@ const rowsVm = computed(() =>
             role="columnheader"
             class="relative flex shrink-0 items-center gap-1.5 truncate border-r border-border px-2"
             :style="{ width: `${widths[c]}px` }"
-            :title="`${columns[c].name} · ${columns[c].dataType}`"
+            :title="headerTitle(c)"
           >
             <span class="truncate">{{ columns[c].name }}</span>
             <span v-if="widths[c] >= 150" class="font-data truncate text-[10px] font-normal text-muted">{{ columns[c].dataType.toLowerCase() }}</span>
@@ -317,6 +419,32 @@ const rowsVm = computed(() =>
             />
           </div>
         </div>
+
+        <!-- Editor de la celda (Go valida el valor al guardarlo) -->
+        <template v-if="editing">
+          <input
+            ref="editorEl"
+            v-model="editing.text"
+            class="font-data absolute z-40 border border-accent bg-bg px-2 text-sm outline-none"
+            :class="editing.error && 'border-danger'"
+            :style="{ top: `${HEADER_HEIGHT + editing.r * ROW_HEIGHT}px`, left: `${GUTTER_WIDTH + offsets[editing.c]}px`, width: `${widths[editing.c]}px`, height: `${ROW_HEIGHT}px` }"
+            data-testid="cell-editor"
+            :aria-label="t('edit.editCell')"
+            @keydown.stop="onEditorKey"
+            @mousedown.stop
+            @dblclick.stop
+            @blur="onEditorBlur"
+          >
+          <div
+            v-if="editing.error"
+            class="absolute z-50 max-w-sm rounded bg-danger px-2 py-1 text-xs text-white shadow"
+            role="alert"
+            data-testid="cell-editor-error"
+            :style="{ top: `${HEADER_HEIGHT + (editing.r + 1) * ROW_HEIGHT + 2}px`, left: `${GUTTER_WIDTH + offsets[editing.c]}px` }"
+          >
+            {{ editing.error }}
+          </div>
+        </template>
 
         <!-- Filas visibles -->
         <div class="absolute left-0" :style="{ top: `${HEADER_HEIGHT + rowRange[0] * ROW_HEIGHT}px`, width: `${totalWidth}px` }">

@@ -94,7 +94,9 @@ func TestEditApplyIntegration(t *testing.T) {
 					at DATETIME(6) NULL,
 					flag TINYINT(1) NULL,
 					ts TIMESTAMP NULL DEFAULT NULL,
-					touched VARCHAR(20) NULL
+					touched VARCHAR(20) NULL,
+					js JSON NULL,
+					fl DOUBLE NULL
 				) DEFAULT CHARSET=utf8mb4`,
 				`CREATE TRIGGER ed_a_bu BEFORE UPDATE ON ed_a FOR EACH ROW SET NEW.touched = 'por-trigger'`,
 				`INSERT INTO ed_a (id, name, note, price, big, at, flag, ts) VALUES
@@ -143,8 +145,10 @@ func TestEditApplyIntegration(t *testing.T) {
 				stage(qid, 0, 5, edit.Value{Text: "2024-02-29 23:59:59.999999"})
 				stage(qid, 0, 6, edit.Value{Text: "true"})
 				stage(qid, 0, 7, edit.Value{Text: "2024-06-01 10:00:00"})
-				stage(qid, 1, 2, edit.Value{Null: true}) // NULL explícito
-				stage(qid, 2, 4, edit.Value{Text: "7"})  // fila con clave BIGINT UNSIGNED máxima
+				stage(qid, 1, 2, edit.Value{Null: true})            // NULL explícito
+				stage(qid, 2, 4, edit.Value{Text: "7"})             // fila con clave BIGINT UNSIGNED máxima
+				stage(qid, 0, 9, edit.Value{Text: `{"a": [1, 2]}`}) // JSON y DOUBLE: tipos que no entran en el WHERE del control optimista
+				stage(qid, 0, 10, edit.Value{Text: "1.5"})
 
 				res, err := svc.Apply(ctx, qid, 0)
 				require.NoError(t, err)
@@ -156,6 +160,7 @@ func TestEditApplyIntegration(t *testing.T) {
 				require.Equal(t, []any{"1"}, db("SELECT note IS NULL FROM ed_a WHERE id = 2"))
 				require.Equal(t, []any{""}, db("SELECT note FROM ed_a WHERE id = 1"), "la cadena vacía no se convirtió en NULL")
 				require.Equal(t, []any{"7"}, db("SELECT CAST(big AS CHAR) FROM ed_a WHERE id = 18446744073709551615"))
+				require.Equal(t, []any{"2", "1.5"}, db("SELECT CAST(JSON_EXTRACT(js, '$.a[1]') AS CHAR), CAST(fl AS CHAR) FROM ed_a WHERE id = 1"))
 
 				// El grid ve el valor que dejó el trigger, no solo lo escrito.
 				w, err := e.q.GetRows(qid, 0, 0, 10)

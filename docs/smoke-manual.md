@@ -33,6 +33,21 @@ Preparación: MySQL 8.x local (p. ej. `docker run --rm --tmpfs /var/lib/mysql -e
 - [ ] Tras reconectar: candado en barra de estado, en la barra de la consulta y en la tarjeta. `SELECT 1` funciona; `DROP TABLE no_existe`, `SELECT 1 INTO OUTFILE '/tmp/x'` y `SET @x = 1` se rechazan.
 - [ ] Quitar el modo y reconectar vuelve a permitir escribir (barra de estado: «Lectura y escritura»).
 
+## Edición de celdas (spec 13)
+Hacerlo contra una base y tabla de pruebas, no contra datos compartidos.
+- [ ] `SELECT * FROM tabla` de una tabla con clave primaria: doble clic y `F2` abren el editor; `Enter` baja, `Tab` pasa a la siguiente columna, `Esc` cancela.
+- [ ] Una celda editada se ve en ámbar; aparece la barra «N cambios sin aplicar». «Ver SQL» muestra los `UPDATE` con los valores.
+- [ ] «Aplicar» con confirmación: tras confirmar, el valor queda en el servidor (comprobar con otro cliente) y la fila refleja lo que dejó un trigger o `ON UPDATE`.
+- [ ] Conflicto: cargar el resultado, cambiar esa fila desde otro cliente, aplicar → mensaje de conflicto y **ningún** cambio del lote aplicado.
+- [ ] Valores extremos: texto con emoji y comillas, cadena vacía frente a NULL (menú «Establecer NULL»), `BIGINT UNSIGNED` máximo, `DECIMAL`, `DATETIME(6)`.
+- [ ] Un texto demasiado largo o un entero inválido se rechaza en la celda, sin llegar al servidor.
+- [ ] Columnas no editables: clave, `AUTO_INCREMENT`, generadas y binarias muestran el motivo en el tooltip de la cabecera.
+- [ ] `JOIN`, alias, vistas y tablas sin clave: no se ofrece edición y el pie del grid explica por qué.
+- [ ] Volver a ejecutar o cerrar la pestaña con cambios pendientes pide confirmación (`⌘/Ctrl+W` incluido: **sin probar con el atajo real**, el E2E usa el botón).
+- [ ] En una conexión de «Solo lectura» no se ofrece edición.
+- [ ] Ajustes → «Confirmar con el SQL a la vista»: desactivado, «Aplicar» aplica sin diálogo.
+- [ ] Zona horaria: editar un `TIMESTAMP` con la sesión en una zona distinta de la del servidor (limitación conocida, spec 13).
+
 ## Ajustes e interfaz
 - [ ] Cambiar tema/idioma en Ajustes (`⌘/Ctrl+,`) y reabrir: se conserva. Ancho del panel y del divisor también.
 - [ ] Un límite de filas bajo (p. ej. 1 000) aplica a la siguiente consulta; uno fuera de rango se rechaza en el campo.

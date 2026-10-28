@@ -1,5 +1,5 @@
 import { Events } from "@wailsio/runtime";
-import type { ExportDone, ExportProgress, HistoryAdded, QueryDone, QueryError, QueryProgress, QueryStarted, QueryStatement, SchemaInvalidated, SessionClosed } from "../types";
+import type { EditApplied, ExportDone, ExportProgress, HistoryAdded, QueryDone, QueryError, QueryProgress, QueryStarted, QueryStatement, SchemaInvalidated, SessionClosed } from "../types";
 
 export interface PingTick {
   seq: number;
@@ -38,6 +38,9 @@ export function onQueryError(h: (ev: QueryError) => void): Unsubscribe {
 
 export function onHistoryAdded(h: (ev: HistoryAdded) => void): Unsubscribe {
   return Events.On("history:added", (e: { data: HistoryAdded }) => h(e.data));
+}
+export function onEditApplied(h: (ev: EditApplied) => void): Unsubscribe {
+  return Events.On("edit:applied", (e: { data: EditApplied }) => h(e.data));
 }
 export function onExportProgress(h: (ev: ExportProgress) => void): Unsubscribe {
   return Events.On("export:progress", (e: { data: ExportProgress }) => h(e.data));

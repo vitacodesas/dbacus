@@ -104,7 +104,7 @@ Métodos:
 - `Explain(...)`: fuera de etapa 1.
 
 ## SettingsService
-`Get()` → `Settings{Theme, Locale, MaxRows, MaxResultMemoryMiB, HistoryRetention, ShowSystemDatabases, SidebarWidth, SplitRatio}`; `Set(Settings)` → `Settings` (lo guardado). Cambios se validan en Go (`VALIDATION` con `Detail` = nombre del campo) y se persisten en `settings`. `QueryService` y el historial releen el store en cada uso: los límites aplican a la siguiente consulta sin reiniciar.
+`Get()` → `Settings{Theme, Locale, MaxRows, MaxResultMemoryMiB, HistoryRetention, ShowSystemDatabases, ConfirmEdits, SidebarWidth, SplitRatio}`; `Set(Settings)` → `Settings` (lo guardado). Cambios se validan en Go (`VALIDATION` con `Detail` = nombre del campo) y se persisten en `settings`. `QueryService` y el historial releen el store en cada uso: los límites aplican a la siguiente consulta sin reiniciar.
 
 Reglas de serialización de celdas: enteros > 2^53 → `T:"bigint"` con `V` string; `[]byte` no UTF-8 → `T:"bytes"` con hex truncado; `DATETIME/TIMESTAMP` → string ISO sin zona salvo `TIMESTAMP`; `JSON` → string; textos > 64 KiB se truncan (`Trunc:true`) con opción de "ver completo" vía `GetCell(queryID, stmtIndex, row, col)`.
 
@@ -131,3 +131,8 @@ type HistoryEntry struct{ ID, ProfileID, SQL string; Database string; ExecutedAt
 ## Reglas
 - Todas las llamadas devuelven `(T, *AppError)` semánticamente: en Wails se expone como excepción con `AppError` serializado en JSON; `api/` lo reconstruye.
 - Ninguna llamada bloquea más de 100 ms salvo `Test`, `Connect` y `Export` (con spinner); `Execute` retorna inmediatamente.
+
+## EditService (etapa 2, spec 13)
+Tipos en `internal/edit`: `Info{Editable, Reason, Database, Table, KeyColumns, Columns[]{Editable, Reason, DataType, Nullable}, Pending}`, `Value{Null, Text}`, `Preview{Row, Cols, SQL}`, `ApplyResult{Applied, Conflict *{Row, Reason "changed"|"missing"}}`.
+Métodos (todos por `(queryId, stmtIndex)`): `GetEditInfo`, `Stage(row, col, Value) → Info`, `Unstage(row, col) → Info`, `Discard → Info`, `Preview → []Preview`, `Apply → ApplyResult`. Errores: `VALIDATION` con `Detail` = motivo de columna/resultado o `cell` (valor inválido); `QUERY_FAILED/readonly` en perfiles de solo lectura; `QUERY_FAILED/busy` si ya se está aplicando; `RESULT_EXPIRED`/`NOT_FOUND` como el resto. `GetRows` devuelve las celdas con cambio pendiente con `Cell.Edited = true`.
+Evento `edit:applied` `{queryId, stmtIndex, rows}`.

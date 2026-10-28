@@ -1,4 +1,5 @@
-import { onExportDone, onExportProgress, onHistoryAdded, onQueryDone, onQueryError, onQueryProgress, onQueryStarted, onQueryStatement, onSchemaInvalidated, onSessionClosed } from "./api/events";
+import { onEditApplied, onExportDone, onExportProgress, onHistoryAdded, onQueryDone, onQueryError, onQueryProgress, onQueryStarted, onQueryStatement, onSchemaInvalidated, onSessionClosed } from "./api/events";
+import { useEditsStore } from "./stores/edits";
 import { useExportsStore } from "./stores/exports";
 import { useHistoryStore } from "./stores/history";
 import { useResultsStore } from "./stores/results";
@@ -12,6 +13,7 @@ export function startEventDispatch(): () => void {
   const results = useResultsStore();
   const history = useHistoryStore();
   const exports = useExportsStore();
+  const edits = useEditsStore();
   const offs = [onSessionClosed((ev) => sessions.handleClosed(ev)), onSchemaInvalidated((ev) => schema.handleInvalidated(ev)),
     onQueryStarted((ev) => results.handleStarted(ev)),
     onQueryStatement((ev) => results.handleStatement(ev)),
@@ -19,6 +21,7 @@ export function startEventDispatch(): () => void {
     onQueryDone((ev) => results.handleDone(ev)),
     onQueryError((ev) => results.handleError(ev)),
     onHistoryAdded((ev) => history.handleAdded(ev)),
+    onEditApplied((ev) => edits.handleApplied(ev)),
     onExportProgress((ev) => exports.handleProgress(ev)),
     onExportDone((ev) => exports.handleDone(ev)),
   ];
