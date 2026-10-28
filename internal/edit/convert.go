@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -229,6 +230,9 @@ func Same(col model.Column, newV Value, orig results.Cell) bool {
 	case "datetime", "timestamp", "date", "time":
 		a, err := Convert(col, newV)
 		return err == nil && fmt.Sprint(a) == o
+	case "json":
+		// El JSON de MySQL se guarda normalizado (espacios, orden de claves): dar formato no es un cambio.
+		return sameJSON(newV.Text, o)
 	}
 	return newV.Text == o
 }
@@ -258,4 +262,21 @@ func FormatJSON(text string) (string, error) {
 		return "", invalid("No se pudo dar formato al JSON")
 	}
 	return out.String(), nil
+}
+
+// sameJSON compara dos textos JSON por su valor (no por su formato). Los números se comparan por su texto: 1 y 1.0 son
+// valores distintos en MySQL, así que ante la duda se considera un cambio.
+func sameJSON(a, b string) bool {
+	parse := func(s string) (any, bool) {
+		dec := json.NewDecoder(strings.NewReader(s))
+		dec.UseNumber()
+		var v any
+		if err := dec.Decode(&v); err != nil || dec.More() {
+			return nil, false
+		}
+		return v, true
+	}
+	va, ok1 := parse(a)
+	vb, ok2 := parse(b)
+	return ok1 && ok2 && reflect.DeepEqual(va, vb)
 }

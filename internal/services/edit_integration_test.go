@@ -5,6 +5,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -167,6 +168,19 @@ func TestEditApplyIntegration(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, "por-trigger", w.Rows[0][8].V)
 				require.False(t, w.Rows[0][1].Edited)
+			})
+
+			t.Run("dar formato a un JSON no es un cambio (en MySQL); en MariaDB, donde es texto, sí", func(t *testing.T) {
+				qid := open("SELECT * FROM ed_a WHERE id = 1")
+				pretty, err := svc.FormatJSON(ctx, `{"a": [1, 2]}`)
+				require.NoError(t, err)
+				info, err := svc.Stage(ctx, qid, 0, 0, 9, edit.Value{Text: pretty}) // columna js
+				require.NoError(t, err)
+				if strings.HasPrefix(image, "mariadb") {
+					require.Equal(t, 1, info.Pending, "MariaDB guarda el JSON como texto: los espacios son parte del valor")
+				} else {
+					require.Equal(t, 0, info.Pending, "MySQL normaliza el JSON: el formato no cambia el valor")
+				}
 			})
 
 			t.Run("un conflicto en una fila no aplica ninguna", func(t *testing.T) {

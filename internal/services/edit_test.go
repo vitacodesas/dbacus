@@ -441,3 +441,26 @@ func TestEditedValuesNeverReachLogsOrEvents(t *testing.T) {
 	require.NotContains(t, string(body), secret, "eventos")
 	require.NotContains(t, logs.String(), secret, "logs")
 }
+
+func TestFormattingJSONIsNotAChange(t *testing.T) {
+	ctx := context.Background()
+	e, svc := newEditEnv(t)
+	e.schema.Details["app.t"] = model.TableDetail{
+		Table:   model.Table{Name: "t", Schema: "app", Type: "table"},
+		Columns: []model.Column{{Name: "id", DataType: "int", ColumnType: "int"}, {Name: "doc", DataType: "json", ColumnType: "json", Nullable: true}},
+		Indexes: []model.Index{{Name: "PRIMARY", Unique: true, Columns: []string{"id"}}},
+	}
+	e.drv.OnRun = func(context.Context, string) (driver.RunResult, error) {
+		return fake.Rows([]string{"id", "doc"}, []any{int64(1), `{"b": 1, "a": [1, 2]}`}), nil
+	}
+	qid := e.execute(t, "t1", "SELECT * FROM t")
+	e.terminal(t, qid)
+
+	info, err := svc.Stage(ctx, qid, 0, 0, 1, edit.Value{Text: "{\n  \"a\": [\n    1,\n    2\n  ],\n  \"b\": 1\n}"})
+	require.NoError(t, err)
+	require.Equal(t, 0, info.Pending, "solo dar formato no deja un cambio pendiente")
+
+	info, err = svc.Stage(ctx, qid, 0, 0, 1, edit.Value{Text: `{"b": 2, "a": [1, 2]}`})
+	require.NoError(t, err)
+	require.Equal(t, 1, info.Pending)
+}

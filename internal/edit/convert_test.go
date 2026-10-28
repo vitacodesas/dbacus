@@ -164,3 +164,16 @@ func TestFormatJSON(t *testing.T) {
 	_, err = FormatJSON(`{"a": }`)
 	require.ErrorContains(t, err, "no es JSON válido")
 }
+
+func TestSameJSONIgnoresFormatting(t *testing.T) {
+	col := mcol("json", "json", true)
+	orig := results.Cell{V: `{"b": [1, 2], "a": {"x": null}}`}
+	pretty, _ := FormatJSON(`{"a":{"x":null},"b":[1,2]}`)
+	require.True(t, Same(col, txt(pretty), orig), "dar formato y reordenar claves no es un cambio")
+	require.True(t, Same(col, txt(`{"a":{"x":null},"b":[1,2]}`), orig), "tampoco quitar espacios")
+	require.False(t, Same(col, txt(`{"a":{"x":null},"b":[1,3]}`), orig), "un valor distinto sí lo es")
+	require.False(t, Same(col, txt(`{"a":{"x":null},"b":[1,2],"c":1}`), orig), "una clave nueva sí lo es")
+	require.False(t, Same(col, txt(`{"b": [1.0, 2], "a": {"x": null}}`), orig), "1 y 1.0 son valores distintos: ante la duda es un cambio")
+	require.False(t, Same(col, txt("{no es json"), orig), "un JSON inválido no es «igual»: Go lo rechazará")
+	require.False(t, Same(col, Value{Null: true}, orig))
+}

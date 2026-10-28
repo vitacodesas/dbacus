@@ -26,3 +26,7 @@ Fallos encontrados en el uso real (smoke manual) que aún no se han arreglado. A
 
 ## C5 · Editar JSON: error sin pista y editor de una línea (2026-10-28)
 > Smoke manual: al añadir una letra a un JSON salía «El valor no es JSON válido» sin más, y un JSON largo no se puede editar cómodamente en una línea. Ahora el error dice la posición y el carácter (probable causa: comillas tipográficas «“» que el sistema sustituyó al escribir), los campos desactivan la autocorrección, y JSON/textos largos/multilínea se editan en un diálogo ampliado con «Formatear JSON». **Sin confirmar** si las comillas tipográficas eran la causa real: depende de lo que escribió el sistema; con el mensaje nuevo se verá en la posición indicada.
+
+## C6 · Dar formato a un JSON enviaba un UPDATE sin cambio real (2026-10-28)
+> Smoke manual: «Formatear JSON» + guardar dejaba un cambio pendiente y el servidor decía «1 fila afectada». Causa: la comparación valor nuevo/original de las columnas JSON era textual y, además, la conexión de edición usa `CLIENT_FOUND_ROWS`, así que «afectada» significa «encontrada». Ahora (`edit.Same`) el JSON de MySQL se compara por valor (no por formato ni orden de claves) y un cambio solo de formato no deja nada pendiente. En MariaDB el JSON es texto (`longtext`), los espacios sí son parte del valor y se trata como cambio. Tests: `TestSameJSONIgnoresFormatting`, `TestFormattingJSONIsNotAChange` e integración en los 3 motores.
+> Pendiente menor: el diálogo ampliado se cierra sin avisar de que no hubo cambio; un toast «Sin cambios» sería más claro.
