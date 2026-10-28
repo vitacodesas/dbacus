@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { AlignLeft, Play, TextCursorInput, Square } from "lucide-vue-next";
+import { AlignLeft, Lock, Play, TextCursorInput, Square } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { modKey } from "../../composables/useShortcuts";
 import { useConnectionsStore } from "../../stores/connections";
@@ -53,6 +53,9 @@ const key = (combo: string) => `${modKey}${combo}`;
     <span class="flex min-w-0 items-center gap-1.5 text-xs" :title="session ? '' : t('query.connectToRun')">
       <span class="size-2 shrink-0 rounded-full" :class="session ? 'bg-success' : 'bg-border'" :style="profile?.color && session ? { backgroundColor: profile.color } : undefined" />
       <span class="truncate" data-testid="toolbar-connection">{{ profile?.name ?? t("query.noConnection") }}</span>
+      <span v-if="profile?.readOnly" class="flex shrink-0 items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-warning" data-testid="toolbar-readonly" :title="t('status.readOnlyHint')">
+        <Lock class="size-3" />{{ t("status.readOnly") }}
+      </span>
     </span>
 
     <label class="ml-2 flex items-center gap-1 text-xs whitespace-nowrap text-muted">

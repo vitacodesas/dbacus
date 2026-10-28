@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Lock } from "lucide-vue-next";
+import { Lock, LockOpen } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { useConnectionsStore } from "../../stores/connections";
 import { useSessionsStore } from "../../stores/sessions";
@@ -19,7 +19,8 @@ const profile = computed(() => (sessions.active ? connections.byId.get(sessions.
       </span>
       <span class="font-data">{{ sessions.active.serverVersion }}</span>
       <span v-if="sessions.active.currentDatabase" class="font-data">{{ sessions.active.currentDatabase }}</span>
-      <span v-if="profile?.readOnly" class="flex items-center gap-1 text-warning" data-testid="status-readonly"><Lock class="size-3" />{{ t("status.readOnly") }}</span>
+      <span v-if="profile?.readOnly" class="flex items-center gap-1 text-warning" data-testid="status-readonly" :title="t('status.readOnlyHint')"><Lock class="size-3" />{{ t("status.readOnly") }}</span>
+      <span v-else class="flex items-center gap-1" data-testid="status-readwrite" :title="t('status.readWriteHint')"><LockOpen class="size-3" />{{ t("status.readWrite") }}</span>
     </template>
     <span v-else>{{ t("status.noSession") }}</span>
     <span class="ml-auto">{{ t("status.ready") }}</span>

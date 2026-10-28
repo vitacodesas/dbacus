@@ -123,6 +123,7 @@ type QueryStore interface {
 	GetSettings(ctx context.Context) (model.Settings, error)
 	SaveTabs(ctx context.Context, tabs []model.TabState) error
 	LoadTabs(ctx context.Context) ([]model.TabState, error)
+	GetProfile(ctx context.Context, id string) (model.ConnectionProfile, error)
 }
 
 type QueryDeps struct {
@@ -205,7 +206,14 @@ func (s *QueryService) Execute(ctx context.Context, req ExecuteRequest) (Execute
 		return ExecuteResponse{}, invalid("sql", "No hay nada que ejecutar")
 	}
 
-	if sess.ReadOnly {
+	// El modo se lee del perfil guardado en cada ejecución: marcar «Solo lectura» con una sesión ya abierta protege al
+	// instante (la sesión del servidor sigue en lectura-escritura hasta reconectar, pero Go ya no deja pasar escrituras).
+	// El sentido contrario (quitar el modo) exige reconectar: la sesión conserva el flag con el que se abrió.
+	readOnly := sess.ReadOnly
+	if p, err := s.d.Store.GetProfile(ctx, sess.ProfileID); err == nil && p.ReadOnly {
+		readOnly = true
+	}
+	if readOnly {
 		for _, st := range stmts {
 			if !sqlsplit.IsReadOnlySafe(st.Text) {
 				return ExecuteResponse{}, apperr.New(apperr.QueryFailed, "Esta conexión es de solo lectura: solo se permiten SELECT, SHOW, DESCRIBE y EXPLAIN").WithDetail("readonly")

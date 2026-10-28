@@ -58,3 +58,10 @@ Riesgos aceptados o abiertos:
 - `style-src 'unsafe-inline'` es necesario porque Monaco inyecta `<style>`.
 - El modo solo lectura no impide efectos secundarios de funciones llamadas desde un `SELECT` ni `INTO` dentro de subconsultas; la garantía real es del servidor y de los privilegios del usuario de BD. Tampoco permite `SET @x = …`.
 - El llavero real del SO solo se ha ejercido con un perfil temporal en macOS; Windows y Linux no se han probado.
+
+### Modo solo lectura con la sesión abierta (smoke manual, 2026-10-28)
+Hallazgo: marcar «Solo lectura» en un perfil con una sesión ya abierta no protegía hasta reconectar (la sesión conserva el flag con el que se abrió), sin avisar. Ahora:
+- `QueryService.Execute` lee el perfil guardado en **cada ejecución**: marcar el modo protege al instante. El servidor sigue sin `READ ONLY` en esa conexión hasta reconectar, pero Go ya no deja pasar escrituras.
+- Quitar el modo con sesión abierta exige reconectar (lado conservador: no se reabre la escritura sola).
+- Guardar una conexión que tiene sesión abierta muestra «Los cambios se aplicarán al reconectar» con el botón **Reconectar**; «Guardar y conectar» reconecta directamente.
+- El modo es visible: candado «Solo lectura» (o «Lectura y escritura») en la barra de estado, etiqueta en la barra de la consulta y candado en la tarjeta de la conexión.

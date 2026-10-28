@@ -28,6 +28,11 @@ Preparación: MySQL 8.x local (p. ej. `docker run --rm --tmpfs /var/lib/mysql -e
 - [x] Exportar 1 M de filas muestra progreso y se puede cancelar; no queda `.partial`. (2026-10-28: 1 000 001 líneas, 6 888 893 bytes, ids únicos y completos; cancelar no deja archivo)
 - [x] No sobrescribe un archivo existente sin pedirlo. (2026-10-28: macOS pregunta; cancelar conserva el original y «Replace» lo sustituye por el contenido completo)
 
+## Modo solo lectura
+- [ ] Marcar «Solo lectura» con la sesión abierta: aparece el aviso con «Reconectar» y `UPDATE`/`DROP TABLE` ya se rechazan sin reconectar.
+- [ ] Tras reconectar: candado en barra de estado, en la barra de la consulta y en la tarjeta. `SELECT 1` funciona; `DROP TABLE no_existe`, `SELECT 1 INTO OUTFILE '/tmp/x'` y `SET @x = 1` se rechazan.
+- [ ] Quitar el modo y reconectar vuelve a permitir escribir (barra de estado: «Lectura y escritura»).
+
 ## Ajustes e interfaz
 - [ ] Cambiar tema/idioma en Ajustes (`⌘/Ctrl+,`) y reabrir: se conserva. Ancho del panel y del divisor también.
 - [ ] Un límite de filas bajo (p. ej. 1 000) aplica a la siguiente consulta; uno fuera de rango se rechaza en el campo.

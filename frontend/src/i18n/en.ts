@@ -17,7 +17,7 @@ const en: typeof es = {
     newConnection: "New connection",
     soon: "Coming soon",
   },
-  status: { noSession: "No active session", ready: "Ready", readOnly: "Read-only" },
+  status: { noSession: "No active session", ready: "Ready", readOnly: "Read-only", readOnlyHint: "Statements that write cannot be run on this connection", readWrite: "Read and write", readWriteHint: "This connection can run statements that modify data" },
   connections: {
     title: "Connections",
     new: "New connection",
@@ -27,8 +27,8 @@ const en: typeof es = {
     loadError: "Could not load connections",
     retry: "Retry",
     status: { connected: "Connected", connecting: "Connecting…", disconnected: "Disconnected" },
-    actions: { connect: "Connect", disconnect: "Disconnect", cancel: "Cancel connecting", edit: "Edit", clone: "Clone", delete: "Delete" },
-    toast: { saved: "Connection saved", cloned: "Connection cloned", deleted: "Connection deleted", connected: "Connected to {name}" },
+    actions: { connect: "Connect", disconnect: "Disconnect", reconnect: "Reconnect", cancel: "Cancel connecting", edit: "Edit", clone: "Clone", delete: "Delete" },
+    toast: { saved: "Connection saved", cloned: "Connection cloned", deleted: "Connection deleted", connected: "Connected to {name}", reconnectHint: "Changes to “{name}” apply when you reconnect; the open session keeps the previous settings." },
     reconnect: "Reconnect",
   },
   form: {

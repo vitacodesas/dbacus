@@ -10,6 +10,7 @@ import {
 import { useConnectFlow } from "../../composables/useConnectFlow";
 import { useConnectionsStore } from "../../stores/connections";
 import { useConnectionUiStore } from "../../stores/connectionUi";
+import { useSessionsStore } from "../../stores/sessions";
 import { useUiStore } from "../../stores/ui";
 import type { ConnectionSecrets, TestResult } from "../../types";
 import BaseButton from "../ui/BaseButton.vue";
@@ -26,6 +27,7 @@ import TestResultPanel from "./TestResultPanel.vue";
 const { t } = useI18n();
 const connections = useConnectionsStore();
 const ui = useUiStore();
+const sessions = useSessionsStore();
 const uiConn = useConnectionUiStore();
 const { connect } = useConnectFlow();
 
@@ -117,12 +119,20 @@ async function save(thenConnect = false) {
   saving.value = true;
   try {
     const secrets = toSecrets(form);
+    const live = form.id ? sessions.sessionFor(form.id) : null;
     const saved = await connections.save(toProfile(form), secrets);
     ui.toast("success", t("connections.toast.saved"));
     // Si la contraseña no se guarda, lo escrito aquí se reutiliza para conectar sin volver a pedirlo.
     const overrides = !form.savePassword ? ephemeral(secrets) : null;
     uiConn.closeForm();
-    if (thenConnect) void connect(saved.id, overrides);
+    // Una sesión abierta conserva la configuración con la que se abrió (modo, host, TLS…): hay que reconectar.
+    const reconnect = async () => {
+      await sessions.disconnect(live!.sessionId);
+      await connect(saved.id, overrides);
+    };
+    if (live && thenConnect) void reconnect();
+    else if (live) ui.toast("info", t("connections.toast.reconnectHint", { name: saved.name }), { label: t("connections.actions.reconnect"), run: () => void reconnect() });
+    else if (thenConnect) void connect(saved.id, overrides);
   } catch (e) {
     if (!applyServerError(e)) ui.toast("error", asAppError(e).message);
   } finally {

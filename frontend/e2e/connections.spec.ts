@@ -45,6 +45,7 @@ test.describe("modo solo lectura", () => {
   test("rechaza una escritura antes de enviarla y lo señala en la barra de estado", async ({ app: page }) => {
     await connect(page, "Producción");
     await expect(page.getByTestId("status-readonly")).toBeVisible();
+    await expect(page.getByTestId("card-readonly")).toBeVisible();
 
     await page.keyboard.press(`${mod}+t`);
     await page.locator(".monaco-editor").first().click();
@@ -52,5 +53,33 @@ test.describe("modo solo lectura", () => {
     await page.keyboard.press(`${mod}+Enter`);
     await expect(page.getByText(/solo lectura/i).first()).toBeVisible();
     await expect(page.getByText("NOMBRE1")).toBeHidden();
+    await expect(page.getByTestId("toolbar-readonly")).toBeVisible();
+  });
+});
+
+test.describe("cambiar el modo con la sesión abierta", () => {
+  test.use({ seed: { profiles: [{ id: "p-rw", name: "Staging", user: "app", hasPassword: true }] } });
+
+  test("marcar «Solo lectura» protege al instante y ofrece reconectar", async ({ app: page }) => {
+    await connect(page, "Staging");
+    await expect(page.getByTestId("status-readwrite")).toBeVisible();
+    await page.keyboard.press(`${mod}+t`);
+    await page.locator(".monaco-editor").first().click();
+    await page.keyboard.insertText("UPDATE actor SET first_name = 'X'");
+    await page.keyboard.press(`${mod}+Enter`);
+    await expect(page.getByText("3 filas afectadas")).toBeVisible(); // en lectura-escritura sí escribe
+
+    await page.getByRole("button", { name: "Editar" }).first().click();
+    await page.getByLabel("Solo lectura").check();
+    await page.getByRole("button", { name: "Guardar", exact: true }).click();
+    await expect(page.getByText(/se aplicarán al reconectar/)).toBeVisible();
+
+    // Sin reconectar, Go ya rechaza la escritura.
+    await page.locator(".monaco-editor").first().click();
+    await page.keyboard.press(`${mod}+Enter`);
+    await expect(page.getByText(/solo lectura/i).first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Reconectar" }).click();
+    await expect(page.getByTestId("status-readonly")).toBeVisible();
   });
 });

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Pencil, Plug, Unplug } from "lucide-vue-next";
+import { Lock, Pencil, Plug, Unplug } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import type { ConnectionProfile } from "../../types";
 import BaseContextMenu, { type MenuItem } from "../ui/BaseContextMenu.vue";
@@ -69,7 +69,10 @@ function toggle() {
         @click="connected && emit('select')"
         @keydown.enter.prevent="connected ? emit('select') : !connecting && emit('connect')"
       >
-        <span class="block truncate text-sm font-medium">{{ profile.name }}</span>
+        <span class="flex items-center gap-1 text-sm font-medium">
+          <span class="truncate">{{ profile.name }}</span>
+          <Lock v-if="profile.readOnly" class="size-3 shrink-0 text-warning" :aria-label="t('status.readOnly')" :title="t('status.readOnly')" data-testid="card-readonly" />
+        </span>
         <span class="font-data block truncate text-xs text-muted">{{ subtitle }}</span>
       </button>
       <span class="flex shrink-0 gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">

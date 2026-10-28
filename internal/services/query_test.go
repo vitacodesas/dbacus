@@ -21,8 +21,15 @@ type memStore struct {
 	mu       sync.Mutex
 	settings model.Settings
 	tabs     []model.TabState
+	profile  func(ctx context.Context, id string) (model.ConnectionProfile, error) // opcional: perfiles reales del test
 }
 
+func (m *memStore) GetProfile(ctx context.Context, id string) (model.ConnectionProfile, error) {
+	if m.profile != nil {
+		return m.profile(ctx, id)
+	}
+	return model.ConnectionProfile{}, apperr.New(apperr.NotFound, "sin perfil")
+}
 func (m *memStore) GetSettings(context.Context) (model.Settings, error) { return m.settings, nil }
 func (m *memStore) SaveTabs(_ context.Context, t []model.TabState) error {
 	m.mu.Lock()
@@ -75,7 +82,7 @@ func newQueryEnv(t *testing.T, profileMut ...func(*model.ConnectionProfile)) *qu
 		qe.logMu.Unlock()
 		qe.events <- namedEvent{name, data}
 	}
-	st := &memStore{settings: model.DefaultSettings()}
+	st := &memStore{settings: model.DefaultSettings(), profile: e.st.GetProfile}
 	schemaSvc := NewSchemaService(e.sessions, emit)
 	qe.q = NewQueryService(QueryDeps{
 		Sessions: e.sessions, Results: results.NewManager(512 << 20), Schema: schemaSvc, Store: st,
@@ -530,7 +537,9 @@ func TestCloseTabReleasesConnectionAndResults(t *testing.T) {
 	require.EqualValues(t, 1, e.drv.Pools[0].Open.Load())
 
 	require.NoError(t, e.q.CloseTab("tab1"))
-	require.EqualValues(t, 0, e.drv.Pools[0].Open.Load())
+	// query:done se emite antes de que la ejecución se retire de byTab: si CloseTab llega en medio, libera la conexión en
+	// segundo plano cuando la ejecución termina, así que se espera en vez de leer el contador de inmediato.
+	require.Eventually(t, func() bool { return e.drv.Pools[0].Open.Load() == 0 }, 2*time.Second, 5*time.Millisecond)
 	_, err := e.q.GetRows(qid, 0, 0, 10)
 	require.Equal(t, apperr.ResultExpired, code(t, err))
 	require.NoError(t, e.q.CloseTab("tab1"), "idempotente")
@@ -682,5 +691,32 @@ func TestReadWriteProfileIsUnchanged(t *testing.T) {
 	e := newQueryEnv(t)
 	e.drv.OnRun = func(context.Context, string) (driver.RunResult, error) { return &fake.Result{}, nil }
 	e.execute(t, "rw", "DROP TABLE t")
+	e.next(t, "query:done")
+}
+
+func TestReadOnlyAppliesToAlreadyOpenSessionWhenProfileChanges(t *testing.T) {
+	e := newQueryEnv(t) // la sesión se abre en lectura-escritura
+	e.drv.OnRun = func(context.Context, string) (driver.RunResult, error) { return &fake.Result{}, nil }
+	e.execute(t, "rw", "UPDATE t SET a = 1")
+	e.next(t, "query:done")
+
+	// Se marca «Solo lectura» en el perfil sin reconectar: la protección es inmediata.
+	profiles, err := e.svc.List(context.Background())
+	require.NoError(t, err)
+	p := profiles[0]
+	p.ReadOnly = true
+	_, err = e.svc.Save(context.Background(), p, ConnectionSecrets{})
+	require.NoError(t, err)
+
+	_, err = e.q.Execute(context.Background(), ExecuteRequest{SessionID: e.sid, TabID: "rw", SQL: "UPDATE t SET a = 2"})
+	require.Equal(t, "readonly", apperr.From(err).Detail)
+	e.execute(t, "rw", "SELECT 1") // leer sigue funcionando
+	e.next(t, "query:done")
+
+	// Quitar el modo exige reconectar: la sesión abierta no se vuelve a abrir a escrituras sola.
+	p.ReadOnly = false
+	_, err = e.svc.Save(context.Background(), p, ConnectionSecrets{})
+	require.NoError(t, err)
+	e.execute(t, "rw", "UPDATE t SET a = 3")
 	e.next(t, "query:done")
 }

@@ -15,7 +15,7 @@ export default {
     newConnection: "Nueva conexión",
     soon: "Disponible pronto",
   },
-  status: { noSession: "Sin sesión activa", ready: "Listo", readOnly: "Solo lectura" },
+  status: { noSession: "Sin sesión activa", ready: "Listo", readOnly: "Solo lectura", readOnlyHint: "No se pueden ejecutar sentencias que escriban en esta conexión", readWrite: "Lectura y escritura", readWriteHint: "Esta conexión permite ejecutar sentencias que modifican datos" },
   connections: {
     title: "Conexiones",
     new: "Nueva conexión",
@@ -25,8 +25,8 @@ export default {
     loadError: "No se pudieron cargar las conexiones",
     retry: "Reintentar",
     status: { connected: "Conectada", connecting: "Conectando…", disconnected: "Desconectada" },
-    actions: { connect: "Conectar", disconnect: "Desconectar", cancel: "Cancelar conexión", edit: "Editar", clone: "Clonar", delete: "Eliminar" },
-    toast: { saved: "Conexión guardada", cloned: "Conexión clonada", deleted: "Conexión eliminada", connected: "Conectado a {name}" },
+    actions: { connect: "Conectar", disconnect: "Desconectar", reconnect: "Reconectar", cancel: "Cancelar conexión", edit: "Editar", clone: "Clonar", delete: "Eliminar" },
+    toast: { saved: "Conexión guardada", cloned: "Conexión clonada", deleted: "Conexión eliminada", connected: "Conectado a {name}", reconnectHint: "Los cambios en «{name}» se aplicarán al reconectar; la sesión abierta sigue con la configuración anterior." },
     reconnect: "Reconectar",
   },
   form: {
