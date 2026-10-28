@@ -73,6 +73,13 @@ Alcance: goroutine por run, eventos, throttling, `KILL QUERY`, LIMIT automático
 **T7.6 ✅ · E2E y cierre** — Dep: T7.5 · Specs: 11 · Alcance: mock del servicio, E2E, guion de smoke manual, actualizar specs 02/05/06/07/09.
 > Quedan **fuera** de la épica 7: insertar/borrar filas, BLOB, vistas, JOIN y DDL (épica 8 propuesta).
 
+## Épica 8 — Insertar y borrar filas (etapa 2; borrador, requiere aprobar el spec 14)
+**T8.1 · Modelo de cambios ampliado** — Dep: Épica 7 · Specs: 14, 13 · Alcance: tipos «fila nueva» y «marca de borrado» en el buffer y en `EditService` (`AddRow`, `StageNew`, `DiscardNew`, `MarkDelete`, `UnmarkDelete`), `Info.CanInsert/InsertReason`, superposición en `GetRows` (`RowWindow.Deleted`, `NewFrom`, total con filas nuevas). DoD: tests unitarios del modelo y de la elegibilidad de inserción.
+**T8.2 · Generación de INSERT y DELETE** — Dep: T8.1 · Specs: 14 · Alcance: `edit.BuildInserts/BuildDeletes` parametrizados (con `<=>` en el DELETE), orden UPDATE→DELETE→INSERT, revisión con valores. DoD: tabla de casos.
+**T8.3 · Aplicar el lote mixto** — Dep: T8.2 · Specs: 14, 13 · Alcance: `Apply` con inserts y deletes, conflicto de borrado, relectura por clave/`LAST_INSERT_ID()`, filas borradas fuera del buffer, historial. DoD: integración en MySQL 8.0/8.4 y MariaDB 10.11 (autoincrement, triggers, FK, clave duplicada, atomicidad).
+**T8.4 · UI** — Dep: T8.3 · Specs: 14, 08, 09 · Alcance: botón «Nueva fila», fila nueva en el grid, `Supr` y menú para eliminar/restaurar, barra de cambios ampliada, aviso de FKs en cascada. DoD: tests de componente.
+**T8.5 · E2E y cierre** — Dep: T8.4 · Specs: 11 · Alcance: mock ampliado, E2E, smoke manual, actualizar specs 02/08/09/13.
+
 ## Grafo resumido
 T0.1 → {T0.2, T0.3, T0.4, T0.5} → T1.x → T2.x (conexiones) → T3.x → T4.x → T5.x → T6.x
 Se recomienda ejecutar primero el camino mínimo hasta una consulta real: T0.1–T0.5, T1.1, T1.3, T1.5, T2.1, T2.3–T2.6, T4.1–T4.5.
