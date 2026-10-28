@@ -146,15 +146,15 @@ type QueryService struct {
 	mu       sync.Mutex
 	byQuery  map[string]*activeRun
 	byTab    map[string]*activeRun
-	tabDB    map[string]string // base vigente en la conexión de cada pestaña
-	tabOwner map[string]string // pestaña → sesión
+	tabDB    map[string]tabDBState // base vigente en la conexión de cada pestaña
+	tabOwner map[string]string     // pestaña → sesión
 }
 
 func NewQueryService(d QueryDeps) *QueryService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &QueryService{
 		d: d, baseCtx: ctx, cancel: cancel,
-		byQuery: map[string]*activeRun{}, byTab: map[string]*activeRun{}, tabDB: map[string]string{}, tabOwner: map[string]string{},
+		byQuery: map[string]*activeRun{}, byTab: map[string]*activeRun{}, tabDB: map[string]tabDBState{}, tabOwner: map[string]string{},
 	}
 }
 
@@ -297,10 +297,13 @@ func (s *QueryService) execute(ctx context.Context, ar *activeRun, sess *session
 	ar.setConn(conn)
 
 	s.mu.Lock()
-	curDB, known := s.tabDB[ar.tabID]
+	prev, known := s.tabDB[ar.tabID]
 	s.mu.Unlock()
-	if !known {
-		curDB = sess.CurrentDatabase
+	// La base recordada solo vale para la conexión del servidor en la que se hizo el USE: tras reconectar la pestaña
+	// recibe otra conexión (otra sesión y otro ID) que arranca con la base por defecto del perfil.
+	curDB := sess.CurrentDatabase
+	if known && prev.sessionID == sess.ID && prev.connID == conn.ID() {
+		curDB = prev.db
 	}
 	if req.Database != "" && req.Database != curDB {
 		if err := conn.Use(ctx, req.Database); err != nil {
@@ -309,7 +312,7 @@ func (s *QueryService) execute(ctx context.Context, ar *activeRun, sess *session
 		}
 		curDB = req.Database
 	}
-	s.setTabDB(ar.tabID, curDB)
+	s.setTabDB(ar.tabID, sess.ID, conn.ID(), curDB)
 
 	var all []StatementResult
 	for i := range stmts {
@@ -323,7 +326,7 @@ func (s *QueryService) execute(ctx context.Context, ar *activeRun, sess *session
 		if isUse(st.Text) {
 			if db := s.currentDatabase(ctx, conn); db != "" {
 				curDB = db
-				s.setTabDB(ar.tabID, db)
+				s.setTabDB(ar.tabID, sess.ID, conn.ID(), db)
 			}
 		}
 		// Un SLEEP() interrumpido por KILL no devuelve error: se detecta por la marca de cancelación.
@@ -460,9 +463,12 @@ func (s *QueryService) currentDatabase(ctx context.Context, conn driver.Conn) st
 	return ""
 }
 
-func (s *QueryService) setTabDB(tabID, db string) {
+// tabDBState es la base vigente de una pestaña y la conexión (sesión + CONNECTION_ID del servidor) en la que está.
+type tabDBState struct{ sessionID, connID, db string }
+
+func (s *QueryService) setTabDB(tabID, sessionID, connID, db string) {
 	s.mu.Lock()
-	s.tabDB[tabID] = db
+	s.tabDB[tabID] = tabDBState{sessionID, connID, db}
 	s.mu.Unlock()
 }
 

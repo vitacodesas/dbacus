@@ -29,7 +29,7 @@ Preparación: MySQL 8.x local (p. ej. `docker run --rm --tmpfs /var/lib/mysql -e
 - [x] No sobrescribe un archivo existente sin pedirlo. (2026-10-28: macOS pregunta; cancelar conserva el original y «Replace» lo sustituye por el contenido completo)
 
 ## Modo solo lectura
-- [ ] Marcar «Solo lectura» con la sesión abierta: aparece el aviso con «Reconectar» y `UPDATE`/`DROP TABLE` ya se rechazan sin reconectar.
+- [x] Marcar «Solo lectura» con la sesión abierta: aparece el aviso con «Reconectar» y `UPDATE`/`DROP TABLE` ya se rechazan sin reconectar.
 - [ ] Tras reconectar: candado en barra de estado, en la barra de la consulta y en la tarjeta. `SELECT 1` funciona; `DROP TABLE no_existe`, `SELECT 1 INTO OUTFILE '/tmp/x'` y `SET @x = 1` se rechazan.
 - [ ] Quitar el modo y reconectar vuelve a permitir escribir (barra de estado: «Lectura y escritura»).
 
@@ -41,4 +41,5 @@ Preparación: MySQL 8.x local (p. ej. `docker run --rm --tmpfs /var/lib/mysql -e
 - [ ] Historial: aparece lo ejecutado, «No guardar historial» en la conexión lo desactiva, búsqueda y borrado funcionan.
 
 ## Registro
+- 2026-10-28 (tarde, macOS): verificado el modo solo lectura con la sesión abierta (protección al instante, aviso «Reconectar», candado visible), el llavero (la entrada se crea al guardar y desaparece al borrar la conexión) y la corrección C1 (base por pestaña tras reconectar).
 - 2026-10-28 (macOS, `wails3 dev`, MySQL de prueba): verificado el bloque de exportación completo y la cancelación de SLEEP. Hallazgo: la exportación con LIMIT automático exportaba solo lo cargado; corregido (spec 07). Pendiente: llavero, SSH/TLS, solo lectura en la app nativa, CSP en la ventana nativa, fluidez del scroll con 1 M de filas.

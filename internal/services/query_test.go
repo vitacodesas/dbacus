@@ -720,3 +720,28 @@ func TestReadOnlyAppliesToAlreadyOpenSessionWhenProfileChanges(t *testing.T) {
 	e.execute(t, "rw", "UPDATE t SET a = 3")
 	e.next(t, "query:done")
 }
+
+// C1 (docs/correcciones.md): tras reconectar, la pestaña recibe una conexión nueva sin base; la base recordada de la
+// conexión anterior no debe hacer que se omita el USE.
+func TestDatabaseIsSelectedAgainAfterReconnect(t *testing.T) {
+	e := newQueryEnv(t)
+	e.drv.OnRun = func(context.Context, string) (driver.RunResult, error) { return fake.Rows([]string{"n"}), nil }
+	ctx := context.Background()
+
+	qid := e.execute(t, "tab1", "SELECT 1", func(r *ExecuteRequest) { r.Database = "identity" })
+	e.terminal(t, qid)
+	require.Equal(t, "identity", e.drv.Pools[0].Conns[0].UsedDB.Load())
+
+	profiles, err := e.svc.List(ctx)
+	require.NoError(t, err)
+	require.NoError(t, e.svc.Disconnect(e.sid))
+	info, err := e.svc.Connect(ctx, profiles[0].ID, nil)
+	require.NoError(t, err)
+	e.sid = info.SessionID
+
+	// Mismo tab y mismo selector (identity), pero conexión nueva: hay que volver a hacer USE.
+	qid = e.execute(t, "tab1", "SELECT 1", func(r *ExecuteRequest) { r.Database = "identity" })
+	d, _ := e.terminal(t, qid)
+	require.Equal(t, "identity", d.Database)
+	require.Equal(t, "identity", e.drv.Pools[1].Conns[0].UsedDB.Load(), "la conexión nueva recibió su USE")
+}
