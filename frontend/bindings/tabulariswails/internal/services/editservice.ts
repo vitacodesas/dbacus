@@ -15,6 +15,15 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as edit$0 from "../edit/models.js";
 
 /**
+ * Apply aplica los cambios pendientes en una transacción (spec 13): un UPDATE por fila con control optimista. Si alguna
+ * fila no coincide (otra sesión la cambió o la borró) o el servidor rechaza algo, se revierte todo y no se aplica nada.
+ * Tras el commit se releen las filas tocadas, porque triggers, valores por defecto y `ON UPDATE` pueden haberlas cambiado.
+ */
+export function Apply(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.ApplyResult> {
+    return $Call.ByID(3310742094, queryID, stmtIndex);
+}
+
+/**
  * Discard descarta todos los cambios pendientes del resultado.
  */
 export function Discard(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Info> {

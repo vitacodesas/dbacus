@@ -12,6 +12,7 @@ import type * as services$0 from "../../../../../tabulariswails/internal/service
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
+            "edit:applied": services$0.EditApplied;
             "export:done": services$0.ExportDone;
             "export:progress": services$0.ExportProgress;
             "history:added": services$0.HistoryAdded;

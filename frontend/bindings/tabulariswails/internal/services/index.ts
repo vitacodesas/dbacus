@@ -23,6 +23,7 @@ export {
 export type {
     ConnectionSecrets,
     DriverInfo,
+    EditApplied,
     ExecuteRequest,
     ExecuteResponse,
     ExportDone,

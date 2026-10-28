@@ -69,10 +69,11 @@ func Run(assets fs.FS) error {
 	}
 	schemaSvc := services.NewSchemaService(sessions, emit)
 	resultMgr := results.NewManager(int64(model.DefaultSettings().MaxResultMemoryMiB) << 20)
+	history := services.NewHistoryRecorder(lc.Context(), st, emit)
 	queries := services.NewQueryService(services.QueryDeps{
 		Sessions: sessions, Results: resultMgr, Schema: schemaSvc, Store: st, Emit: emit,
 		// El historial se escribe fuera del camino de la consulta; respeta "No guardar historial" del perfil.
-		History: services.NewHistoryRecorder(lc.Context(), st, emit),
+		History: history,
 	})
 	lc.OnShutdown("queries", queries.ServiceShutdown) // se registra después que sessions: se cierra antes (LIFO)
 
@@ -96,7 +97,7 @@ func Run(assets fs.FS) error {
 		application.NewService(queries),
 		application.NewService(services.NewHistoryService(st)),
 		application.NewService(exports),
-		application.NewService(services.NewEditService(services.EditDeps{Sessions: sessions, Results: resultMgr, Schema: schemaSvc, Store: st})),
+		application.NewService(services.NewEditService(services.EditDeps{Sessions: sessions, Results: resultMgr, Schema: schemaSvc, Store: st, History: history, Emit: emit})),
 		application.NewService(services.NewSettingsService(st)),
 	}
 

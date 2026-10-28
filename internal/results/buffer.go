@@ -350,3 +350,44 @@ func (b *Buffer) Cell(row, col int) (Cell, error) {
 	}
 	return b.rows[row][col], nil
 }
+
+// CommitPending convierte los cambios pendientes en valores reales del buffer (tras aplicarlos con éxito) y los limpia.
+func (b *Buffer) CommitPending() {
+	m := b.run.m
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, p := range b.pending {
+		if p.Row < len(b.rows) && p.Col < len(b.rows[p.Row]) {
+			row := append([]Cell(nil), b.rows[p.Row]...) // copia: las ventanas ya entregadas no deben cambiar bajo los pies de nadie
+			c := p.Cell
+			c.Edited = false
+			row[p.Col] = c
+			b.rows[p.Row] = row
+		}
+	}
+	b.pending = nil
+}
+
+// ReplaceRow sustituye una fila entera (p. ej. releída del servidor tras una edición) y ajusta la memoria contabilizada.
+func (b *Buffer) ReplaceRow(row int, cells []Cell) error {
+	m := b.run.m
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if b.run.evicted {
+		return ErrExpired
+	}
+	if row < 0 || row >= len(b.rows) || len(cells) != len(b.rows[row]) {
+		return errors.New("fila fuera de rango o con otro número de columnas")
+	}
+	var oldSize, newSize int64
+	for _, c := range b.rows[row] {
+		oldSize += c.size()
+	}
+	for _, c := range cells {
+		newSize += c.size()
+	}
+	b.rows[row] = cells
+	b.run.bytes += newSize - oldSize
+	m.total += newSize - oldSize
+	return nil
+}

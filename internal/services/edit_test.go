@@ -1,7 +1,13 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +16,7 @@ import (
 	"tabulariswails/internal/driver"
 	"tabulariswails/internal/driver/fake"
 	"tabulariswails/internal/edit"
+	"tabulariswails/internal/logging"
 	"tabulariswails/internal/model"
 	"tabulariswails/internal/results"
 )
@@ -25,7 +32,30 @@ func newEditEnv(t *testing.T) (*queryEnv, *EditService) {
 	e.drv.OnRun = func(context.Context, string) (driver.RunResult, error) {
 		return fake.Rows([]string{"id", "name", "note"}, []any{int64(1), "a", nil}, []any{int64(2), "b", "nota"}), nil
 	}
-	return e, NewEditService(EditDeps{Sessions: e.sessions, Results: e.q.d.Results, Schema: e.q.d.Schema, Store: e.st})
+	return e, NewEditService(EditDeps{Sessions: e.sessions, Results: e.q.d.Results, Schema: e.q.d.Schema, Store: e.st, Emit: e.q.d.Emit})
+}
+
+// newApplyEnv es newEditEnv con un historial capturado y las filas releídas simuladas.
+func newApplyEnv(t *testing.T) (*queryEnv, *EditService, *[]model.HistoryEntry) {
+	t.Helper()
+	e, _ := newEditEnv(t)
+	var mu sync.Mutex
+	hist := &[]model.HistoryEntry{}
+	svc := NewEditService(EditDeps{Sessions: e.sessions, Results: e.q.d.Results, Schema: e.q.d.Schema, Store: e.st, Emit: e.q.d.Emit,
+		History: func(h model.HistoryEntry) { mu.Lock(); *hist = append(*hist, h); mu.Unlock() }})
+	e.drv.OnRun = func(_ context.Context, stmt string) (driver.RunResult, error) {
+		if strings.Contains(stmt, "WHERE") { // relectura de una fila tras aplicar
+			return fake.Rows([]string{"id", "name", "note"}, []any{int64(1), "servidor", "trigger"}), nil
+		}
+		return fake.Rows([]string{"id", "name", "note"}, []any{int64(1), "a", nil}, []any{int64(2), "b", "nota"}), nil
+	}
+	return e, svc, hist
+}
+
+func editConn(t *testing.T, e *queryEnv) *fake.Conn {
+	t.Helper()
+	require.Len(t, e.drv.Pools[0].Edits, 1, "se usó una conexión de edición")
+	return e.drv.Pools[0].Edits[0]
 }
 
 func TestGetEditInfo(t *testing.T) {
@@ -208,4 +238,206 @@ func TestPendingDiesWithTheResult(t *testing.T) {
 	info, err := svc.GetEditInfo(ctx, qid2, 0)
 	require.NoError(t, err)
 	require.Equal(t, 0, info.Pending)
+}
+
+func stageTwo(t *testing.T, svc *EditService, qid string) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := svc.Stage(ctx, qid, 0, 0, 1, edit.Value{Text: "x"})
+	require.NoError(t, err)
+	_, err = svc.Stage(ctx, qid, 0, 1, 2, edit.Value{Text: "y"})
+	require.NoError(t, err)
+}
+
+func TestApplyCommitsEverythingInOneTransaction(t *testing.T) {
+	ctx := context.Background()
+	e, svc, hist := newApplyEnv(t)
+	qid := e.execute(t, "t1", "SELECT * FROM t")
+	e.terminal(t, qid)
+	stageTwo(t, svc, qid)
+
+	res, err := svc.Apply(ctx, qid, 0)
+	require.NoError(t, err)
+	require.Equal(t, 2, res.Applied)
+	require.Nil(t, res.Conflict)
+
+	c := editConn(t, e)
+	require.Equal(t, []string{"begin", "commit"}, c.TxLog)
+	require.Len(t, c.Execs, 3)
+	require.Contains(t, c.Execs[0].Stmt, "STRICT_ALL_TABLES", "el modo estricto evita recortes silenciosos")
+	require.Equal(t, "UPDATE `app`.`t` SET `name` = ? WHERE `id` = ? AND `name` <=> ?", c.Execs[1].Stmt)
+	require.Equal(t, []any{"x", int64(1), "a"}, c.Execs[1].Args)
+	require.Equal(t, []any{"y", int64(2), "nota"}, c.Execs[2].Args)
+	require.Empty(t, e.drv.Pools[0].Conns[0].Execs, "la conexión de la pestaña no se toca")
+	require.True(t, c.Released.Load())
+
+	// El grid ve lo que quedó en el servidor (relectura: triggers y valores por defecto), sin marcas de pendiente.
+	w, err := e.q.GetRows(qid, 0, 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, results.Cell{V: "servidor"}, w.Rows[0][1])
+	require.Equal(t, results.Cell{V: "trigger"}, w.Rows[0][2])
+	info, err := svc.GetEditInfo(ctx, qid, 0)
+	require.NoError(t, err)
+	require.Equal(t, 0, info.Pending)
+	e.next(t, "edit:applied")
+
+	require.Len(t, *hist, 2)
+	require.True(t, (*hist)[0].OK)
+	require.Contains(t, (*hist)[0].SQL, "UPDATE `app`.`t` SET `name` = 'x'")
+	require.Equal(t, "app", (*hist)[0].Database)
+
+	// Aplicar otra vez no hace nada.
+	res, err = svc.Apply(ctx, qid, 0)
+	require.NoError(t, err)
+	require.Zero(t, res.Applied)
+}
+
+func TestApplyConflictRollsEverythingBack(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name   string
+		exists bool
+		reason string
+	}{{"la fila cambió", true, edit.ConflictChanged}, {"la fila ya no existe", false, edit.ConflictMissing}} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, svc, hist := newApplyEnv(t)
+			qid := e.execute(t, "t1", "SELECT * FROM t")
+			e.terminal(t, qid)
+			stageTwo(t, svc, qid)
+			updates := 0
+			e.drv.OnExec = func(_ context.Context, stmt string, _ []any) (int64, error) {
+				if strings.HasPrefix(stmt, "UPDATE") {
+					updates++
+					if updates == 2 {
+						return 0, nil // la segunda fila no coincide con lo que se vio
+					}
+				}
+				return 1, nil
+			}
+			prev := e.drv.OnRun
+			e.drv.OnRun = func(ctx context.Context, stmt string) (driver.RunResult, error) {
+				if strings.HasPrefix(stmt, "SELECT 1 FROM") && !tc.exists {
+					return fake.Rows([]string{"1"}), nil
+				}
+				if strings.HasPrefix(stmt, "SELECT 1 FROM") {
+					return fake.Rows([]string{"1"}, []any{int64(1)}), nil
+				}
+				return prev(ctx, stmt)
+			}
+
+			res, err := svc.Apply(ctx, qid, 0)
+			require.NoError(t, err)
+			require.Zero(t, res.Applied)
+			require.NotNil(t, res.Conflict)
+			require.Equal(t, 1, res.Conflict.Row)
+			require.Equal(t, tc.reason, res.Conflict.Reason)
+
+			require.Equal(t, []string{"begin", "rollback"}, editConn(t, e).TxLog)
+			info, _ := svc.GetEditInfo(ctx, qid, 0)
+			require.Equal(t, 2, info.Pending, "los cambios siguen pendientes para decidir qué hacer")
+			require.Empty(t, *hist, "lo no aplicado no entra en el historial")
+		})
+	}
+}
+
+func TestApplyServerErrorRollsBackAndNamesTheRow(t *testing.T) {
+	ctx := context.Background()
+	e, svc, hist := newApplyEnv(t)
+	qid := e.execute(t, "t1", "SELECT * FROM t")
+	e.terminal(t, qid)
+	stageTwo(t, svc, qid)
+	updates := 0
+	e.drv.OnExec = func(_ context.Context, stmt string, _ []any) (int64, error) {
+		if strings.HasPrefix(stmt, "UPDATE") {
+			updates++
+			if updates == 2 {
+				return 0, apperr.New(apperr.QueryFailed, "Data too long for column 'name'")
+			}
+		}
+		return 1, nil
+	}
+	_, err := svc.Apply(ctx, qid, 0)
+	require.Error(t, err)
+	require.Contains(t, apperr.From(err).Message, "Fila 2: Data too long")
+	require.Equal(t, apperr.QueryFailed, code(t, err))
+	require.Equal(t, []string{"begin", "rollback"}, editConn(t, e).TxLog)
+	require.Len(t, *hist, 1)
+	require.False(t, (*hist)[0].OK, "el fallo queda en el historial")
+	info, _ := svc.GetEditInfo(ctx, qid, 0)
+	require.Equal(t, 2, info.Pending)
+}
+
+func TestApplyIsRejectedOnReadOnlyProfile(t *testing.T) {
+	ctx := context.Background()
+	e, svc, _ := newApplyEnv(t)
+	qid := e.execute(t, "t1", "SELECT * FROM t")
+	e.terminal(t, qid)
+	stageTwo(t, svc, qid)
+	profiles, err := e.svc.List(ctx)
+	require.NoError(t, err)
+	p := profiles[0]
+	p.ReadOnly = true
+	_, err = e.svc.Save(ctx, p, ConnectionSecrets{})
+	require.NoError(t, err)
+
+	_, err = svc.Apply(ctx, qid, 0)
+	require.Equal(t, apperr.QueryFailed, code(t, err))
+	require.Equal(t, "readonly", detail(t, err))
+	require.Empty(t, e.drv.Pools[0].Edits, "ni siquiera se abre una conexión de escritura")
+}
+
+func TestApplyFailsIfTheEditConnectionFails(t *testing.T) {
+	ctx := context.Background()
+	e, svc, _ := newApplyEnv(t)
+	qid := e.execute(t, "t1", "SELECT * FROM t")
+	e.terminal(t, qid)
+	stageTwo(t, svc, qid)
+	e.drv.AcquireFn = func(context.Context) error { return errors.New("sin conexiones") }
+	_, err := svc.Apply(ctx, qid, 0)
+	require.Error(t, err)
+	info, _ := svc.GetEditInfo(ctx, qid, 0)
+	require.Equal(t, 2, info.Pending)
+}
+
+// Criterio del spec 13: lo que el usuario escribe en una celda no aparece en logs ni en eventos.
+func TestEditedValuesNeverReachLogsOrEvents(t *testing.T) {
+	const secret = "VALOR-EDITADO-9f2c"
+	ctx := context.Background()
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(logging.NewHandler(&logs, slog.LevelDebug)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	e, svc, _ := newApplyEnv(t)
+	e.drv.OnExec = func(_ context.Context, stmt string, _ []any) (int64, error) {
+		if strings.HasPrefix(stmt, "UPDATE") {
+			return 0, errors.New("fallo del servidor") // también el camino de error
+		}
+		return 1, nil
+	}
+	qid := e.execute(t, "t1", "SELECT * FROM t")
+	e.terminal(t, qid)
+	_, err := svc.Stage(ctx, qid, 0, 0, 2, edit.Value{Text: secret})
+	require.NoError(t, err)
+	_, _ = svc.Apply(ctx, qid, 0) // falla a propósito
+
+	e.drv.OnExec = nil
+	_, err = svc.Stage(ctx, qid, 0, 1, 2, edit.Value{Text: secret})
+	require.NoError(t, err)
+	_, err = svc.Discard(ctx, qid, 0)
+	require.NoError(t, err)
+	_, err = svc.Stage(ctx, qid, 0, 1, 2, edit.Value{Text: secret})
+	require.NoError(t, err)
+	_, err = svc.Apply(ctx, qid, 0)
+	require.NoError(t, err)
+
+	var wire []any
+	for len(e.events) > 0 {
+		ev := <-e.events
+		wire = append(wire, ev.name, ev.data)
+	}
+	body, err := json.Marshal(wire)
+	require.NoError(t, err)
+	require.NotContains(t, string(body), secret, "eventos")
+	require.NotContains(t, logs.String(), secret, "logs")
 }

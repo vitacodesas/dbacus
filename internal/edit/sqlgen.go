@@ -119,3 +119,21 @@ func literal(q Quoter, v any) string {
 	}
 	return q.QuoteString(fmt.Sprint(v))
 }
+
+// RowSelect genera `SELECT cols FROM db.t WHERE key = lit …` con los valores como literales (se ejecuta tras aplicar para
+// releer la fila, o para comprobar si existe). La clave son valores ya tipados por OriginalArg.
+func RowSelect(q Quoter, db, table string, cols, keyCols []string, key []any) string {
+	sel := "1"
+	if len(cols) > 0 {
+		quoted := make([]string, len(cols))
+		for i, c := range cols {
+			quoted[i] = q.QuoteIdent(c)
+		}
+		sel = strings.Join(quoted, ", ")
+	}
+	where := make([]string, len(keyCols))
+	for i, k := range keyCols {
+		where[i] = q.QuoteIdent(k) + " = " + literal(q, key[i])
+	}
+	return "SELECT " + sel + " FROM " + q.QuoteIdent(db) + "." + q.QuoteIdent(table) + " WHERE " + strings.Join(where, " AND ") + " LIMIT 1"
+}

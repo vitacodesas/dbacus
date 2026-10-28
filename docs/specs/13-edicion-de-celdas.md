@@ -72,6 +72,14 @@ El front envía texto; Go convierte según el tipo de columna y rechaza antes de
 5. Tras el commit, Go relee las filas tocadas por clave (misma conversión a `Cell`), reemplaza esas filas del buffer (copia al escribir bajo el mutex del manager), vacía el conjunto de cambios y emite `edit:applied`.
 6. Cada sentencia se registra en el historial (spec 07) con su SQL de revisión; el SQL con valores **no** va a logs (regla 5).
 
+> Implementado en T7.4 (`EditService.Apply`, evento `edit:applied`). Diferencias y hallazgos respecto al borrador:
+> - La conexión de aplicación se pone en modo estricto (`STRICT_ALL_TABLES`) para que un valor que no cabe falle en vez de recortarse en silencio.
+> - Un conflicto (`affected = 0`) se clasifica con una consulta posterior: `changed` si la clave sigue existiendo, `missing` si no. Los cambios **siguen pendientes** tras un conflicto o un error.
+> - Un error del servidor devuelve su `AppError` con el mensaje prefijado por «Fila N:» y queda en el historial como fallido; los aplicados se registran con su SQL de revisión (con valores, como cualquier sentencia escrita a mano).
+> - Tras el commit se releen las filas por clave y se sustituyen en el buffer; si el resultado tiene columnas que no son de la tabla (expresiones), se conservan los valores escritos.
+> - **No implementado**: copiar `time_zone` de la pestaña a la conexión de aplicación. Si el usuario cambió la zona horaria de esa sesión, un `TIMESTAMP` editado se interpretaría en la zona por defecto del servidor. En tipos `TIMESTAMP` no hay verificación de conflicto por el mismo motivo.
+> - Un solo `Apply` a la vez por resultado (`busy` si se repite).
+
 ## UI (Vue, solo pinta)
 - Doble clic o `F2` abre un editor en la celda; `Enter` guarda el cambio pendiente y baja, `Tab` pasa a la siguiente columna editable, `Esc` cancela. Menú contextual: «Establecer NULL», «Revertir celda».
 - Celdas con cambio pendiente: fondo distinto y valor original en el tooltip. Columnas no editables: cursor normal y tooltip con el motivo.

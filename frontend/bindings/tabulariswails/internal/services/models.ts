@@ -35,6 +35,15 @@ export interface DriverInfo {
     "ssl": boolean;
 }
 
+/**
+ * EditApplied avisa de que se aplicaron cambios en un resultado (spec 13): el grid vuelve a pedir sus ventanas.
+ */
+export interface EditApplied {
+    "queryId": string;
+    "stmtIndex": number;
+    "rows": number;
+}
+
 export interface ExecuteRequest {
     "sessionId": string;
     "tabId": string;

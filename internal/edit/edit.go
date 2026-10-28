@@ -55,6 +55,23 @@ type Preview struct {
 	SQL  string `json:"sql"`
 }
 
+// ApplyResult es el resultado de aplicar los cambios: o se aplicaron todos (Conflict == nil) o no se aplicó ninguno.
+type ApplyResult struct {
+	Applied  int       `json:"applied"` // filas actualizadas
+	Conflict *Conflict `json:"conflict"`
+}
+
+// Conflict indica la primera fila cuya edición no coincidió con lo que hay en el servidor.
+type Conflict struct {
+	Row    int    `json:"row"`    // índice de la fila en el resultado
+	Reason string `json:"reason"` // "changed": otra sesión cambió la fila; "missing": ya no existe
+}
+
+const (
+	ConflictChanged = "changed"
+	ConflictMissing = "missing"
+)
+
 // Plan es Info más lo que el servidor necesita internamente (no viaja a Vue).
 type Plan struct {
 	Info

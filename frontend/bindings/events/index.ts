@@ -9,6 +9,11 @@ import type {} from "../github.com/wailsapp/wails/v3/internal/eventdata.js";
 import "../github.com/wailsapp/wails/v3/internal/eventcreate.js";
 
 /**
+ * Name of the custom event "edit:applied".
+ */
+export const EditApplied = "edit:applied";
+
+/**
  * Name of the custom event "export:done".
  */
 export const ExportDone = "export:done";
