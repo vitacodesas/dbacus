@@ -6,8 +6,8 @@
 Añadir filas nuevas y borrar filas desde el grid de un resultado editable, como cambios pendientes que se revisan y se aplican juntos (con las ediciones de celdas) en **una sola transacción**.
 
 ## Alcance v1
-- **Incluye**: «Nueva fila» (se rellenan sus celdas en el grid y se aplica como `INSERT`), «Eliminar filas» (selección de una o varias filas, se aplica como `DELETE`), revisión del SQL, atomicidad y detección de conflictos.
-- **Fuera de alcance**: duplicar fila, pegar varias filas desde el portapapeles, importar CSV, borrado en cascada asistido, `TRUNCATE`, deshacer tras aplicar.
+- **Incluye**: «Nueva fila» (se rellenan sus celdas en el grid y se aplica como `INSERT`), **«Insertar nueva fila a partir de esta»** (clic derecho sobre una o varias filas: crea filas nuevas ya rellenadas con los valores de las existentes, para cambiar solo lo que se quiera), «Eliminar filas» (selección de una o varias filas, se aplica como `DELETE`), revisión del SQL, atomicidad y detección de conflictos.
+- **Fuera de alcance**: pegar varias filas desde el portapapeles, importar CSV, borrado en cascada asistido, `TRUNCATE`, deshacer tras aplicar.
 
 ## Decisiones
 | # | Decisión | Por defecto propuesto | Motivo |
@@ -19,6 +19,7 @@ Añadir filas nuevas y borrar filas desde el grid de un resultado editable, como
 | ⚑D5 | Clave de una fila nueva | Si la clave es `AUTO_INCREMENT` se deja al servidor y se relee con `LAST_INSERT_ID()`; si no, es obligatoria en la fila nueva | Para poder releer la fila tras insertar |
 | ⚑D6 | ¿Se piden confirmaciones aparte? | No: el diálogo de revisión del spec 13 (activado por defecto) muestra también `INSERT` y `DELETE`; los borrados se resaltan | Un solo punto de control |
 | ⚑D7 | Tras aplicar | Las filas borradas **salen del buffer** (cambia el número de filas) y las nuevas se añaden al final con los valores releídos | El grid refleja el servidor sin re-ejecutar |
+| ⚑D8 | ¿Qué se copia al «insertar nueva fila a partir de esta»? | Los valores **tal como se ven** (incluidas las ediciones pendientes de esa fila), incluido `NULL`. **No se copian**: columnas `AUTO_INCREMENT` (las asigna el servidor), generadas, binarias (no se pueden escribir desde aquí) y las columnas de una clave **no autoincremental**, que quedan vacías y marcadas como obligatorias para que no se duplique la clave | Copiar la clave tal cual falla siempre; lo demás es justo lo que el usuario quiere conservar |
 
 ## Modelo (Go)
 - Un conjunto de cambios por `(queryId, stmtIndex)`, ya existente, pasa a tener tres tipos: **editar celda**, **fila nueva** (celdas parciales) y **marca de borrado** (por índice de fila del buffer).
@@ -27,7 +28,7 @@ Añadir filas nuevas y borrar filas desde el grid de un resultado editable, como
 - Tope: `MaxPending` (1 000) cuenta celdas editadas + filas nuevas + borradas.
 
 ## Contrato (a incorporar en spec 02 al implementar)
-`EditService` añade: `AddRow(queryId, stmt) → {Row int, Info}`, `StageNew(queryId, stmt, row, col, Value) → Info` (mismas conversiones y errores que `Stage`), `DiscardNew(queryId, stmt, row)`, `MarkDelete(queryId, stmt, rows []int) → Info`, `UnmarkDelete(queryId, stmt, rows []int) → Info`.
+`EditService` añade: `AddRow(queryId, stmt) → {Row int, Info}`, `DuplicateRows(queryId, stmt, rows []int) → {Rows []int, Info}` (crea una fila nueva por cada fila origen, con los valores de D8; máx. `MaxPending`), `StageNew(queryId, stmt, row, col, Value) → Info` (mismas conversiones y errores que `Stage`), `DiscardNew(queryId, stmt, row)`, `MarkDelete(queryId, stmt, rows []int) → Info`, `UnmarkDelete(queryId, stmt, rows []int) → Info`.
 `edit.Info` añade `CanInsert bool`, `InsertReason string` (`missing_required` con las columnas), `PendingInserts`, `PendingDeletes`; `Pending` sigue siendo el total de cambios.
 `ApplyResult` añade `Inserted`, `Deleted`; `Conflict.Reason` gana `"delete_changed"`.
 
@@ -39,6 +40,7 @@ Igual que en el spec 13 (conexión de edición, modo estricto, una transacción,
 Tras el commit: se releen las filas insertadas por su clave (o `LAST_INSERT_ID()`), se eliminan las borradas del buffer y se emite `edit:applied`.
 
 ## UI (Vue, solo pinta)
+- Menú contextual de una o varias filas seleccionadas: **«Insertar nueva fila a partir de esta»** (o «…de estas N filas»). Las filas nuevas aparecen al final, se selecciona la primera y se abre el editor en su primera columna vacía obligatoria o, si no hay, en la primera columna editable.
 - Botón «Nueva fila» en la barra del resultado; la fila aparece al final (fondo verde); `Tab`/`Enter` recorren sus columnas editables. Las columnas obligatorias vacías se marcan antes de aplicar.
 - Menú contextual de fila(s) y tecla `Supr`/`⌫` sobre filas seleccionadas: «Eliminar fila(s)» → se muestran tachadas en rojo; «Restaurar» las desmarca.
 - La barra de cambios dice «N cambios · M filas nuevas · K filas a borrar».
@@ -48,11 +50,16 @@ Tras el commit: se releen las filas insertadas por su clave (o `LAST_INSERT_ID()
 - Un perfil de solo lectura no ofrece nada de esto y `Apply` lo rechaza (ya cubierto).
 - Borrar con FK: el servidor decide (`RESTRICT` falla y revierte todo; `CASCADE` borra también filas de otras tablas **sin que la app lo sepa**: el diálogo de revisión avisa en un texto fijo cuando la tabla tiene FKs entrantes con `CASCADE`).
 - Resultados truncados por el límite: se pueden borrar/añadir filas del trozo cargado; el total mostrado no es el total real.
+- Al copiar, un índice único distinto de la clave elegida (p. ej. un correo único) hará fallar el `INSERT` en el servidor si no se cambia: el error indica la fila y no se aplica nada. No se intenta adivinar cuál cambiar.
 - Valores de las filas nuevas: las mismas conversiones que en el spec 13; `DEFAULT` solo cuando la celda está vacía **y** sin marcar como «cadena vacía/NULL».
 - Un `INSERT` en una tabla con `AUTO_INCREMENT` consume el contador aunque se revierta: es comportamiento del servidor.
 
 ## Criterios de aceptación
 - [ ] «Nueva fila» + rellenar + aplicar inserta una fila y el grid la muestra con los valores que dejó el servidor (autoincrement, `DEFAULT`, triggers).
+- [ ] Clic derecho sobre una fila → «Insertar nueva fila a partir de esta» crea una fila nueva con los mismos valores (incluido `NULL`), salvo las columnas autoincrementales, generadas, binarias y las de una clave no autoincremental, que quedan vacías; se puede cambiar lo que se quiera y aplicar.
+- [ ] Con varias filas seleccionadas se crean varias filas nuevas, en el mismo orden.
+- [ ] Copiar una fila cuya clave es natural (no autoincremental) no se puede aplicar hasta rellenar la clave; el motivo se ve en la celda.
+- [ ] Copiar una fila con un valor único repetido (p. ej. un correo) devuelve el error del servidor indicando la fila nueva, sin aplicar nada.
 - [ ] Una tabla con una columna `NOT NULL` sin `DEFAULT` que no está en el `SELECT` no ofrece «Nueva fila» y dice cuál falta.
 - [ ] Borrar una o varias filas y aplicar las elimina; el grid pierde esas filas y el total baja.
 - [ ] Si otra sesión cambió la fila que se iba a borrar, `Apply` da conflicto y no se aplica **nada** del lote (incluidas las inserciones y ediciones).
