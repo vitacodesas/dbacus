@@ -23,6 +23,7 @@ type Column struct {
 	Default      *string `json:"default"`
 	IsPrimaryKey bool    `json:"isPrimaryKey"`
 	IsAutoInc    bool    `json:"isAutoInc"`
+	IsGenerated  bool    `json:"isGenerated"` // columna generada (VIRTUAL/STORED): no se puede escribir
 	Comment      string  `json:"comment"`
 	Ordinal      int     `json:"ordinal"`
 }
@@ -32,6 +33,8 @@ type Index struct {
 	Columns []string `json:"columns"`
 	Unique  bool     `json:"unique"`
 	Type    string   `json:"type"`
+	// Prefix: alguna columna se indexa solo por un prefijo (col(10)), así que el índice único no lo es sobre el valor completo.
+	Prefix bool `json:"prefix"`
 }
 
 type ForeignKey struct {

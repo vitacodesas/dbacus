@@ -96,6 +96,7 @@ func Run(assets fs.FS) error {
 		application.NewService(queries),
 		application.NewService(services.NewHistoryService(st)),
 		application.NewService(exports),
+		application.NewService(services.NewEditService(services.EditDeps{Sessions: sessions, Results: resultMgr, Schema: schemaSvc, Store: st})),
 		application.NewService(services.NewSettingsService(st)),
 	}
 

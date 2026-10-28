@@ -48,7 +48,7 @@ function blankProfile(): Any {
 const profileOf = (id: string) => profiles.find((p) => p.id === id);
 
 // ---- datos de ejemplo ----------------------------------------------------------------------------------------------------
-const col = (name: string, dataType: string, extra: Any = {}) => ({ name, dataType, columnType: dataType, nullable: false, default: null, isPrimaryKey: false, isAutoInc: false, comment: "", ordinal: 0, ...extra });
+const col = (name: string, dataType: string, extra: Any = {}) => ({ name, dataType, columnType: dataType, nullable: false, default: null, isPrimaryKey: false, isAutoInc: false, isGenerated: false, comment: "", ordinal: 0, ...extra });
 const TABLES: Record<string, { rows: number; cols: Any[]; cell: (i: number, c: number) => Any }> = {
   actor: {
     rows: 200,

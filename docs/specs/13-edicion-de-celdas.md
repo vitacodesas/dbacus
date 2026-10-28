@@ -35,6 +35,7 @@ Si falla, `Editable=false` con un `Reason` que la UI traduce: `no_single_table`,
 - Re-ejecutar la consulta, cerrar la pestaña o desconectar **descarta** los cambios; la UI pide confirmación si hay pendientes.
 
 ## Contrato (a incorporar en spec 02 al implementar)
+> Implementado en T7.1: los tipos `EditInfo`/`EditColumn` son `edit.Info`/`edit.Column` (paquete `internal/edit`, con la lógica pura de elegibilidad en `edit.Analyze`) y `EditService.GetEditInfo`. Metadatos nuevos del esquema: `Column.IsGenerated` e `Index.Prefix`. Motivos de columna: `key`, `auto_increment`, `generated`, `binary`, `expression`, `unmapped`, `duplicate`; de resultado además `not_rows` y `table_not_found`. Si hay varios candidatos de clave, se elige la primaria y, si no está entera en el resultado, el primer índice único utilizable.
 ```go
 type EditColumn struct{ Editable bool; Reason string; DataType string; Nullable bool }
 type EditInfo struct {

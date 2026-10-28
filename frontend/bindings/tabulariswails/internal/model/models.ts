@@ -19,6 +19,11 @@ export interface Column {
     "default": string | null;
     "isPrimaryKey": boolean;
     "isAutoInc": boolean;
+
+    /**
+     * columna generada (VIRTUAL/STORED): no se puede escribir
+     */
+    "isGenerated": boolean;
     "comment": string;
     "ordinal": number;
 }
@@ -105,6 +110,11 @@ export interface Index {
     "columns": string[] | null;
     "unique": boolean;
     "type": string;
+
+    /**
+     * Prefix: alguna columna se indexa solo por un prefijo (col(10)), así que el índice único no lo es sobre el valor completo.
+     */
+    "prefix": boolean;
 }
 
 /**

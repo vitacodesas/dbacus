@@ -15,10 +15,10 @@ const tables: Record<string, Table[]> = {
 const detail: TableDetail = {
   name: "users", schema: "app", type: "table", rowEstimate: null, comment: "", createSql: "",
   columns: [
-    { name: "id", dataType: "int", columnType: "int unsigned", nullable: false, default: null, isPrimaryKey: true, isAutoInc: true, comment: "", ordinal: 1 },
-    { name: "email", dataType: "varchar", columnType: "varchar(190)", nullable: true, default: null, isPrimaryKey: false, isAutoInc: false, comment: "correo", ordinal: 2 },
+    { name: "id", dataType: "int", columnType: "int unsigned", nullable: false, default: null, isPrimaryKey: true, isAutoInc: true, isGenerated: false, comment: "", ordinal: 1 },
+    { name: "email", dataType: "varchar", columnType: "varchar(190)", nullable: true, default: null, isPrimaryKey: false, isAutoInc: false, isGenerated: false, comment: "correo", ordinal: 2 },
   ],
-  indexes: [{ name: "uq_email", columns: ["email"], unique: true, type: "BTREE" }],
+  indexes: [{ name: "uq_email", columns: ["email"], unique: true, type: "BTREE", prefix: false }],
   foreignKeys: [{ name: "fk_org", columns: ["org_id"], refSchema: "app", refTable: "orgs", refColumns: ["id"], onUpdate: "RESTRICT", onDelete: "CASCADE" }],
 };
 

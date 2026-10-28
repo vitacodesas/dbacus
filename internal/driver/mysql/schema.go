@@ -144,7 +144,7 @@ func (r *schemaReader) Describe(ctx context.Context, db, table string) (model.Ta
 
 func (r *schemaReader) columns(ctx context.Context, db, table string) ([]model.Column, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA, COLUMN_COMMENT, ORDINAL_POSITION
+		SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA, COLUMN_COMMENT, ORDINAL_POSITION, GENERATION_EXPRESSION
 		FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION`, db, table)
 	if err != nil {
 		return nil, mapError(err)
@@ -157,14 +157,16 @@ func (r *schemaReader) columns(ctx context.Context, db, table string) ([]model.C
 			c             model.Column
 			nullable, key string
 			extra         string
-			def           sql.NullString
+			def, genExpr  sql.NullString
 		)
-		if err := rows.Scan(&c.Name, &c.DataType, &c.ColumnType, &nullable, &def, &key, &extra, &c.Comment, &c.Ordinal); err != nil {
+		if err := rows.Scan(&c.Name, &c.DataType, &c.ColumnType, &nullable, &def, &key, &extra, &c.Comment, &c.Ordinal, &genExpr); err != nil {
 			return nil, mapError(err)
 		}
 		c.Nullable = strings.EqualFold(nullable, "YES")
 		c.IsPrimaryKey = key == "PRI"
 		c.IsAutoInc = strings.Contains(strings.ToLower(extra), "auto_increment")
+		// EXTRA = DEFAULT_GENERATED es un valor por defecto con expresión, no una columna generada: se mira la expresión.
+		c.IsGenerated = genExpr.Valid && genExpr.String != ""
 		if def.Valid {
 			d := def.String
 			// MariaDB devuelve la cadena "NULL" para "sin valor por defecto" en columnas nulables.
@@ -182,7 +184,7 @@ func (r *schemaReader) columns(ctx context.Context, db, table string) ([]model.C
 
 func (r *schemaReader) indexes(ctx context.Context, db, table string) ([]model.Index, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, INDEX_TYPE
+		SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, INDEX_TYPE, SUB_PART
 		FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY INDEX_NAME, SEQ_IN_INDEX`, db, table)
 	if err != nil {
 		return nil, mapError(err)
@@ -195,8 +197,9 @@ func (r *schemaReader) indexes(ctx context.Context, db, table string) ([]model.I
 			name, typ string
 			nonUnique int
 			col       sql.NullString // NULL en índices funcionales de MySQL 8
+			subPart   sql.NullInt64  // longitud del prefijo indexado; NULL si se indexa la columna entera
 		)
-		if err := rows.Scan(&name, &nonUnique, &col, &typ); err != nil {
+		if err := rows.Scan(&name, &nonUnique, &col, &typ, &subPart); err != nil {
 			return nil, mapError(err)
 		}
 		i, ok := pos[name]
@@ -204,6 +207,9 @@ func (r *schemaReader) indexes(ctx context.Context, db, table string) ([]model.I
 			i = len(out)
 			pos[name] = i
 			out = append(out, model.Index{Name: name, Unique: nonUnique == 0, Type: typ, Columns: []string{}})
+		}
+		if subPart.Valid {
+			out[i].Prefix = true
 		}
 		if col.Valid {
 			out[i].Columns = append(out[i].Columns, col.String)
