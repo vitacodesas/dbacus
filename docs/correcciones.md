@@ -20,3 +20,6 @@ Fallos encontrados en el uso real (smoke manual) que aún no se han arreglado. A
 
 ## ~~C3 · El selector de base de la consulta no mostraba todas las bases~~ ✅ corregido (2026-10-28)
 > Las bases solo se pedían a Go cuando se abría el panel de esquema, y las del sistema se filtraban. Ahora la barra de la consulta las pide al tener sesión y las del sistema aparecen en un grupo aparte. Tests: `query.test.ts` («selector de base…») y E2E «el selector de base lista todas las bases…».
+
+## C4 · Doble clic en la columna clave abría el visor sin explicar nada (2026-10-28)
+> Smoke manual de edición: «me abre el modal pero no me permite modificar». Era la columna clave (no editable por diseño, D4), pero la interfaz no lo decía. Ahora las columnas no editables de un resultado editable llevan un candado en la cabecera y el doble clic muestra el motivo («Columna de la clave: no se edita») antes de abrir el visor. Tests: `ResultGrid.test.ts` y E2E «la columna clave no se edita».

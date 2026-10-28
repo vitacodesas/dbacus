@@ -161,6 +161,22 @@ describe("ResultGrid", () => {
       expect(closed.w.find('[data-testid="cell-editor"]').exists()).toBe(false);
     });
 
+    it("doble clic en una columna no editable de un resultado editable explica el motivo y marca la columna", async () => {
+      const { w } = await setupEditable();
+      expect(w.findAll('[data-testid="col-locked"]')).toHaveLength(1); // solo la clave
+      await key(w, "Home"); // selecciona la celda de la clave (columna 0)
+      await w.get('[role="grid"]').trigger("dblclick");
+      await flushPromises();
+      expect(w.find('[data-testid="cell-editor"]').exists()).toBe(false);
+      const { useUiStore } = await import("../../stores/ui");
+      expect(useUiStore().toasts.some((x) => x.message.includes("clave"))).toBe(true);
+    });
+
+    it("no marca columnas bloqueadas si el resultado entero no es editable", async () => {
+      const { w } = await setupEditable({ ...editable, editable: false, reason: "no_single_table" });
+      expect(w.findAll('[data-testid="col-locked"]')).toHaveLength(0);
+    });
+
     it("marca las celdas con cambio pendiente", async () => {
       const { w } = await setup(50);
       api.getRows.mockImplementation(async () => ({ offset: 0, total: 50, complete: true, rows: [[{ v: 1 }, { v: "editado", edited: true }]] }));

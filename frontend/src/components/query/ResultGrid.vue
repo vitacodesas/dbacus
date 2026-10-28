@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { Lock } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { rowsAsInsert } from "../../api/queries";
 import { asAppError } from "../../api/errors";
@@ -239,7 +240,12 @@ function onEditorBlur() {
 }
 
 function onDblClick() {
-  if (!startEdit()) viewCurrent();
+  if (startEdit()) return;
+  // En un resultado editable, doble clic sobre una columna que no lo es explica el motivo (antes solo abría el visor).
+  const s = sel.value;
+  const reason = s && editInfo.value?.editable ? editInfo.value.columns?.[s.fc]?.reason : "";
+  if (reason) ui.toast("info", t(`edit.reasons.${reason}`));
+  viewCurrent();
 }
 
 async function setNull() {
@@ -409,6 +415,7 @@ const rowsVm = computed(() =>
             :title="headerTitle(c)"
           >
             <span class="truncate">{{ columns[c].name }}</span>
+            <Lock v-if="editInfo?.editable && !canEdit(c)" class="size-3 shrink-0 text-muted" data-testid="col-locked" />
             <span v-if="widths[c] >= 150" class="font-data truncate text-[10px] font-normal text-muted">{{ columns[c].dataType.toLowerCase() }}</span>
             <span
               data-resize="1"

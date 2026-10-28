@@ -52,8 +52,10 @@ test.describe("edición de celdas", () => {
   });
 
   test("la columna clave no se edita", async ({ app: page }) => {
+    await expect(grid(page).getByTestId("col-locked")).toHaveCount(1); // un candado en la cabecera de la clave
     await cell(page, "1").first().dblclick();
     await expect(page.getByTestId("cell-editor")).toBeHidden();
+    await expect(page.getByText("Columna de la clave: no se edita")).toBeVisible();
   });
 
   test("escribir el valor original no deja cambios pendientes", async ({ app: page }) => {
