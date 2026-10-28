@@ -17,3 +17,6 @@ Fallos encontrados en el uso real (smoke manual) que aún no se han arreglado. A
 - **Riesgo**: un CI cargado podría marcarlo en rojo sin que haya un fallo real. Si aparece en CI, investigar antes de añadir reintentos.
 
 > Actualización: `TestProbeViaSSH` (C2) volvió a fallar una vez en una ejecución normal de `go test -race ./...` (2026-10-28, al compilar T7.3), no solo bajo carga artificial. Sigue sin investigar; si se repite, tratarlo como prioridad antes de confiar en el CI.
+
+## ~~C3 · El selector de base de la consulta no mostraba todas las bases~~ ✅ corregido (2026-10-28)
+> Las bases solo se pedían a Go cuando se abría el panel de esquema, y las del sistema se filtraban. Ahora la barra de la consulta las pide al tener sesión y las del sistema aparecen en un grupo aparte. Tests: `query.test.ts` («selector de base…») y E2E «el selector de base lista todas las bases…».

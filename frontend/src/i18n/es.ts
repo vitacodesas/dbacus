@@ -112,7 +112,7 @@ export default {
     noConnection: "Sin conexión", connectToRun: "Se conectará al ejecutar", running: "Ejecutando…", rowsReceived: "{n} filas recibidas",
     emptyTitle: "Sin consultas abiertas", emptyDescription: "Abre una consulta nueva o haz doble clic en una tabla del esquema.",
     idle: "Ejecuta una consulta para ver resultados.", noRows: "0 filas", messages: "Mensajes", result: "Resultado {n}",
-    rowN: "Fila {n}", rowsRange: "{from}–{to} de {total}", rowsTotal: "{total} filas", truncated: "{total}+ filas (truncado)", limitApplied: "Se aplicó LIMIT {n}",
+    systemDatabases: "Sistema", rowN: "Fila {n}", rowsRange: "{from}–{to} de {total}", rowsTotal: "{total} filas", truncated: "{total}+ filas (truncado)", limitApplied: "Se aplicó LIMIT {n}",
     affected: "{n} filas afectadas", lastInsert: "Último ID: {id}", warnings: "{n} advertencias", took: "{ms} ms",
     canceled: "Consulta cancelada", expired: "El resultado ya no está en memoria.", rerun: "Volver a ejecutar", errorTitle: "Error al ejecutar",
     copyError: "Copiar error", cell: { title: "Valor de la celda", copy: "Copiar", loading: "Cargando…" }, null: "NULL",

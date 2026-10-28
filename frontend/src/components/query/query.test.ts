@@ -137,6 +137,36 @@ describe("componentes de consultas", () => {
     });
   });
 
+  describe("selector de base de la barra de consulta", () => {
+    it("pide las bases a Go sin depender del panel de esquema y separa las del sistema", async () => {
+      const { tabs } = await boot();
+      const { useSchemaStore } = await import("../../stores/schema");
+      const schema = useSchemaStore();
+      const load = vi.spyOn(schema, "loadDatabases").mockImplementation(async (sid: string) => {
+        schema.databases = { ...schema.databases, [sid]: [{ name: "mysql", isSystem: true }, { name: "shop", isSystem: false }, { name: "information_schema", isSystem: true }, { name: "crm", isSystem: false }] };
+      });
+      const id = tabs.openTab({ profileId: "p1" });
+      const w = mount(QueryToolbar, { props: { tab: tabs.byId(id)! }, global: { plugins } });
+      await flushPromises();
+
+      expect(load).toHaveBeenCalledWith("s1");
+      const select = w.get('[data-testid="database-select"]');
+      const groups = select.findAll("optgroup");
+      expect(groups).toHaveLength(1);
+      expect(groups[0].findAll("option").map((o) => o.text())).toEqual(["mysql", "information_schema"]);
+      const top = select.findAll(":scope > option").map((o) => o.text());
+      expect(top.slice(1)).toEqual(["shop", "crm"]); // la primera es «predeterminada»
+    });
+
+    it("la base elegida en la pestaña aparece aunque la lista no la incluya todavía", async () => {
+      const { tabs } = await boot();
+      const id = tabs.openTab({ profileId: "p1", database: "legacy" });
+      const w = mount(QueryToolbar, { props: { tab: tabs.byId(id)! }, global: { plugins } });
+      await flushPromises();
+      expect(w.get('[data-testid="database-select"]').findAll("option").map((o) => o.text())).toContain("legacy");
+    });
+  });
+
   describe("ResultPane", () => {
     async function pane() {
       const { tabs, results } = await boot();

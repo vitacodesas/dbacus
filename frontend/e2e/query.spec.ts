@@ -57,4 +57,13 @@ test.describe("consultas y resultados", () => {
     await expect(page.getByText("NOMBRE1", { exact: true })).toBeVisible();
     await expect(page.getByRole("tab", { name: /Resultado 2|Mensajes/ }).first()).toBeVisible();
   });
+
+  test("el selector de base lista todas las bases sin haber abierto el panel de esquema", async ({ app: page }) => {
+    const select = page.getByTestId("database-select");
+    await expect(select.locator("option", { hasText: /^sakila$/ })).toHaveCount(1);
+    await expect(select.locator("optgroup option", { hasText: "information_schema" })).toHaveCount(1);
+    await expect(select.locator("optgroup option", { hasText: "mysql" })).toHaveCount(1);
+    await select.selectOption("mysql");
+    await expect(select).toHaveValue("mysql");
+  });
 });

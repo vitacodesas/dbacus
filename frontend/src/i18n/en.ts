@@ -114,7 +114,7 @@ const en: typeof es = {
     noConnection: "Not connected", connectToRun: "It will connect when you run", running: "Running…", rowsReceived: "{n} rows received",
     emptyTitle: "No open queries", emptyDescription: "Open a new query or double-click a table in the schema.",
     idle: "Run a query to see results.", noRows: "0 rows", messages: "Messages", result: "Result {n}",
-    rowN: "Row {n}", rowsRange: "{from}–{to} of {total}", rowsTotal: "{total} rows", truncated: "{total}+ rows (truncated)", limitApplied: "LIMIT {n} applied",
+    systemDatabases: "System", rowN: "Row {n}", rowsRange: "{from}–{to} of {total}", rowsTotal: "{total} rows", truncated: "{total}+ rows (truncated)", limitApplied: "LIMIT {n} applied",
     affected: "{n} rows affected", lastInsert: "Last ID: {id}", warnings: "{n} warnings", took: "{ms} ms",
     canceled: "Query canceled", expired: "The result is no longer in memory.", rerun: "Run again", errorTitle: "Error while running",
     copyError: "Copy error", cell: { title: "Cell value", copy: "Copy", loading: "Loading…" }, null: "NULL",

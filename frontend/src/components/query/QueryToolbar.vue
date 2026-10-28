@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { AlignLeft, Lock, Play, TextCursorInput, Square } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { modKey } from "../../composables/useShortcuts";
@@ -26,9 +26,14 @@ const profile = computed(() => connections.byId.get(props.tab.profileId));
 const session = computed(() => sessions.sessionFor(props.tab.profileId));
 const running = computed(() => results.running(props.tab.id));
 
-// Bases disponibles: las que ya cargó el árbol de esquema para esa sesión (sin las del sistema).
-const databases = computed(() => (session.value ? (schema.databasesOf(session.value.sessionId) ?? []).filter((d) => !d.isSystem).map((d) => d.name) : []));
-const dbOptions = computed(() => [...new Set([...databases.value, ...(props.tab.database ? [props.tab.database] : [])])]);
+// Bases disponibles: se piden a Go al tener sesión (no dependen de que el panel de esquema se haya abierto); las del
+// sistema van aparte para no mezclarlas con las del usuario.
+watch(() => session.value?.sessionId, (sid) => sid && void schema.loadDatabases(sid), { immediate: true });
+const allDatabases = computed(() => (session.value ? (schema.databasesOf(session.value.sessionId) ?? []) : []));
+const userDbs = computed(() => allDatabases.value.filter((d) => !d.isSystem).map((d) => d.name));
+const systemDbs = computed(() => allDatabases.value.filter((d) => d.isSystem).map((d) => d.name));
+// La base elegida en la pestaña siempre aparece, aunque aún no haya llegado la lista.
+const extraDb = computed(() => (props.tab.database && ![...userDbs.value, ...systemDbs.value].includes(props.tab.database) ? [props.tab.database] : []));
 
 const limits = computed(() => [100, 500, 1000, 0].map((v) => ({ value: v, label: v === 0 ? t("query.limitNone") : String(v) })));
 const key = (combo: string) => `${modKey}${combo}`;
@@ -68,7 +73,11 @@ const key = (combo: string) => `${modKey}${combo}`;
         @change="tabs.setDatabase(tab.id, ($event.target as HTMLSelectElement).value)"
       >
         <option value="">{{ session?.currentDatabase ? t("query.defaultDatabase", { db: session.currentDatabase }) : t("query.noDatabase") }}</option>
-        <option v-for="d in dbOptions" :key="d" :value="d">{{ d }}</option>
+        <option v-for="d in extraDb" :key="d" :value="d">{{ d }}</option>
+        <option v-for="d in userDbs" :key="d" :value="d">{{ d }}</option>
+        <optgroup v-if="systemDbs.length" :label="t('query.systemDatabases')">
+          <option v-for="d in systemDbs" :key="d" :value="d">{{ d }}</option>
+        </optgroup>
       </select>
     </label>
 
