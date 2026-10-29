@@ -154,6 +154,62 @@ export interface HistoryQuery {
     "cursor": string;
 }
 
+/**
+ * PageRequest pide otra página de una sentencia ya paginada.
+ */
+export interface PageRequest {
+    "queryId": string;
+    "stmtIndex": number;
+
+    /**
+     * first | next | prev | last
+     */
+    "direction": string;
+
+    /**
+     * solo modo aproximado (spec 18 §5); aún sin uso
+     */
+    "column": string;
+}
+
+/**
+ * PagingInfo describe cómo se pagina una sentencia y dónde está la página actual.
+ */
+export interface PagingInfo {
+    /**
+     * "keyset" | "approx" | "none"
+     */
+    "mode": string;
+
+    /**
+     * solo "none": código del spec 18 §6
+     */
+    "reason": string;
+    "pageSize": number;
+    "hasNext": boolean;
+    "hasPrev": boolean;
+
+    /**
+     * 1-basada si se conoce; 0 = desconocida (tras «Última»)
+     */
+    "page": number;
+
+    /**
+     * columnas del cursor, en orden
+     */
+    "keyColumns": string[] | null;
+
+    /**
+     * "" | "tie_at_edge" | "no_index"
+     */
+    "warning": string;
+
+    /**
+     * ≈ filas de la tabla (solo keyset y sin WHERE); 0 = desconocido
+     */
+    "estimated": number;
+}
+
 export interface ParsedDSN {
     "profile": model$0.ConnectionProfile;
     "secrets": ConnectionSecrets;
@@ -275,9 +331,14 @@ export interface StatementResult {
     "sql": string;
 
     /**
-     * LIMIT automático añadido (0 = ninguno)
+     * LIMIT automático añadido (0 = ninguno); no se usa si hay paginación por cursor
      */
     "limitApplied": number;
+
+    /**
+     * paginación por cursor (spec 18); nil si no es un SELECT o AutoLimit es 0
+     */
+    "paging": PagingInfo | null;
 
     /**
      * posición en el SQL enviado (UTF-16)

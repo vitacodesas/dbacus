@@ -131,6 +131,39 @@ func (r *Run) NewBuffer(cols []model.ColumnMeta) *Buffer {
 	return b
 }
 
+// ReplaceBuffer sustituye el resultado de la sentencia i por uno vacío con las columnas dadas y descuenta la memoria del
+// anterior (paginación por cursor: cada página reemplaza a la anterior dentro de la misma ejecución, spec 18). Quien aún
+// tenga el buffer viejo lo sigue leyendo sin problema: deja de contar y de ser alcanzable desde la ejecución.
+func (r *Run) ReplaceBuffer(i int, cols []model.ColumnMeta) (*Buffer, error) {
+	r.m.mu.Lock()
+	defer r.m.mu.Unlock()
+	if r.evicted {
+		return nil, ErrExpired
+	}
+	if i < 0 || i >= len(r.stmts) {
+		return nil, apperr.Newf(apperr.NotFound, "La sentencia %d no existe en esta ejecución", i)
+	}
+	var freed int64
+	for _, row := range r.stmts[i].rows {
+		freed += rowSize(row)
+	}
+	r.bytes -= freed
+	r.m.total -= freed
+	b := &Buffer{run: r, cols: cols}
+	r.stmts[i] = b
+	r.m.lru.MoveToFront(r.elem)
+	return b, nil
+}
+
+// rowSize es el tamaño estimado de una fila en el buffer (el mismo cálculo que usa Append).
+func rowSize(row []Cell) int64 {
+	var size int64 = 24
+	for _, c := range row {
+		size += c.size()
+	}
+	return size
+}
+
 func (r *Run) Buffer(i int) (*Buffer, error) {
 	r.m.mu.Lock()
 	defer r.m.mu.Unlock()
@@ -153,6 +186,7 @@ type Buffer struct {
 	complete  bool
 	srcSQL    string
 	srcDB     string
+	ext       any                // estado que adjunta quien crea el buffer (la paginación por cursor, spec 18); opaco aquí
 	pending   map[[2]int]Pending // cambios de celda sin aplicar (spec 13); mueren con el buffer
 	inserts   []*NewRow          // filas nuevas sin aplicar (spec 14): ocupan los índices tras la última fila real
 	deletes   map[int]any        // filas marcadas para borrar (spec 14) → datos opacos de quien las marcó
@@ -243,13 +277,23 @@ func (b *Buffer) Source() (sql, database string) {
 
 func (b *Buffer) Columns() []model.ColumnMeta { return b.cols }
 
+// SetExt adjunta al buffer un estado opaco de quien lo creó; Ext lo devuelve. Muere con el buffer.
+func (b *Buffer) SetExt(v any) {
+	b.run.m.mu.Lock()
+	b.ext = v
+	b.run.m.mu.Unlock()
+}
+
+func (b *Buffer) Ext() any {
+	b.run.m.mu.Lock()
+	defer b.run.m.mu.Unlock()
+	return b.ext
+}
+
 // Append añade una fila. Devuelve false (y marca el resultado como truncado) si el límite de memoria impide guardarla
 // incluso tras expulsar ejecuciones antiguas.
 func (b *Buffer) Append(row []Cell) bool {
-	var size int64 = 24
-	for _, c := range row {
-		size += c.size()
-	}
+	size := rowSize(row)
 	m := b.run.m
 	m.mu.Lock()
 	defer m.mu.Unlock()

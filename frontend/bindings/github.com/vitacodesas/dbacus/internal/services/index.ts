@@ -35,6 +35,8 @@ export type {
     HistoryAdded,
     HistoryPage,
     HistoryQuery,
+    PageRequest,
+    PagingInfo,
     ParsedDSN,
     PingTick,
     QueryDone,

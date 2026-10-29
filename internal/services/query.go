@@ -15,6 +15,7 @@ import (
 	"github.com/vitacodesas/dbacus/internal/apperr"
 	"github.com/vitacodesas/dbacus/internal/driver"
 	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/paging"
 	"github.com/vitacodesas/dbacus/internal/results"
 	"github.com/vitacodesas/dbacus/internal/session"
 	"github.com/vitacodesas/dbacus/internal/sqlfmt"
@@ -56,7 +57,8 @@ type StatementResult struct {
 	Warnings     int                `json:"warnings"`
 	ElapsedMs    int64              `json:"elapsedMs"`
 	SQL          string             `json:"sql"`
-	LimitApplied int                `json:"limitApplied"` // LIMIT automático añadido (0 = ninguno)
+	LimitApplied int                `json:"limitApplied"` // LIMIT automático añadido (0 = ninguno); no se usa si hay paginación por cursor
+	Paging       *PagingInfo        `json:"paging"`       // paginación por cursor (spec 18); nil si no es un SELECT o AutoLimit es 0
 	Start        int                `json:"start"`        // posición en el SQL enviado (UTF-16)
 	End          int                `json:"end"`
 }
@@ -385,13 +387,29 @@ func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn dri
 	req ExecuteRequest, st *sqlsplit.Statement, idx, maxRows int, db string, allowRetry bool) (StatementResult, error) {
 
 	text, applied := st.Text, 0
+	started := time.Now()
+	out := StatementResult{Index: idx, SQL: st.Text, Start: st.Start, End: st.End}
+
+	// Paginación por cursor (spec 18): si la sentencia se puede paginar, se ejecuta su primera página con el SQL reescrito.
+	// Si no, o si no se puede saber, se mantiene el LIMIT automático de siempre y se explica por qué no se pagina.
+	var pstate *pageState
 	if req.AutoLimit > 0 {
-		if t, ok := sqlsplit.InjectLimit(text, req.AutoLimit); ok {
-			text, applied = t, req.AutoLimit
+		size := pageSizeFor(req.AutoLimit, maxRows)
+		dec, detail, known := s.planPaging(ctx, sess, st.Text, db, size)
+		if known && dec.Mode == paging.ModeKeyset {
+			if q, err := dec.Plan.Build(paging.First, nil, sess.Driver.QuoteIdent); err == nil {
+				text, pstate = q, newPageState(dec.Plan, detail, out)
+			}
+		} else if known {
+			out.Paging = &PagingInfo{Mode: paging.ModeNone, Reason: dec.Reason, PageSize: size}
+		}
+		if pstate == nil {
+			if t, ok := sqlsplit.InjectLimit(text, req.AutoLimit); ok {
+				text, applied = t, req.AutoLimit
+			}
 		}
 	}
-	started := time.Now()
-	out := StatementResult{Index: idx, SQL: st.Text, LimitApplied: applied, Start: st.Start, End: st.End}
+	out.LimitApplied = applied
 
 	record := func(err error) {
 		if s.d.History == nil {
@@ -408,6 +426,9 @@ func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn dri
 		go func() { defer s.wg.Done(); s.d.History(e) }()
 	}
 
+	if pstate != nil && explainUsesFilesort(ctx, conn, text) {
+		pstate.warning = warnNoIndex
+	}
 	res, err := conn.Run(ctx, text)
 	if err != nil {
 		if !(allowRetry && connLost(err)) {
@@ -426,6 +447,7 @@ func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn dri
 		s.emit("query:statement", QueryStatement{QueryID: ar.queryID, Result: out})
 		s.afterStatement(sess, st.Text)
 		record(nil)
+		out.Paging = nil
 		return out, nil
 	}
 
@@ -433,6 +455,21 @@ func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn dri
 	buf.SetSource(st.Text, db)
 	out.Kind, out.Columns = "rows", cols
 	s.emit("query:statement", QueryStatement{QueryID: ar.queryID, Result: out})
+
+	if pstate != nil {
+		r, err := s.firstPage(res, cols, buf, pstate, out, started)
+		if err != nil {
+			out.RowCount = int64(buf.Len())
+			if !(allowRetry && connLost(err)) {
+				record(err)
+			}
+			return out, err
+		}
+		out = r // el historial lee out.RowCount: va después de asignarlo
+		s.afterStatement(sess, st.Text)
+		record(nil)
+		return out, nil
+	}
 
 	var n int64
 	truncated := false

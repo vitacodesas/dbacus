@@ -25,7 +25,7 @@ Con el LIMIT automático (por defecto 1000) un resultado grande se corta y **no 
 
 ## 4. Modo `keyset` (exacto)
 **Condiciones** (todas):
-1. Una sola sentencia `SELECT` de **una tabla**, con lista de columnas simples o `*` (reutiliza `sqlsplit.SimpleSelectTable`): sin alias, expresiones, JOIN, UNION, GROUP BY, HAVING, DISTINCT, INTO, FOR UPDATE/LOCK ni LIMIT/OFFSET propios; no vistas.
+1. Una sola sentencia `SELECT` de **una tabla** (`sqlsplit.SplitSelect`): sin alias de tabla, JOIN, UNION, GROUP BY, HAVING, DISTINCT, INTO, FOR UPDATE/LOCK ni LIMIT/OFFSET propios; no vistas. *(Implementación: la lista puede llevar expresiones o alias —se reescribe tal cual—, siempre que las columnas del cursor aparezcan **sueltas y sin alias** o con `*`; es más amplio que `SimpleSelectTable`, pensado para la edición.)*
 2. La tabla tiene **clave única**: la clave primaria o, si no, un índice único sin prefijo con todas sus columnas `NOT NULL` (misma regla que `edit.chooseKey`, que se reutiliza).
 3. Las columnas de la clave **y** las del `ORDER BY` son **numéricas exactas**: `TINYINT…BIGINT` (con o sin `UNSIGNED`) y `DECIMAL`; todas `NOT NULL`. (`FLOAT`/`DOUBLE` quedan fuera: no son exactas.)
 4. Esas columnas están **en el resultado**: se leen sus valores en la primera y la última fila para construir el cursor. Si faltan: motivo `key_not_selected`.
@@ -67,6 +67,7 @@ Es una elección explícita del usuario y **tiene costes que la interfaz debe mo
 | Código | Significado | Sugerencia |
 |---|---|---|
 | `not_select` | no es un `SELECT` (SHOW, EXPLAIN, CALL, WITH…) | — |
+| `not_simple` | `SELECT` con modificadores (`SQL_CALC_FOUND_ROWS`…), sin `FROM`, con alias de tabla o con una forma que el analizador no reconoce | simplifica la consulta |
 | `user_limit` | la consulta ya trae `LIMIT`/`OFFSET` | quítalo para paginar |
 | `multi_table` | JOIN o subconsulta en `FROM` | usa «Paginación aproximada» si hay columna numérica |
 | `grouped` | GROUP BY / HAVING / DISTINCT / agregados | — |

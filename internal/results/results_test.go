@@ -368,3 +368,73 @@ func TestRemoveRowsAndAppendRowAdjustMemory(t *testing.T) {
 	buf.ClearPending()
 	require.Equal(t, 0, buf.InsertCount()+buf.DeleteCount()+buf.PendingCount())
 }
+
+func TestReplaceBufferFreesTheOldMemoryAndKeepsTheOtherStatements(t *testing.T) {
+	m := NewManager(1 << 30)
+	r := m.NewRun("q1", "tab1")
+	first := r.NewBuffer(cols("n"))
+	other := r.NewBuffer(cols("n"))
+	fill(t, first, 100)
+	fill(t, other, 10)
+	before := m.Total()
+	require.Positive(t, before)
+
+	// Cada fila pesa lo mismo, así que cambiar 100 filas por 3 deja exactamente el peso de 13.
+	nb, err := r.ReplaceBuffer(0, cols("n"))
+	require.NoError(t, err)
+	require.EqualValues(t, rowSize([]Cell{{V: int64(0)}})*10, m.Total(), "al sustituir se descuenta lo del buffer anterior")
+	fill(t, nb, 3)
+	require.EqualValues(t, rowSize([]Cell{{V: int64(0)}})*13, m.Total())
+
+	got, err := r.Buffer(0)
+	require.NoError(t, err)
+	require.Same(t, nb, got)
+	require.Equal(t, 3, got.Len())
+	o, _ := r.Buffer(1)
+	require.Same(t, other, o)
+	require.Equal(t, 10, o.Len(), "las demás sentencias no se tocan")
+
+	// El buffer viejo sigue siendo legible para quien aún lo tuviera, pero ya no cuenta.
+	require.Equal(t, 100, first.Len())
+	m.Release("q1")
+	require.EqualValues(t, 0, m.Total(), "liberar la ejecución deja la memoria en cero (sin fugas ni negativos)")
+}
+
+func TestReplaceBufferErrors(t *testing.T) {
+	m := NewManager(1 << 30)
+	r := m.NewRun("q1", "tab1")
+	r.NewBuffer(cols("n"))
+	_, err := r.ReplaceBuffer(5, cols("n"))
+	require.Error(t, err)
+	_, err = r.ReplaceBuffer(-1, cols("n"))
+	require.Error(t, err)
+	m.Release("q1")
+	_, err = r.ReplaceBuffer(0, cols("n"))
+	require.ErrorIs(t, err, ErrExpired)
+}
+
+func TestReplaceBufferDropsPendingEditsAndExt(t *testing.T) {
+	m := NewManager(1 << 30)
+	r := m.NewRun("q1", "tab1")
+	b := r.NewBuffer(cols("n"))
+	fill(t, b, 3)
+	b.SetExt("estado de la página 1")
+	require.NoError(t, b.Stage(0, 0, Cell{V: int64(9)}, nil))
+	require.Equal(t, 1, b.PendingCount())
+	require.Equal(t, "estado de la página 1", b.Ext())
+
+	nb, err := r.ReplaceBuffer(0, cols("n"))
+	require.NoError(t, err)
+	require.Zero(t, nb.PendingCount())
+	require.Nil(t, nb.Ext())
+}
+
+func TestExtIsPerBuffer(t *testing.T) {
+	m := NewManager(1 << 30)
+	r := m.NewRun("q1", "tab1")
+	a, b := r.NewBuffer(cols("n")), r.NewBuffer(cols("n"))
+	a.SetExt(1)
+	b.SetExt(2)
+	require.Equal(t, 1, a.Ext())
+	require.Equal(t, 2, b.Ext())
+}

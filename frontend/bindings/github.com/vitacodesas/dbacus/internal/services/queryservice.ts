@@ -63,6 +63,15 @@ export function LoadTabs(): $CancellablePromise<model$0.TabState[] | null> {
 }
 
 /**
+ * Page lee otra página de una sentencia paginada y la deja en lugar de la actual, dentro de la misma ejecución (spec 18 §7).
+ * Es síncrona, se puede cancelar con Cancel(queryID) y no se anota en el historial. Si la dirección no tiene más filas,
+ * deja la página actual como estaba. Las demás sentencias del script no se tocan.
+ */
+export function Page(req: $models.PageRequest): $CancellablePromise<$models.StatementResult> {
+    return $Call.ByID(2849956562, req);
+}
+
+/**
  * ReleaseResult libera la memoria de una ejecución que la UI ya no muestra.
  */
 export function ReleaseResult(queryID: string): $CancellablePromise<void> {
