@@ -10,7 +10,7 @@ Go es la fuente de verdad de datos; Pinia guarda **proyecciones** para pintar y 
 | `sessions` | `byId`, `activeSessionId` | `connect`, `disconnect`, `onClosed` | `ConnectionService` + evento `session:closed` |
 | `schema` | árbol cacheado `[sessionId][db]`, `expanded`, `filter` | `loadDatabases`, `loadTables`, `loadDetail`, `refresh` | `SchemaService` + `schema:invalidated` |
 | `queryTabs` | `tabs[]` (`id, sessionId, title, sql, database, dirty`), `activeTabId` | `open`, `close`, `rename`, `setSql` (debounce → persistir en Go), `execute`, `cancel` | `QueryService` |
-| `results` | por `tabId`: `status`, `statements[]`, `error`, `rowCounts`, `windows` (LRU) | `onStarted/onStatement/onProgress/onDone/onError`, `fetchWindow` | eventos `query:*` + `GetRows` |
+| `results` | por `tabId`: `status`, `statements[]` (con `paging`), `error`, `rowCounts`, `windows` (LRU, clave con `pageSeq`: cambiar de página invalida la caché) | `onStarted/onStatement/onProgress/onDone/onError`, `fetchWindow`, `page(stmt, direction)` | eventos `query:*` + `GetRows` |
 | `history` | `entries[]`, `cursor`, `search` | `load`, `delete`, `clear` | `HistoryService` |
 | `ui` | `theme`, `sidebarWidth`, `splitRatio`, `sidebarView`, `locale`, `collapsedGroups[]`, `toasts[]` | setters; persistencia en Go (`ui_state`) | local + `SettingsService` |
 

@@ -28,7 +28,7 @@ Escribir SQL, ejecutarlo sin bloquear la UI, ver resultados grandes con fluidez 
 - Selección de celdas/filas/columnas, copiar como TSV, copiar como INSERT (Go lo arma), `⌘/Ctrl+C`.
 - Múltiples sentencias → sub-pestañas de resultado ("Resultado 1", "Resultado 2", "Mensajes").
 - Barra de estado: filas (`1–100 de 52 340` o `100 000+ (truncado)`), tiempo, BD, sesión.
-- Paginación: scroll virtual es la paginación; adicionalmente selector "Limitar a N filas" (100/500/1000/sin límite=MaxRows) que **inyecta LIMIT solo si** la sentencia es un `SELECT` simple sin LIMIT (decisión en Go con el splitter; se informa al usuario "LIMIT 1000 aplicado").
+- **Paginación por cursor (spec 18)**: el selector pasa a ser «Filas por página»; para un `SELECT` de una tabla con clave numérica única la app pagina por cursor de clave (`< >`, primera y última) y llega al final sin acumular filas; el resto se comporta como se describe a continuación (con el motivo en la barra). El texto siguiente describe el LIMIT automático que sigue vigente en el modo `none` y con «Sin límite». Antes: scroll virtual es la paginación; adicionalmente selector "Limitar a N filas" (100/500/1000/sin límite=MaxRows) que **inyecta LIMIT solo si** la sentencia es un `SELECT` simple sin LIMIT (decisión en Go con el splitter; se informa al usuario "LIMIT 1000 aplicado").
 
 ## Cancelación
 `Cancel(queryId)` → `Conn.Kill` (`KILL QUERY`; el ctx solo se cancela si Kill falla o pasan 2 s, porque cancelarlo cierra la conexión y pierde el estado de sesión) → estado `canceled` (`QUERY_CANCELED`), buffer parcial queda consultable. UI: botón Stop visible durante la ejecución; cerrar pestaña cancela.

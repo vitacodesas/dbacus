@@ -112,3 +112,6 @@ Las columnas `JSON`, los textos con saltos de línea y los que no caben en el an
 
 ## Pruebas
 Unitarias: análisis de `SimpleSelectTable` (tabla de casos), elegibilidad, conversión por tipo, generación del `UPDATE`. Integración (`-tags integration`): lo anterior contra servidores reales, incluidos conflicto, rollback y clave compuesta. E2E con el mock: editar, ver la barra, revisar SQL, aplicar y conflicto. Smoke manual: edición real, conflicto con dos pestañas y conexión de solo lectura.
+
+## Paginación por cursor (spec 18)
+Una página de un `SELECT` editable sigue siendo editable: `edit.Analyze` ve siempre la sentencia **original** (`Source()`), nunca el SQL reescrito de la página. Como las ediciones pendientes se indexan por posición de fila del buffer, **cambiar de página las descarta** y la interfaz pide confirmación igual que al volver a ejecutar.

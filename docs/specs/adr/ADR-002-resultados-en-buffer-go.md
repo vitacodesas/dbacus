@@ -8,7 +8,7 @@
 
 **Alternativas descartadas**
 - Push de chunks por evento: backpressure difícil, duplica memoria.
-- Paginación con `LIMIT/OFFSET` re-ejecutando: costosa y inconsistente en datos mutables.
+- Paginación con `LIMIT/OFFSET` re-ejecutando: costosa y inconsistente en datos mutables. *(Enmendado por el [ADR-005](ADR-005-paginacion-por-cursor.md): la paginación por **cursor de clave** sí se adopta; OFFSET sigue descartado.)*
 
 **Consecuencias**
 - Tope `MaxRows` y tope global de memoria con LRU (spec 06); `RESULT_EXPIRED` cuando se libera.

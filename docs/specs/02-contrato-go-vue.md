@@ -80,24 +80,35 @@ type ExecuteRequest struct {
   SessionID, TabID, SQL string
   Database string           // base a usar (USE) si difiere de la de la pestaña
   MaxRows int               // tope de filas por resultado; 0 = ajuste del usuario (default 100_000)
-  AutoLimit int             // >0: añade LIMIT n a SELECT simples sin LIMIT (spec 06); 0 = no
+  AutoLimit int             // >0: filas por página (spec 18): pagina por cursor si se puede; si no, añade LIMIT n a SELECT simples sin LIMIT (spec 06); 0 = sin límite
 }
 type ExecuteResponse struct{ QueryID string }          // inmediato; el trabajo sigue en goroutine
 type ColumnMeta struct{ Name, DataType string; Nullable bool; Precision, Scale *int }
 type StatementResult struct {
   Index int; Kind string /* "rows" | "exec" */
   Start, End int            // posición de la sentencia en el SQL enviado (UTF-16): para marcar errores
-  LimitApplied int          // LIMIT automático añadido (0 = ninguno)
+  LimitApplied int          // LIMIT automático añadido (0 = ninguno); en modo de paginación keyset/approx no se usa
+  Paging *PagingInfo        // paginación por cursor (spec 18); nil si Kind=="exec"
   Columns []ColumnMeta
   RowCount int64; Truncated bool
   AffectedRows int64; LastInsertID int64; Warnings int
   ElapsedMs int64; SQL string
 }
+type PagingInfo struct {
+  Mode string; Reason string       // "keyset" | "approx" | "none"; código de motivo si "none" (spec 18 §6)
+  PageSize int; HasNext, HasPrev bool
+  Page int                         // 1-basada si se conoce; 0 = desconocida (tras «Última»)
+  KeyColumns []string              // columnas del cursor, en orden
+  Warning string                   // "" | "tie_at_edge" | "no_index"
+  Estimated int64                  // ≈ filas (information_schema), solo keyset sin WHERE; 0 = desconocido
+}
+type PageRequest struct{ QueryID string; StmtIndex int; Direction string /* first|next|prev|last */; Column string /* solo approx; "" = la actual */ }
 type RowWindow struct{ Offset int; Rows [][]Cell; Total int64; Complete bool }
 type Cell struct{ V any /* null|string|number|bool */; T string /* "", "bytes", "bigint", "datetime", "json" */; Trunc bool }
 ```
 Métodos:
 - `Execute(req)` → `ExecuteResponse`.
+- `Page(req PageRequest)` → `StatementResult` (spec 18): lee una página por cursor y **sustituye el buffer** de esa sentencia dentro del mismo `queryId`; síncrono, cancelable con `Cancel(queryID)`, sin registro en el historial; `busy` si la pestaña ejecuta; `RESULT_EXPIRED` si el buffer se liberó.
 - `Cancel(queryID)` → `error` (idempotente).
 - `GetRows(queryID, stmtIndex, offset, limit)` → `RowWindow` (limit ≤ 1000). `RESULT_EXPIRED` si el buffer fue liberado.
 - `ReleaseResult(queryID)` → libera buffer.

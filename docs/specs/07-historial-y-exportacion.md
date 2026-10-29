@@ -7,7 +7,7 @@
 - Privacidad: opción "No guardar historial" por perfil; el SQL con credenciales literales no se redacta (aviso en settings).
 
 ## Exportación (CSV / JSON)
-- Origen: un resultado (`queryId`, `stmtIndex`) con buffer vigente. Si está truncado, ofrecer "Re-ejecutar y exportar todo" (Go re-ejecuta en streaming directo a archivo sin pasar por buffer, con la misma sentencia).
+- Origen: un resultado (`queryId`, `stmtIndex`) con buffer vigente. Si está truncado **o paginado con más páginas (`Paging.HasNext || HasPrev`, spec 18)**, ofrecer "Re-ejecutar y exportar todo" (Go re-ejecuta en streaming directo a archivo sin pasar por buffer, con la misma sentencia).
 - Diálogo nativo de guardado abierto desde Go. Escritura en goroutine con `bufio.Writer`, cancelable, progreso por eventos.
 - **CSV**: separador (`,` `;` `\t`), comillas, cabecera sí/no, `NULL` como vacío o literal, BOM UTF-8 opcional, saltos `\n`/`\r\n`.
 - **JSON**: array de objetos o NDJSON; bigint como string; bytes en base64; fechas ISO 8601.
