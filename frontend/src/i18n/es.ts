@@ -1,5 +1,5 @@
 export default {
-  app: { name: "Dbacus" },
+  app: { name: "Dbacus", signature: "Hecho con amor por vitacodesas" },
   common: { cancel: "Cancelar", confirm: "Confirmar", close: "Cerrar", save: "Guardar", delete: "Eliminar", loading: "Cargando…" },
   activity: { connections: "Conexiones", schema: "Esquema", history: "Historial", settings: "Ajustes" },
   sidebar: {

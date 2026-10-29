@@ -545,7 +545,7 @@ export const SettingsService = {
   Get: () => cp(() => ({ ...settings })),
   Set: (s: Any) =>
     cp(() => {
-      if (s.maxRows < 1000) throw fail("VALIDATION", "Ajuste inválido", "maxRows");
+      if (s.maxRows < 20) throw fail("VALIDATION", "Ajuste inválido", "maxRows");
       settings = { ...s };
       return { ...settings };
     }),

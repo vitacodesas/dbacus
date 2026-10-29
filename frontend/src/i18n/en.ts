@@ -1,7 +1,7 @@
 import type es from "./es";
 
 const en: typeof es = {
-  app: { name: "Dbacus" },
+  app: { name: "Dbacus", signature: "Made with love by vitacodesas" },
   common: { cancel: "Cancel", confirm: "Confirm", close: "Close", save: "Save", delete: "Delete", loading: "Loading…" },
   activity: { connections: "Connections", schema: "Schema", history: "History", settings: "Settings" },
   sidebar: {

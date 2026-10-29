@@ -13,9 +13,11 @@ const profile = computed(() => (sessions.active ? connections.byId.get(sessions.
 
 <template>
   <footer class="flex h-6 shrink-0 items-center gap-4 border-t border-border bg-panel px-3 text-xs text-muted">
+    <!-- Firma de la organización (spec 17): esquina inferior izquierda, siempre visible aunque se colapse la barra lateral. -->
+    <span class="shrink-0 border-r border-border pr-3 select-none" data-testid="signature">{{ t("app.signature") }}</span>
     <template v-if="sessions.active">
-      <span class="flex items-center gap-1.5 text-fg" data-testid="status-session">
-        <span class="size-2 rounded-full bg-success" />{{ profile?.name }}
+      <span class="flex min-w-0 items-center gap-1.5 text-fg" data-testid="status-session">
+        <span class="size-2 shrink-0 rounded-full bg-success" /><span class="truncate">{{ profile?.name }}</span>
       </span>
       <span class="font-data">{{ sessions.active.serverVersion }}</span>
       <span v-if="sessions.active.currentDatabase" class="font-data">{{ sessions.active.currentDatabase }}</span>
