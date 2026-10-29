@@ -168,7 +168,10 @@ func probeTCP(ctx context.Context, dial driver.DialFunc, target string, p model.
 	}
 	c, err := dial(ctx, "tcp", target)
 	if err == nil {
-		return c.Close()
+		// Conectar fue la prueba. Al cerrar, el otro extremo puede haberse adelantado (un servidor que corta enseguida, o un
+		// canal SSH ya cerrado por el servidor remoto): ese `EOF` de Close no es un fallo de la conexión.
+		_ = c.Close()
+		return nil
 	}
 	var ae *apperr.AppError
 	if errors.As(err, &ae) {

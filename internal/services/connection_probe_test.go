@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -211,4 +212,19 @@ func TestProbeCancelReturnsQuickly(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, r.OK)
 	require.Less(t, time.Since(start), time.Second, "cancelar un Test colgado termina en menos de 1 s")
+}
+
+// closeEOFConn simula un extremo que ya cerró cuando se llama a Close (p. ej. un canal SSH cerrado por el servidor remoto).
+type closeEOFConn struct{ net.Conn }
+
+func (closeEOFConn) Close() error { return io.EOF }
+
+func TestProbeTCPIgnoresACloseErrorAfterConnecting(t *testing.T) {
+	dial := func(context.Context, string, string) (net.Conn, error) {
+		c1, c2 := net.Pipe()
+		_ = c2.Close()
+		return closeEOFConn{c1}, nil
+	}
+	require.NoError(t, probeTCP(context.Background(), dial, "db:3306", model.ConnectionProfile{Host: "db", Port: 3306}),
+		"si se pudo conectar, el EOF al cerrar no es un fallo")
 }

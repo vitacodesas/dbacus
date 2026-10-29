@@ -27,12 +27,17 @@ Pruebas: unitarias con llavero y carpetas simulados (copia correcta, idempotenci
 ## B. Preparar el repositorio para hacerlo público (T9.1 y T9.6)
 - **Auditoría previa (hecha en parte, 2026-10-28)**: sin credenciales ni claves privadas en el árbol ni en el historial; sin archivos grandes (lo mayor son iconos de 1,8 MB). Hallazgos a resolver antes de publicar:
   1. **Correo personal en los 20 commits** (`whary11@gmail.com`). Decisión pendiente: dejarlo, o reescribir el historial con el correo `noreply` de GitHub (`git filter-repo --mailmap`) **antes** del primer push; después ya no se puede retirar.
-  2. `docs/correcciones.md` nombra un entorno interno («Laika STG», Aurora): generalizarlo.
+  2. ~~`docs/correcciones.md` nombra un entorno interno («Laika STG»)~~: generalizado (T9.1).
   3. No hay `LICENSE`: es obligatorio en un repositorio público.
 - **Licencia** (pendiente de elegir): recomiendo **Apache-2.0** (concesión de patentes, la más común en herramientas de bases de datos). Antes de fijarla, revisar las licencias de las dependencias (`go-licenses`, `license-checker`): `go-sql-driver/mysql` es MPL-2.0 (copyleft solo de archivo, compatible); el resto es MIT/BSD/Apache.
 - **Archivos mínimos**: `LICENSE`, `README.md` (qué es, capturas, instalación, compilar, estado), `SECURITY.md` (cómo reportar vulnerabilidades), `.github/dependabot.yml` (Go, npm, Actions), `.github/ISSUE_TEMPLATE` y `PULL_REQUEST_TEMPLATE` cortas, `CHANGELOG.md`.
 - **Ajustes del repositorio**: secret scanning y push protection activados, Dependabot alerts, rama `main` protegida (PR obligatorio, checks requeridos, sin force-push), borrar ramas al fusionar.
 - **Idioma**: los specs y la UI quedan en español; el `README` lleva un resumen en inglés.
+
+### Resultado de la revisión de licencias (T9.1, 2026-10-28)
+- **Go** (20 módulos que entran en el binario): 11 BSD-3, 8 MIT y 1 MPL-2.0 (`go-sql-driver/mysql`, copyleft solo a nivel de archivo: se puede enlazar desde cualquier licencia sin cambiar la nuestra, siempre que se conserve su aviso). Ninguna GPL/AGPL/LGPL ni sin licencia.
+- **npm** (dependencias de producción, 89 paquetes): 73 MIT, 5 Apache-2.0, 3 ISC, 1 BSD-3, 1 BSD-2, 1 0BSD, `dompurify` (MPL-2.0 o Apache-2.0, a elegir) y `lightningcss` (MPL-2.0, herramienta de compilación de Tailwind que no se distribuye en la app). Ninguna copyleft fuerte.
+- **Conclusión**: Apache-2.0 es compatible. Al publicar, incluir un `THIRD_PARTY_NOTICES.md` generado (avisos de MPL/Apache/BSD).
 
 ## C. CI (T9.4 y T9.5)
 **Principios**: permisos mínimos (`permissions: contents: read` por defecto), `concurrency` que cancela ejecuciones obsoletas de una misma rama, versiones de acciones fijadas por hash (Dependabot las actualiza), sin secretos en los PR de forks.
