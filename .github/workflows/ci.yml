@@ -24,6 +24,8 @@ jobs:
           V=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)
           go install github.com/wailsapp/wails/v3/cmd/wails3@$V
       - run: cd frontend && npm ci && npm run typecheck && npm run lint && npm test
+      # main.go embebe frontend/dist (ignorado por git): debe existir antes de vet/test/build de Go.
+      - run: cd frontend && npm run build
       - name: E2E (Playwright, backend simulado)
         if: runner.os == 'Linux'
         working-directory: frontend
@@ -59,8 +61,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm, cache-dependency-path: frontend/package-lock.json }
       - name: Linux deps
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - run: cd frontend && npm ci && npm run build
       - run: go test -tags=integration -count=1 ./...
 
   security:
@@ -73,5 +78,6 @@ jobs:
         with: { node-version: 24, cache: npm, cache-dependency-path: frontend/package-lock.json }
       - name: Linux deps
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - run: cd frontend && npm ci && npm run build
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
       - run: cd frontend && npm audit --audit-level=high
