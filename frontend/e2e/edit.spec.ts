@@ -10,12 +10,16 @@ async function runSql(page: Page, sql: string) {
 const grid = (page: Page) => page.getByTestId("result-grid");
 const cell = (page: Page, text: string) => grid(page).getByRole("gridcell", { name: text, exact: true });
 
-async function edit(page: Page, from: string, to: string) {
+// `closes: false` para el caso en que Go rechaza el valor y el editor debe quedarse abierto.
+async function edit(page: Page, from: string, to: string, { closes = true } = {}) {
   await cell(page, from).dblclick();
   const editor = page.getByTestId("cell-editor");
   await expect(editor).toBeVisible();
   await editor.fill(to);
   await editor.press("Enter");
+  // El commit es asíncrono y al terminar devuelve el foco al grid: si el test sigue antes, ese foco tardío le
+  // quita el que acaba de dar a otro elemento (p. ej. Monaco) y las teclas siguientes caen en el grid.
+  if (closes) await expect(editor).toBeHidden();
 }
 
 test.describe("edición de celdas", () => {
@@ -42,7 +46,7 @@ test.describe("edición de celdas", () => {
   });
 
   test("Go rechaza un valor inválido y el editor se queda abierto con el motivo", async ({ app: page }) => {
-    await edit(page, "NOMBRE1", "ESTE TEXTO ES DEMASIADO LARGO");
+    await edit(page, "NOMBRE1", "ESTE TEXTO ES DEMASIADO LARGO", { closes: false });
     await expect(page.getByTestId("cell-editor-error")).toContainText("admite 10");
     await expect(page.getByTestId("cell-editor")).toBeVisible();
     await page.getByTestId("cell-editor").press("Escape");
@@ -224,8 +228,10 @@ test.describe("filas nuevas, copias y borrados", () => {
     await page.getByTestId("cell-editor").press("Enter");
 
     await page.getByTestId("edit-view-sql").click();
-    const kinds = await page.getByRole("dialog").locator("[data-kind]").evaluateAll((els) => els.map((e) => e.getAttribute("data-kind")));
-    expect(kinds).toEqual(["update", "delete", "insert"]);
+    // evaluateAll no espera: hay que dejar que el diálogo pinte las sentencias antes de leerlas.
+    const items = page.getByRole("dialog").locator("[data-kind]");
+    await expect(items).toHaveCount(3);
+    expect(await items.evaluateAll((els) => els.map((e) => e.getAttribute("data-kind")))).toEqual(["update", "delete", "insert"]);
   });
 
   test("borrar en una tabla con claves foráneas avisa de lo que se arrastra", async ({ app: page }) => {
