@@ -36,6 +36,8 @@ export const useUiStore = defineStore("ui", () => {
   const maxResultMemoryMiB = ref(512);
   const historyRetention = ref(5000);
   const settingsOpen = ref(false);
+  /** Grupos de conexiones plegados en la lista (spec 17); NO_GROUP = «Sin grupo». Se guarda con el resto de ajustes. */
+  const collapsedGroups = ref<string[]>([]);
   /** LIMIT automático para SELECT simples (0 = sin límite; el tope real es MaxRows de Go). */
   const autoLimit = ref(1000);
   const toasts = ref<Toast[]>([]);
@@ -81,7 +83,7 @@ export const useUiStore = defineStore("ui", () => {
   const snapshot = (): Settings => ({
     theme: theme.value, locale: locale.value, maxRows: maxRows.value, maxResultMemoryMiB: maxResultMemoryMiB.value,
     historyRetention: historyRetention.value, showSystemDatabases: showSystemDatabases.value, confirmEdits: confirmEdits.value,
-    sidebarWidth: sidebarWidth.value, splitRatio: splitRatio.value,
+    sidebarWidth: sidebarWidth.value, splitRatio: splitRatio.value, collapsedGroups: [...collapsedGroups.value],
   });
   function apply(s: Settings) {
     theme.value = s.theme as Theme;
@@ -93,6 +95,16 @@ export const useUiStore = defineStore("ui", () => {
     confirmEdits.value = s.confirmEdits;
     sidebarWidth.value = s.sidebarWidth;
     splitRatio.value = s.splitRatio;
+    collapsedGroups.value = [...(s.collapsedGroups ?? [])];
+  }
+
+  const isGroupCollapsed = (id: string) => collapsedGroups.value.includes(id);
+  function toggleGroup(id: string) {
+    collapsedGroups.value = isGroupCollapsed(id) ? collapsedGroups.value.filter((x) => x !== id) : [...collapsedGroups.value, id];
+  }
+  /** Al borrar un grupo, su id deja de recordarse (si no, la lista de ajustes crecería con ids muertos). */
+  function forgetGroup(id: string) {
+    collapsedGroups.value = collapsedGroups.value.filter((x) => x !== id);
   }
 
   // Sin esto, el primer guardado (p. ej. al redimensionar) pisaría lo guardado con los valores por defecto.
@@ -137,7 +149,8 @@ export const useUiStore = defineStore("ui", () => {
 
   return {
     theme, systemDark, resolvedTheme, sidebarWidth, sidebarCollapsed, splitRatio, sidebarView, locale, autoLimit, toasts,
-    showSystemDatabases, confirmEdits, maxRows, maxResultMemoryMiB, historyRetention, settingsOpen, load, saveSettings,
+    showSystemDatabases, confirmEdits, maxRows, maxResultMemoryMiB, historyRetention, settingsOpen, collapsedGroups, isGroupCollapsed,
+    toggleGroup, forgetGroup, load, saveSettings,
     setSidebarWidth, resizeSidebar, setSplitRatio, toggleSidebar, selectSidebarView, toast, dismissToast,
   };
 });

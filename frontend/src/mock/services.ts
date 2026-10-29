@@ -6,11 +6,13 @@ import { Events } from "./runtime";
 type Any = any;
 interface Seed {
   profiles?: Any[];
+  groups?: Any[];
   /** Milisegundos de latencia simulada en cada llamada (por defecto 20). */
   latencyMs?: number;
 }
 const seed: Seed = (window as Any).__MOCK_SEED__ ?? {};
 const latency = seed.latencyMs ?? 20;
+const maxRowsConst = 20;
 
 let n = 0;
 const uid = (p: string) => `${p}${++n}`;
@@ -32,14 +34,15 @@ const fail = (code: string, message: string, detail = "") =>
 
 // ---- estado ------------------------------------------------------------------------------------------------------------
 const profiles: Any[] = (seed.profiles ?? []).map((p) => ({ ...blankProfile(), ...p }));
+const groups: Any[] = (seed.groups ?? []).map((g) => ({ id: "", name: "", color: "", createdAt: "", updatedAt: "", ...g }));
 const sessions: Any[] = [];
 const history: Any[] = [];
-let settings: Any = { theme: "light", locale: "es", maxRows: 100_000, maxResultMemoryMiB: 512, historyRetention: 5000, showSystemDatabases: false, confirmEdits: true, sidebarWidth: 300, splitRatio: 0.5 };
+let settings: Any = { theme: "light", locale: "es", maxRows: 100_000, maxResultMemoryMiB: 512, historyRetention: 5000, showSystemDatabases: false, confirmEdits: true, sidebarWidth: 300, splitRatio: 0.5, collapsedGroups: [] };
 let tabs: Any[] = [];
 
 function blankProfile(): Any {
   return {
-    id: "", name: "", driver: "mysql", host: "127.0.0.1", port: 3306, user: "root", database: "", color: "", params: null,
+    id: "", name: "", driver: "mysql", host: "127.0.0.1", port: 3306, user: "root", database: "", color: "", groupId: "", params: null,
     tls: { mode: "preferred", caPath: "", certPath: "", keyPath: "" },
     ssh: { enabled: false, host: "", port: 22, user: "", authMethod: "password", keyPath: "" },
     savePassword: true, noHistory: false, readOnly: false, hasPassword: false, hasSshPassword: false, hasSshPassphrase: false, createdAt: "", updatedAt: "",
@@ -161,6 +164,7 @@ export const ConnectionService = {
   Save: (p: Any, sec: Any) =>
     cp(() => {
       if (!p.name?.trim()) throw fail("VALIDATION", "Falta el nombre", "name");
+      if (p.groupId && !groups.some((g) => g.id === p.groupId)) throw fail("VALIDATION", "El grupo no existe", "groupId");
       const now = new Date().toISOString();
       const prev = profileOf(p.id);
       const saved = { ...p, id: p.id || uid("p"), hasPassword: sec.password != null ? sec.password !== "" : (prev?.hasPassword ?? false), createdAt: prev?.createdAt ?? now, updatedAt: now };
@@ -180,6 +184,32 @@ export const ConnectionService = {
     cp(() => {
       const i = profiles.findIndex((p) => p.id === id);
       if (i >= 0) profiles.splice(i, 1);
+    }),
+  // Grupos (spec 17): mismas reglas que Go (nombre único sin distinguir mayúsculas, color #RRGGBB, borrar deja las
+  // conexiones en «Sin grupo» sin tocar nada más).
+  ListGroups: () => cp(() => [...groups].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })).map((g) => ({ ...g }))),
+  SaveGroup: (g: Any) =>
+    cp(() => {
+      const name = (g.name ?? "").trim();
+      const color = (g.color ?? "").trim();
+      if (!name) throw fail("VALIDATION", "El nombre del grupo es obligatorio", "name");
+      if (name.length > 100) throw fail("VALIDATION", "El nombre del grupo es demasiado largo", "name");
+      if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) throw fail("VALIDATION", "El color debe tener formato #RRGGBB", "color");
+      if (groups.some((o) => o.id !== g.id && o.name.toLowerCase() === name.toLowerCase())) throw fail("VALIDATION", "Ya existe un grupo con ese nombre", "name");
+      const now = new Date().toISOString();
+      const prev = groups.find((o) => o.id === g.id);
+      const saved = { id: g.id || uid("g"), name, color, createdAt: prev?.createdAt ?? now, updatedAt: now };
+      if (prev) Object.assign(prev, saved);
+      else groups.push(saved);
+      return { ...saved };
+    }),
+  DeleteGroup: (id: string) =>
+    cp(() => {
+      const i = groups.findIndex((g) => g.id === id);
+      if (i >= 0) groups.splice(i, 1);
+      profiles.forEach((p) => {
+        if (p.groupId === id) p.groupId = "";
+      });
     }),
   Test: (p: Any) =>
     cp(async () => {
@@ -545,7 +575,7 @@ export const SettingsService = {
   Get: () => cp(() => ({ ...settings })),
   Set: (s: Any) =>
     cp(() => {
-      if (s.maxRows < 20) throw fail("VALIDATION", "Ajuste inválido", "maxRows");
+      if (s.maxRows < maxRowsConst) throw fail("VALIDATION", "Ajuste inválido", "maxRows");
       settings = { ...s };
       return { ...settings };
     }),

@@ -1,6 +1,7 @@
 // Re-exporta los tipos generados por Wails; el resto del front importa de aquí, no de bindings/.
 export type {
   ConnectionProfile,
+  ConnectionGroup,
   TLSConfig,
   SSHConfig,
   Database,

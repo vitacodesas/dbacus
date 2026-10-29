@@ -16,7 +16,7 @@ Agrupar conexiones (p. ej. «Producción», «Staging») y darle a cada grupo un
 ### Reglas
 1. **Color efectivo** de una conexión = su color si lo tiene; si no, el de su grupo; si no, ninguno. Se aplica en la tarjeta de la lista, el árbol de esquema y la barra de consulta (los tres sitios que hoy usan `profile.color`). El cálculo vive en un único lugar del store (`colorOf`).
 2. **Crear un grupo** se hace desde el modal de la conexión (campo «Grupo» → «＋ Nuevo grupo…», con nombre y color). El grupo se crea **antes** de guardar la conexión; si guardar la conexión falla, el grupo queda creado y seleccionado, de modo que reintentar no lo duplica.
-3. **Editar y eliminar** un grupo se hace desde el menú contextual de su cabecera en la lista (el modal solo crea).
+3. **Editar y eliminar** un grupo se hace desde su cabecera en la lista (el modal de la conexión solo crea): un lápiz visible (usable con teclado) y el menú contextual abren el diálogo de edición (nombre y color), que lleva además «Eliminar grupo». El menú contextual solo se abre con clic derecho, por eso no es la única vía.
 4. **Eliminar un grupo** deja sus conexiones en «Sin grupo», en una sola transacción. **No** borra conexiones, contraseñas del llavero ni historial. Pide confirmación indicando cuántas conexiones se mueven.
 5. `Save` de una conexión con un `groupId` que no existe → `VALIDATION`, Detail `groupId`.
 6. Clonar una conexión conserva su grupo.
@@ -24,7 +24,7 @@ Agrupar conexiones (p. ej. «Producción», «Staging») y darle a cada grupo un
 
 ### Interfaz
 - **Modal** (pestaña General, tras el nombre): campo «Grupo» con «Sin grupo», los grupos existentes y «＋ Nuevo grupo…». Al elegir esto último aparecen el nombre y la fila de colores del grupo. La fila de colores es el componente `ColorSwatches`, compartido con el color de la conexión.
-- **Lista** (`ConnectionList`): si no hay grupos, la lista plana de hoy. Con grupos: una sección por grupo ordenada por nombre y «Sin grupo» al final. Cabecera: chevron, punto de color, nombre y contador; colapsable (el estado de colapso se recuerda). Menú contextual de la cabecera: Editar grupo, Eliminar grupo.
+- **Lista** (`ConnectionList`): si no hay grupos, la lista plana de hoy. Con grupos: una sección por grupo ordenada por nombre y «Sin grupo» al final. Cabecera: chevron, punto de color, nombre y contador; colapsable. El estado de plegado se guarda en `Settings.collapsedGroups` (ids; `"__none__"` = «Sin grupo»; máx. 500 ids de ≤ 64 caracteres) y el id se olvida al borrar el grupo. Con una búsqueda activa todo se ve desplegado (si no, las coincidencias quedarían ocultas) y al limpiarla vuelve el plegado de antes.
 - **Búsqueda**: filtra conexiones por nombre, host, base y usuario, y también por nombre de grupo; con filtro activo se ocultan los grupos sin resultados; sin filtro, los grupos vacíos se ven.
 - Accesibilidad: la cabecera es un botón con `aria-expanded`; el menú contextual es accesible por teclado como el de las tarjetas.
 

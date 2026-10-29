@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import type { SessionInfo } from "../types";
 
 const info = (id: string, profileId = "p1"): SessionInfo => ({ sessionId: id, profileId, serverVersion: "8", currentDatabase: "" });
-const api = vi.hoisted(() => ({ startConnect: vi.fn(), disconnect: vi.fn(), listSessions: vi.fn(), listProfiles: vi.fn(), listDrivers: vi.fn() }));
+const api = vi.hoisted(() => ({ startConnect: vi.fn(), disconnect: vi.fn(), listSessions: vi.fn(), listProfiles: vi.fn(), listDrivers: vi.fn(), listGroups: vi.fn() }));
 vi.mock("../api/connections", () => api);
 
 import { useSessionsStore } from "./sessions";
@@ -14,6 +14,7 @@ describe("sessions store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     Object.values(api).forEach((f) => f.mockReset());
+    api.listGroups.mockResolvedValue([]);
   });
 
   it("connect registra la sesión, la activa y limpia el estado 'conectando'", async () => {

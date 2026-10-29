@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { Lock, Pencil, Plug, Unplug } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
+import { useConnectionsStore } from "../../stores/connections";
 import type { ConnectionProfile } from "../../types";
 import BaseContextMenu, { type MenuItem } from "../ui/BaseContextMenu.vue";
 import BaseSpinner from "../ui/BaseSpinner.vue";
@@ -17,6 +18,9 @@ const emit = defineEmits<{
   delete: [];
 }>();
 const { t } = useI18n();
+const connections = useConnectionsStore();
+// Color efectivo (spec 17): el de la conexión; si no tiene, el de su grupo.
+const color = computed(() => connections.colorOf(props.profile));
 
 const subtitle = computed(() => {
   const p = props.profile;
@@ -54,7 +58,7 @@ function toggle() {
   <BaseContextMenu :items="menu" @select="onMenu">
     <li
       class="group relative flex items-center gap-2 rounded-md border-l-[3px] px-2 py-1.5 hover:bg-hover focus-within:bg-hover"
-      :style="{ borderLeftColor: profile.color || 'transparent' }"
+      :style="{ borderLeftColor: color || 'transparent' }"
       :data-testid="`connection-${profile.name}`"
       @dblclick="!connected && !connecting && emit('connect')"
     >

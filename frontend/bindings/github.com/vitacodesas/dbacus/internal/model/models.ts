@@ -166,6 +166,11 @@ export interface Settings {
     "confirmEdits": boolean;
     "sidebarWidth": number;
     "splitRatio": number;
+
+    /**
+     * CollapsedGroups son los ids de los grupos de conexiones plegados en la lista (spec 17); "__none__" es «Sin grupo».
+     */
+    "collapsedGroups": string[] | null;
 }
 
 export interface TLSConfig {

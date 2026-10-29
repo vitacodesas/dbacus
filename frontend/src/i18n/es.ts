@@ -29,12 +29,19 @@ export default {
     toast: { saved: "Conexión guardada", cloned: "Conexión clonada", deleted: "Conexión eliminada", connected: "Conectado a {name}", reconnectHint: "Los cambios en «{name}» se aplicarán al reconectar; la sesión abierta sigue con la configuración anterior." },
     reconnect: "Reconectar",
   },
+  groups: {
+    none: "Sin grupo", new: "＋ Nuevo grupo…", empty: "Sin conexiones", count: "{n}",
+    toggle: "Plegar o desplegar el grupo {name}", edit: "Editar grupo", delete: "Eliminar grupo",
+    dialog: { title: "Editar grupo", name: "Nombre del grupo", color: "Color del grupo", colorNone: "Sin color", save: "Guardar" },
+    confirmDelete: { title: "Eliminar grupo", message: "«{name}» se eliminará. Sus conexiones ({n}) pasarán a «Sin grupo»; no se borra ninguna conexión, contraseña ni historial." },
+    toast: { saved: "Grupo guardado", deleted: "Grupo eliminado" },
+  },
   form: {
     titleNew: "Nueva conexión",
     titleEdit: "Editar conexión",
     tabs: { general: "General", tls: "SSL/TLS", ssh: "Túnel SSH", advanced: "Avanzado", import: "Importar" },
     fields: {
-      name: "Nombre", driver: "Tipo", color: "Color", host: "Host", port: "Puerto", user: "Usuario", password: "Contraseña",
+      name: "Nombre", driver: "Tipo", color: "Color", colorNone: "Sin color", group: "Grupo", newGroupName: "Nombre del grupo nuevo", newGroupColor: "Color del grupo", host: "Host", port: "Puerto", user: "Usuario", password: "Contraseña",
       savePassword: "Guardar contraseña en el llavero del sistema",
       noHistory: "No guardar el historial de consultas de esta conexión", database: "Base de datos (opcional)",
       readOnly: "Solo lectura", readOnlyHint: "La sesión se abre en modo solo lectura y la app rechaza antes de enviarlo todo lo que no sea SELECT, SHOW, DESCRIBE o EXPLAIN.",
@@ -134,7 +141,7 @@ export default {
     theme: "Tema", locale: "Idioma", maxRows: "Máximo de filas por resultado", maxMemory: "Memoria para resultados (MiB)",
     retention: "Entradas de historial por conexión", hint: "Los límites aplican a la siguiente consulta. Con 0 en el historial no se borra nada.",
     showSystem: "Mostrar bases del sistema", confirmEdits: "Confirmar con el SQL a la vista antes de aplicar ediciones de celdas",
-    invalid: { maxRows: "Entre 1 000 y 10 000 000", maxResultMemoryMiB: "Entre 64 y 16 384", historyRetention: "Entre 0 y 100 000" },
+    invalid: { maxRows: "Entre 20 y 10 000 000", maxResultMemoryMiB: "Entre 64 y 16 384", historyRetention: "Entre 0 y 100 000" },
   },
   edit: {
     appliedTitle: "Cambios aplicados", appliedUpdated: "{n} actualizadas", appliedInserted: "{n} nuevas", appliedDeleted: "{n} borradas",

@@ -80,6 +80,8 @@ type Settings struct {
 	ConfirmEdits        bool    `json:"confirmEdits"` // pedir confirmación (con el SQL a la vista) antes de aplicar ediciones de celdas
 	SidebarWidth        int     `json:"sidebarWidth"`
 	SplitRatio          float64 `json:"splitRatio"`
+	// CollapsedGroups son los ids de los grupos de conexiones plegados en la lista (spec 17); "__none__" es «Sin grupo».
+	CollapsedGroups []string `json:"collapsedGroups"`
 }
 
 func DefaultSettings() Settings {
@@ -92,6 +94,7 @@ func DefaultSettings() Settings {
 		ConfirmEdits:       true,
 		SidebarWidth:       300,
 		SplitRatio:         0.5,
+		CollapsedGroups:    []string{},
 	}
 }
 

@@ -98,7 +98,7 @@ test.describe("ajustes", () => {
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Máximo de filas por resultado").fill("5");
     await dialog.getByTestId("settings-save").click();
-    await expect(dialog.getByText("Entre 1 000 y 10 000 000")).toBeVisible();
+    await expect(dialog.getByText("Entre 20 y 10 000 000")).toBeVisible();
     await expect(dialog).toBeVisible();
   });
 });

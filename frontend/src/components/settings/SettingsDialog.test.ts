@@ -58,7 +58,7 @@ describe("SettingsDialog", () => {
     saveBtn().click();
     await flushPromises();
 
-    expect(body().textContent).toContain("Entre 1 000 y 10 000 000");
+    expect(body().textContent).toContain("Entre 20 y 10 000 000");
     expect(ui.settingsOpen).toBe(true);
     expect(ui.maxRows).toBe(100_000);
   });

@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	settingsKey = "app"
-	tabsKey     = "tabs"
+	settingsKey  = "app"
+	tabsKey      = "tabs"
+	maxRowsConst = 20
+	// Tope de ids de grupo recordados como plegados: evita que la lista crezca sin límite con grupos ya borrados.
+	maxCollapsedGroups = 500
 )
 
 // GetSettings devuelve los ajustes guardados sobre los valores por defecto.
@@ -49,7 +52,7 @@ func ValidateSettings(st model.Settings) *apperr.AppError {
 		return bad("theme")
 	case !slices.Contains([]string{"es", "en"}, st.Locale):
 		return bad("locale")
-	case st.MaxRows < 1000 || st.MaxRows > 10_000_000:
+	case st.MaxRows < maxRowsConst || st.MaxRows > 10_000_000:
 		return bad("maxRows")
 	case st.MaxResultMemoryMiB < 64 || st.MaxResultMemoryMiB > 16384:
 		return bad("maxResultMemoryMiB")
@@ -59,6 +62,8 @@ func ValidateSettings(st model.Settings) *apperr.AppError {
 		return bad("sidebarWidth")
 	case st.SplitRatio < 0.1 || st.SplitRatio > 0.9:
 		return bad("splitRatio")
+	case len(st.CollapsedGroups) > maxCollapsedGroups || slices.ContainsFunc(st.CollapsedGroups, func(id string) bool { return len(id) > 64 }):
+		return bad("collapsedGroups")
 	}
 	return nil
 }

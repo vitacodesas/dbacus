@@ -2,6 +2,7 @@ import { expect, test as base, type Page } from "@playwright/test";
 
 export interface MockSeed {
   profiles?: Record<string, unknown>[];
+  groups?: Record<string, unknown>[];
   latencyMs?: number;
 }
 

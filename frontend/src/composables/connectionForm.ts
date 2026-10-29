@@ -1,5 +1,5 @@
 // Estado, conversión y validación del formulario de conexión. La validación es solo UX: Go repite todo (spec 04).
-import type { ConnectionProfile, ConnectionSecrets } from "../types";
+import type { ConnectionGroup, ConnectionProfile, ConnectionSecrets } from "../types";
 
 export interface ParamRow {
   key: string;
@@ -11,6 +11,10 @@ export interface FormState {
   name: string;
   driver: string;
   color: string;
+  /** Grupo de la conexión ("" = «Sin grupo», spec 17). */
+  groupId: string;
+  /** Grupo nuevo que se crea al guardar (antes que la conexión). Mientras `active`, `groupId` se ignora. */
+  newGroup: { active: boolean; name: string; color: string };
   host: string;
   port: string;
   user: string;
@@ -42,13 +46,15 @@ export type FieldErrors = Record<string, string>;
 export type FormTab = "general" | "tls" | "ssh" | "advanced" | "import";
 
 export const DEFAULT_PORT = 3306;
+/** Valor de la opción «＋ Nuevo grupo…» en el selector (no puede ser un uuid). */
+export const NEW_GROUP = "__new__";
 export const ZERO_TIME = "0001-01-01T00:00:00Z";
 const colorRe = /^#[0-9a-fA-F]{6}$/;
 const paramKeyRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export function emptyForm(driver = "mysql", port = DEFAULT_PORT): FormState {
   return {
-    id: "", name: "", driver, color: "", host: "127.0.0.1", port: String(port), user: "", database: "",
+    id: "", name: "", driver, color: "", groupId: "", newGroup: { active: false, name: "", color: "" }, host: "127.0.0.1", port: String(port), user: "", database: "",
     savePassword: true, noHistory: false, readOnly: false, password: "", clearPassword: false,
     tls: { mode: "preferred", caPath: "", certPath: "", keyPath: "" },
     ssh: { enabled: false, host: "", port: "22", user: "", authMethod: "password", keyPath: "", password: "", clearPassword: false, passphrase: "", clearPassphrase: false },
@@ -60,7 +66,7 @@ export function emptyForm(driver = "mysql", port = DEFAULT_PORT): FormState {
 export function formFromProfile(p: ConnectionProfile): FormState {
   const f = emptyForm(p.driver, p.port || DEFAULT_PORT);
   Object.assign(f, {
-    id: p.id, name: p.name, color: p.color ?? "", host: p.host, user: p.user, database: p.database ?? "", savePassword: p.savePassword, noHistory: !!p.noHistory, readOnly: !!p.readOnly,
+    id: p.id, name: p.name, color: p.color ?? "", groupId: p.groupId ?? "", host: p.host, user: p.user, database: p.database ?? "", savePassword: p.savePassword, noHistory: !!p.noHistory, readOnly: !!p.readOnly,
   });
   f.tls = { mode: p.tls?.mode || "preferred", caPath: p.tls?.caPath ?? "", certPath: p.tls?.certPath ?? "", keyPath: p.tls?.keyPath ?? "" };
   f.ssh = {
@@ -78,7 +84,7 @@ export function toProfile(f: FormState): ConnectionProfile {
   for (const { key, value } of f.params) if (key.trim()) params[key.trim()] = value;
   return {
     id: f.id, name: f.name.trim(), driver: f.driver, host: f.host.trim(), port: Number(f.port), user: f.user.trim(), database: f.database.trim(),
-    color: f.color.trim(), tls: { ...f.tls }, params, savePassword: f.savePassword, noHistory: f.noHistory, readOnly: f.readOnly,
+    color: f.color.trim(), groupId: f.newGroup.active ? "" : f.groupId, tls: { ...f.tls }, params, savePassword: f.savePassword, noHistory: f.noHistory, readOnly: f.readOnly,
     ssh: {
       enabled: f.ssh.enabled, host: f.ssh.host.trim(), port: Number(f.ssh.port) || 22, user: f.ssh.user.trim(),
       authMethod: f.ssh.authMethod, keyPath: f.ssh.keyPath,
@@ -88,6 +94,11 @@ export function toProfile(f: FormState): ConnectionProfile {
     // Go (time.Time) rechaza ""; los timestamps reales los fija el servidor al guardar.
     createdAt: ZERO_TIME, updatedAt: ZERO_TIME,
   } as unknown as ConnectionProfile;
+}
+
+/** Grupo nuevo a crear antes de guardar la conexión (Go fija los timestamps). */
+export function toGroup(f: FormState): ConnectionGroup {
+  return { id: "", name: f.newGroup.name.trim(), color: f.newGroup.color.trim(), createdAt: ZERO_TIME, updatedAt: ZERO_TIME } as unknown as ConnectionGroup;
 }
 
 /** Secretos a enviar: nulo = sin cambios; texto (aunque sea vacío tras tocar) = fijar; `clear` = borrar el guardado. */
@@ -125,6 +136,11 @@ export function validateForm(f: FormState, t: T): FieldErrors {
   if (!portOk(f.port)) e.port = t("form.errors.port");
   if (!f.user.trim()) e.user = required;
   if (f.color.trim() && !colorRe.test(f.color.trim())) e.color = t("form.errors.color");
+  if (f.newGroup.active) {
+    if (!f.newGroup.name.trim()) e["group.name"] = required;
+    else if ([...f.newGroup.name.trim()].length > 100) e["group.name"] = t("form.errors.nameLong");
+    if (f.newGroup.color.trim() && !colorRe.test(f.newGroup.color.trim())) e["group.color"] = t("form.errors.color");
+  }
 
   if (f.tls.mode === "verify-ca" && !f.tls.caPath) e["tls.caPath"] = t("form.errors.caRequired");
   if (!!f.tls.certPath !== !!f.tls.keyPath) e["tls.certPath"] = t("form.errors.certPair");

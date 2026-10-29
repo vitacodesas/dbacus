@@ -56,7 +56,7 @@ const key = (combo: string) => `${modKey}${combo}`;
 
     <span class="mx-1 h-5 w-px bg-border" />
     <span class="flex min-w-0 items-center gap-1.5 text-xs" :title="session ? '' : t('query.connectToRun')">
-      <span class="size-2 shrink-0 rounded-full" :class="session ? 'bg-success' : 'bg-border'" :style="profile?.color && session ? { backgroundColor: profile.color } : undefined" />
+      <span class="size-2 shrink-0 rounded-full" :class="session ? 'bg-success' : 'bg-border'" :style="connections.colorOf(profile) && session ? { backgroundColor: connections.colorOf(profile) } : undefined" />
       <span class="truncate" data-testid="toolbar-connection">{{ profile?.name ?? t("query.noConnection") }}</span>
       <span v-if="profile?.readOnly" class="flex shrink-0 items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-warning" data-testid="toolbar-readonly" :title="t('status.readOnlyHint')">
         <Lock class="size-3" />{{ t("status.readOnly") }}

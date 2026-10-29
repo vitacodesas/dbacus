@@ -27,6 +27,9 @@ func (s *SettingsService) Get(ctx context.Context) (model.Settings, error) {
 
 // Set valida y persiste; devuelve lo guardado para que Vue no tenga que releerlo.
 func (s *SettingsService) Set(ctx context.Context, st model.Settings) (model.Settings, error) {
+	if st.CollapsedGroups == nil {
+		st.CollapsedGroups = []string{} // Vue siempre recibe un array, nunca null
+	}
 	if err := s.st.SetSettings(ctx, st); err != nil {
 		return model.Settings{}, toAppErr(err)
 	}

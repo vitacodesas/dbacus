@@ -22,7 +22,7 @@ function currentSettings(): Settings {
   return {
     theme: ui.theme, locale: ui.locale, maxRows: ui.maxRows, maxResultMemoryMiB: ui.maxResultMemoryMiB,
     historyRetention: ui.historyRetention, showSystemDatabases: ui.showSystemDatabases, confirmEdits: ui.confirmEdits,
-    sidebarWidth: ui.sidebarWidth, splitRatio: ui.splitRatio,
+    sidebarWidth: ui.sidebarWidth, splitRatio: ui.splitRatio, collapsedGroups: [...ui.collapsedGroups],
   };
 }
 watch(

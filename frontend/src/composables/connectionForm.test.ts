@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConnectionProfile } from "../types";
-import { applyParsed, emptyForm, firstTabWithError, formFromProfile, tabOfField, toProfile, toSecrets, validateForm } from "./connectionForm";
+import { applyParsed, emptyForm, firstTabWithError, formFromProfile, tabOfField, toGroup, toProfile, toSecrets, validateForm } from "./connectionForm";
 
 const t = (k: string) => k;
 const valid = () => ({ ...emptyForm(), name: "Local", user: "root" });
@@ -127,5 +127,35 @@ describe("applyParsed", () => {
     expect(f).toMatchObject({ host: "h", port: "3307", user: "u2", database: "d", password: "pw", name: "Local" });
     expect(f.tls.mode).toBe("verify-full");
     expect(f.params).toEqual([{ key: "charset", value: "utf8mb4" }, { key: "time_zone", value: "UTC" }]);
+  });
+});
+
+describe("grupos en el formulario (spec 17)", () => {
+  it("la conexión conserva su grupo al editarla y sin grupo es cadena vacía", () => {
+    const base = { id: "1", name: "A", driver: "mysql", host: "h", port: 3306, user: "u", savePassword: true } as ConnectionProfile;
+    expect(formFromProfile({ ...base, groupId: "g1" }).groupId).toBe("g1");
+    expect(formFromProfile(base).groupId).toBe("");
+    expect(toProfile({ ...valid(), groupId: "g1" }).groupId).toBe("g1");
+  });
+
+  it("con un grupo nuevo activo, la conexión se envía sin grupo (aún no tiene id)", () => {
+    const f = { ...valid(), groupId: "g-viejo", newGroup: { active: true, name: "Prod", color: "#ff0000" } };
+    expect(toProfile(f).groupId).toBe("");
+    const g = toGroup(f);
+    expect(g).toMatchObject({ id: "", name: "Prod", color: "#ff0000" });
+  });
+
+  it("valida nombre y color del grupo nuevo solo mientras está activo", () => {
+    expect(validateForm({ ...valid(), newGroup: { active: false, name: "", color: "rojo" } }, t)).toEqual({});
+    const e = validateForm({ ...valid(), newGroup: { active: true, name: "  ", color: "rojo" } }, t);
+    expect(e["group.name"]).toBeTruthy();
+    expect(e["group.color"]).toBeTruthy();
+    expect(validateForm({ ...valid(), newGroup: { active: true, name: "x".repeat(101), color: "" } }, t)["group.name"]).toBeTruthy();
+    expect(validateForm({ ...valid(), newGroup: { active: true, name: "Prod", color: "#a1B2c3" } }, t)).toEqual({});
+  });
+
+  it("los errores de grupo caen en la pestaña General", () => {
+    expect(tabOfField("group.name")).toBe("general");
+    expect(tabOfField("groupId")).toBe("general");
   });
 });

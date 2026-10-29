@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import { noSecrets, parseDsn, startTest, trustHostKey, type Cancellable } from "../../api/connections";
 import { AppException, ErrorCode, asAppError } from "../../api/errors";
 import {
-  applyParsed, emptyForm, firstTabWithError, formFromProfile, toProfile, toSecrets, validateForm,
+  applyParsed, emptyForm, firstTabWithError, formFromProfile, NEW_GROUP, toGroup, toProfile, toSecrets, validateForm,
   type FieldErrors, type FormState, type FormTab,
 } from "../../composables/connectionForm";
 import { useConnectFlow } from "../../composables/useConnectFlow";
@@ -19,6 +19,7 @@ import BaseInput from "../ui/BaseInput.vue";
 import BaseModal from "../ui/BaseModal.vue";
 import BaseSelect from "../ui/BaseSelect.vue";
 import BaseTabs from "../ui/BaseTabs.vue";
+import ColorSwatches from "../ui/ColorSwatches.vue";
 import BaseToggle from "../ui/BaseToggle.vue";
 import PasswordField from "./PasswordField.vue";
 import PathField from "./PathField.vue";
@@ -31,7 +32,6 @@ const sessions = useSessionsStore();
 const uiConn = useConnectionUiStore();
 const { connect } = useConnectFlow();
 
-const COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899"];
 const PARAM_SUGGESTIONS = ["charset", "time_zone", "sql_mode", "timeout", "readTimeout", "writeTimeout", "wait_timeout"];
 
 const open = computed({ get: () => uiConn.formOpen, set: (v) => (v ? uiConn.openNew() : uiConn.closeForm()) });
@@ -50,6 +50,19 @@ const driverOptions = computed(() => [
   ...connections.drivers.map((d) => ({ value: d.name, label: d.displayName })),
   ...["PostgreSQL", "SQLite"].map((n) => ({ value: n.toLowerCase(), label: `${n} (${t("form.drivers.soon")})`, disabled: true })),
 ]);
+const groupOptions = computed(() => [
+  { value: "", label: t("groups.none") },
+  ...connections.groups.map((g) => ({ value: g.id, label: g.name })),
+  { value: NEW_GROUP, label: t("groups.new") },
+]);
+// Un solo selector para «Sin grupo», un grupo existente o «Nuevo grupo…» (que despliega nombre y color).
+const groupChoice = computed({
+  get: () => (form.newGroup.active ? NEW_GROUP : form.groupId),
+  set: (v: string) => {
+    form.newGroup.active = v === NEW_GROUP;
+    form.groupId = v === NEW_GROUP ? "" : v;
+  },
+});
 const tlsOptions = computed(() => ["disable", "preferred", "required", "verify-ca", "verify-full"].map((m) => ({ value: m, label: t(`form.tlsModes.${m}`) })));
 const sshMethodOptions = computed(() => ["password", "key"].map((m) => ({ value: m, label: t(`form.sshMethods.${m}`) })));
 const tabs = computed(() => (["general", "tls", "ssh", "advanced", "import"] as FormTab[]).map((v) => ({ value: v, label: t(`form.tabs.${v}`) })));
@@ -59,6 +72,8 @@ watch(open, (isOpen) => {
   const existing = uiConn.editingId ? connections.byId.get(uiConn.editingId) : undefined;
   const d = connections.drivers[0];
   Object.assign(form, existing ? formFromProfile(existing) : emptyForm(d?.name ?? "mysql", d?.defaultPort ?? 3306));
+  // Un groupId de un grupo que ya no existe se muestra como «Sin grupo» (el select no tendría opción para él).
+  if (form.groupId && !connections.groupById.has(form.groupId)) form.groupId = "";
   errors.value = {};
   tab.value = "general";
   testResult.value = null;
@@ -114,10 +129,31 @@ async function trustAndRetest(fingerprint: string) {
   await runTest();
 }
 
+/**
+ * Crea el grupo nuevo (si se pidió) ANTES de guardar la conexión, que necesita su id. Si luego falla guardar la conexión,
+ * el grupo ya existe y queda seleccionado: reintentar no lo duplica.
+ */
+async function ensureGroup(): Promise<boolean> {
+  if (!form.newGroup.active) return true;
+  try {
+    const g = await connections.saveGroup(toGroup(form));
+    form.groupId = g.id;
+    form.newGroup = { active: false, name: "", color: "" };
+    return true;
+  } catch (e) {
+    const err = asAppError(e);
+    // El detail del grupo ("name", "color") no es el del formulario: se prefija para pintarlo en su campo.
+    if (err.code === ErrorCode.Validation && err.detail) showErrors({ [`group.${err.detail}`]: err.message });
+    else ui.toast("error", err.message);
+    return false;
+  }
+}
+
 async function save(thenConnect = false) {
   if (saving.value || !validate()) return;
   saving.value = true;
   try {
+    if (!(await ensureGroup())) return;
     const secrets = toSecrets(form);
     const live = form.id ? sessions.sessionFor(form.id) : null;
     const saved = await connections.save(toProfile(form), secrets);
@@ -174,6 +210,11 @@ const err = (field: string) => errors.value[field];
           <div class="grid grid-cols-2 gap-3 pt-4">
             <BaseInput v-model="form.name" :label="t('form.fields.name')" :error="err('name')" />
             <BaseSelect v-model="form.driver" :label="t('form.fields.driver')" :options="driverOptions" :error="err('driver')" />
+            <BaseSelect v-model="groupChoice" class="col-span-2" :label="t('form.fields.group')" :options="groupOptions" :error="err('groupId')" data-testid="group-select" />
+            <div v-if="form.newGroup.active" class="col-span-2 grid grid-cols-2 gap-3 rounded-md border border-border p-3" data-testid="new-group">
+              <BaseInput v-model="form.newGroup.name" class="col-span-2" :label="t('form.fields.newGroupName')" :error="err('group.name')" />
+              <ColorSwatches v-model="form.newGroup.color" class="col-span-2" :label="t('form.fields.newGroupColor')" :none-label="t('form.fields.colorNone')" :error="err('group.color')" />
+            </div>
             <BaseInput v-model="form.host" :label="t('form.fields.host')" :placeholder="t('form.hints.hostDefault')" :error="err('host')" mono />
             <BaseInput v-model="form.port" type="number" :label="t('form.fields.port')" :error="err('port')" mono />
             <BaseInput v-model="form.user" :label="t('form.fields.user')" :error="err('user')" autocomplete="off" />
@@ -190,34 +231,7 @@ const err = (field: string) => errors.value[field];
             <BaseCheckbox v-model="form.readOnly" class="col-span-2" :label="t('form.fields.readOnly')" />
             <p v-if="form.readOnly" class="col-span-2 -mt-2 text-xs text-muted">{{ t("form.fields.readOnlyHint") }}</p>
             <BaseInput v-model="form.database" class="col-span-2" :label="t('form.fields.database')" :error="err('database')" mono />
-            <div class="col-span-2 flex flex-col gap-1">
-              <span class="text-xs font-medium text-muted">{{ t("form.fields.color") }}</span>
-              <div class="flex flex-wrap items-center gap-2" role="radiogroup" :aria-label="t('form.fields.color')">
-                <button
-                  type="button"
-                  role="radio"
-                  :aria-checked="!form.color"
-                  class="size-6 rounded-full border border-border text-xs text-muted"
-                  :class="!form.color && 'ring-2 ring-accent'"
-                  @click="form.color = ''"
-                >
-                  ∅
-                </button>
-                <button
-                  v-for="c in COLORS"
-                  :key="c"
-                  type="button"
-                  role="radio"
-                  :aria-checked="form.color === c"
-                  :aria-label="c"
-                  class="size-6 rounded-full"
-                  :class="form.color === c && 'ring-2 ring-accent ring-offset-2 ring-offset-panel'"
-                  :style="{ backgroundColor: c }"
-                  @click="form.color = c"
-                />
-              </div>
-              <p v-if="err('color')" class="text-xs text-danger">{{ err("color") }}</p>
-            </div>
+            <ColorSwatches v-model="form.color" class="col-span-2" :label="t('form.fields.color')" :none-label="t('form.fields.colorNone')" :error="err('color')" />
           </div>
         </template>
 

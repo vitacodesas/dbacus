@@ -1,7 +1,7 @@
 // Único punto que importa ConnectionService (bindings generados). Ver docs/specs/02-contrato-go-vue.md.
 import type { CancellablePromise } from "@wailsio/runtime";
 import { ConnectionService } from "../../bindings/github.com/vitacodesas/dbacus/internal/services";
-import type { ConnectionProfile, ConnectionSecrets, DriverInfo, ParsedDSN, SessionInfo, TestResult } from "../types";
+import type { ConnectionGroup, ConnectionProfile, ConnectionSecrets, DriverInfo, ParsedDSN, SessionInfo, TestResult } from "../types";
 import { wrap } from "./errors";
 
 export const noSecrets = (): ConnectionSecrets => ({ password: null, sshPassword: null, sshKeyPassphrase: null, clear: null });
@@ -21,6 +21,9 @@ export const getProfile = (id: string): Promise<ConnectionProfile> => wrap(Conne
 export const saveProfile = (p: ConnectionProfile, s: ConnectionSecrets): Promise<ConnectionProfile> => wrap(ConnectionService.Save(p, s));
 export const cloneProfile = (id: string): Promise<ConnectionProfile> => wrap(ConnectionService.Clone(id));
 export const deleteProfile = (id: string, deleteHistory: boolean): Promise<void> => wrap(ConnectionService.Delete(id, deleteHistory));
+export const listGroups = async (): Promise<ConnectionGroup[]> => (await wrap(ConnectionService.ListGroups())) ?? [];
+export const saveGroup = (g: ConnectionGroup): Promise<ConnectionGroup> => wrap(ConnectionService.SaveGroup(g));
+export const deleteGroup = (id: string): Promise<void> => wrap(ConnectionService.DeleteGroup(id));
 export const parseDsn = (dsn: string): Promise<ParsedDSN> => wrap(ConnectionService.ParseDSN(dsn));
 export const pickFile = (title: string): Promise<string> => wrap(ConnectionService.PickFile(title));
 export const trustHostKey = (host: string, port: number, fingerprint: string): Promise<void> => wrap(ConnectionService.TrustHostKey(host, port, fingerprint));

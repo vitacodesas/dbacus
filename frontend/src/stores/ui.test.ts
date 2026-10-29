@@ -55,7 +55,7 @@ describe("ui store", () => {
   describe("ajustes", () => {
     const saved: Settings = {
       theme: "dark", locale: "en", maxRows: 5000, maxResultMemoryMiB: 128, historyRetention: 100,
-      showSystemDatabases: true, confirmEdits: false, sidebarWidth: 280, splitRatio: 0.4,
+      showSystemDatabases: true, confirmEdits: false, sidebarWidth: 280, splitRatio: 0.4, collapsedGroups: ["g1"],
     };
     beforeEach(() => Object.values(api).forEach((f) => f.mockReset()));
 
@@ -83,6 +83,31 @@ describe("ui store", () => {
       await vi.advanceTimersByTimeAsync(2);
       expect(api.setSettings).toHaveBeenCalledTimes(1);
       expect(api.setSettings).toHaveBeenCalledWith({ ...saved, sidebarWidth: 320 });
+    });
+
+    it("recuerda los grupos plegados: carga lo guardado y guarda al plegar o desplegar", async () => {
+      api.getSettings.mockResolvedValue(saved);
+      api.setSettings.mockResolvedValue(saved);
+      const ui = useUiStore();
+      await ui.load();
+      expect(ui.isGroupCollapsed("g1")).toBe(true);
+      expect(ui.isGroupCollapsed("g2")).toBe(false);
+
+      ui.toggleGroup("g2");
+      ui.toggleGroup("g1");
+      expect(ui.collapsedGroups).toEqual(["g2"]);
+      await vi.advanceTimersByTimeAsync(600);
+      expect(api.setSettings).toHaveBeenCalledWith({ ...saved, collapsedGroups: ["g2"] });
+    });
+
+    it("forgetGroup olvida el id de un grupo borrado y los ajustes viejos sin el campo cargan vacíos", async () => {
+      api.getSettings.mockResolvedValue({ ...saved, collapsedGroups: undefined });
+      const ui = useUiStore();
+      await ui.load();
+      expect(ui.collapsedGroups).toEqual([]);
+      ui.toggleGroup("g9");
+      ui.forgetGroup("g9");
+      expect(ui.collapsedGroups).toEqual([]);
     });
 
     it("no guarda nada si los ajustes no se llegaron a cargar", async () => {

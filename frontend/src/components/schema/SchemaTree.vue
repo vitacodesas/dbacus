@@ -36,7 +36,7 @@ const nodes = computed<SessionNode[]>(() =>
       sessionId: sid,
       label: profile?.name ?? sid,
       hint: s.serverVersion,
-      color: profile?.color || undefined,
+      color: connections.colorOf(profile) || undefined,
       active: sid === sessions.activeSessionId,
       expanded: schema.isExpanded(sid, `s:${sid}`),
       ctx: {

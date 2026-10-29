@@ -15,6 +15,7 @@ import BaseTabs from "../components/ui/BaseTabs.vue";
 import BaseToast from "../components/ui/BaseToast.vue";
 import BaseToggle from "../components/ui/BaseToggle.vue";
 import BaseTooltip from "../components/ui/BaseTooltip.vue";
+import ColorSwatches from "../components/ui/ColorSwatches.vue";
 import { useUiStore, type Theme } from "../stores/ui";
 import { usePingStore } from "../stores/ping";
 
@@ -27,6 +28,7 @@ const text = ref("");
 const select = ref("mysql");
 const check = ref(true);
 const toggle = ref(false);
+const swatch = ref("#06b6d4");
 const tab = ref("a");
 const modal = ref(false);
 const confirm = ref(false);
@@ -72,6 +74,7 @@ const themes: Theme[] = ["light", "dark", "system"];
         <div class="flex flex-col justify-end gap-2">
           <BaseCheckbox v-model="check" label="Guardar contraseña en el llavero" />
           <BaseToggle v-model="toggle" label="Túnel SSH" />
+          <ColorSwatches v-model="swatch" label="Color" none-label="Sin color" />
         </div>
       </section>
 

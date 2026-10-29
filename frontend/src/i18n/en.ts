@@ -31,12 +31,19 @@ const en: typeof es = {
     toast: { saved: "Connection saved", cloned: "Connection cloned", deleted: "Connection deleted", connected: "Connected to {name}", reconnectHint: "Changes to “{name}” apply when you reconnect; the open session keeps the previous settings." },
     reconnect: "Reconnect",
   },
+  groups: {
+    none: "No group", new: "＋ New group…", empty: "No connections", count: "{n}",
+    toggle: "Collapse or expand the group {name}", edit: "Edit group", delete: "Delete group",
+    dialog: { title: "Edit group", name: "Group name", color: "Group color", colorNone: "No color", save: "Save" },
+    confirmDelete: { title: "Delete group", message: "“{name}” will be deleted. Its connections ({n}) will move to “No group”; no connection, password or history is deleted." },
+    toast: { saved: "Group saved", deleted: "Group deleted" },
+  },
   form: {
     titleNew: "New connection",
     titleEdit: "Edit connection",
     tabs: { general: "General", tls: "SSL/TLS", ssh: "SSH tunnel", advanced: "Advanced", import: "Import" },
     fields: {
-      name: "Name", driver: "Type", color: "Color", host: "Host", port: "Port", user: "User", password: "Password",
+      name: "Name", driver: "Type", color: "Color", colorNone: "No color", group: "Group", newGroupName: "New group name", newGroupColor: "Group color", host: "Host", port: "Port", user: "User", password: "Password",
       savePassword: "Save password in the system keychain",
       noHistory: "Don't save query history for this connection", database: "Database (optional)",
       readOnly: "Read-only", readOnlyHint: "The session opens in read-only mode and the app rejects anything other than SELECT, SHOW, DESCRIBE or EXPLAIN before sending it.",

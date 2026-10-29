@@ -53,3 +53,30 @@ func TestSettingsServiceRejectsInvalid(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.DefaultSettings(), got)
 }
+
+func TestSettingsCollapsedGroupsRoundTripAndLimits(t *testing.T) {
+	ctx := context.Background()
+	svc := newSettingsSvc(t)
+
+	s := model.DefaultSettings()
+	s.CollapsedGroups = []string{"g1", "__none__"}
+	saved, err := svc.Set(ctx, s)
+	require.NoError(t, err)
+	require.Equal(t, []string{"g1", "__none__"}, saved.CollapsedGroups)
+	again, _ := svc.Get(ctx)
+	require.Equal(t, []string{"g1", "__none__"}, again.CollapsedGroups)
+
+	// nil se normaliza a un array vacío (Vue nunca debe recibir null).
+	s.CollapsedGroups = nil
+	saved, err = svc.Set(ctx, s)
+	require.NoError(t, err)
+	require.NotNil(t, saved.CollapsedGroups)
+	require.Empty(t, saved.CollapsedGroups)
+
+	s.CollapsedGroups = []string{string(make([]byte, 65))}
+	_, err = svc.Set(ctx, s)
+	require.Equal(t, "collapsedGroups", apperr.From(err).Detail)
+	s.CollapsedGroups = make([]string, 501)
+	_, err = svc.Set(ctx, s)
+	require.Equal(t, "collapsedGroups", apperr.From(err).Detail)
+}

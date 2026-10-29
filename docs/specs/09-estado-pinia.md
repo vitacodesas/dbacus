@@ -12,7 +12,7 @@ Go es la fuente de verdad de datos; Pinia guarda **proyecciones** para pintar y 
 | `queryTabs` | `tabs[]` (`id, sessionId, title, sql, database, dirty`), `activeTabId` | `open`, `close`, `rename`, `setSql` (debounce → persistir en Go), `execute`, `cancel` | `QueryService` |
 | `results` | por `tabId`: `status`, `statements[]`, `error`, `rowCounts`, `windows` (LRU) | `onStarted/onStatement/onProgress/onDone/onError`, `fetchWindow` | eventos `query:*` + `GetRows` |
 | `history` | `entries[]`, `cursor`, `search` | `load`, `delete`, `clear` | `HistoryService` |
-| `ui` | `theme`, `sidebarWidth`, `splitRatio`, `sidebarView`, `locale`, `toasts[]` | setters; persistencia en Go (`ui_state`) | local + `SettingsService` |
+| `ui` | `theme`, `sidebarWidth`, `splitRatio`, `sidebarView`, `locale`, `collapsedGroups[]`, `toasts[]` | setters; persistencia en Go (`ui_state`) | local + `SettingsService` |
 
 ## Reglas
 - Un solo punto de suscripción a eventos: `api/events.ts` registra listeners al arrancar y despacha a stores; los componentes **no** se suscriben directamente.

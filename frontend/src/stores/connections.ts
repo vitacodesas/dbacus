@@ -2,18 +2,26 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import * as api from "../api/connections";
 import { asAppError } from "../api/errors";
-import type { AppError, ConnectionProfile, ConnectionSecrets, DriverInfo } from "../types";
+import type { AppError, ConnectionGroup, ConnectionProfile, ConnectionSecrets, DriverInfo } from "../types";
 
-const byName = (a: ConnectionProfile, b: ConnectionProfile) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
 export const useConnectionsStore = defineStore("connections", () => {
   const profiles = ref<ConnectionProfile[]>([]);
+  const groups = ref<ConnectionGroup[]>([]);
   const drivers = ref<DriverInfo[]>([]);
   const loading = ref(false);
   const loaded = ref(false);
   const lastError = ref<AppError | null>(null);
 
   const byId = computed(() => new Map(profiles.value.map((p) => [p.id, p])));
+  const groupById = computed(() => new Map(groups.value.map((g) => [g.id, g])));
+
+  /** Grupo de una conexión; un groupId huérfano (grupo inexistente) cuenta como «Sin grupo» (spec 17). */
+  const groupOf = (p?: ConnectionProfile) => (p?.groupId ? groupById.value.get(p.groupId) : undefined);
+
+  /** Color efectivo (spec 17): el de la conexión si lo tiene; si no, el de su grupo; si no, ninguno. */
+  const colorOf = (p?: ConnectionProfile) => p?.color || groupOf(p)?.color || "";
 
   function upsert(p: ConnectionProfile) {
     const i = profiles.value.findIndex((x) => x.id === p.id);
@@ -26,8 +34,9 @@ export const useConnectionsStore = defineStore("connections", () => {
     loading.value = true;
     lastError.value = null;
     try {
-      [profiles.value, drivers.value] = await Promise.all([api.listProfiles(), api.listDrivers()]);
+      [profiles.value, drivers.value, groups.value] = await Promise.all([api.listProfiles(), api.listDrivers(), api.listGroups()]);
       profiles.value.sort(byName);
+      groups.value.sort(byName);
       loaded.value = true;
     } catch (e) {
       lastError.value = asAppError(e);
@@ -53,5 +62,21 @@ export const useConnectionsStore = defineStore("connections", () => {
     profiles.value = profiles.value.filter((p) => p.id !== id);
   }
 
-  return { profiles, drivers, loading, loaded, lastError, byId, load, save, clone, remove };
+  async function saveGroup(group: ConnectionGroup) {
+    const saved = await api.saveGroup(group);
+    const i = groups.value.findIndex((g) => g.id === saved.id);
+    if (i >= 0) groups.value[i] = saved;
+    else groups.value.push(saved);
+    groups.value.sort(byName);
+    return saved;
+  }
+
+  /** Las conexiones del grupo pasan a «Sin grupo» en Go: se vuelven a pedir en vez de reproducirlo aquí. */
+  async function removeGroup(id: string) {
+    await api.deleteGroup(id);
+    groups.value = groups.value.filter((g) => g.id !== id);
+    profiles.value = (await api.listProfiles()).sort(byName);
+  }
+
+  return { profiles, groups, drivers, loading, loaded, lastError, byId, groupById, groupOf, colorOf, load, save, clone, remove, saveGroup, removeGroup };
 });
