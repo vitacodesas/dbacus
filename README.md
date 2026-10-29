@@ -1,6 +1,6 @@
 # Dbacus
 
-Cliente SQL de escritorio, rápido y ligero, inspirado en [Tabularis](https://github.com/debba/tabularis). Go + Wails 3 en el backend; Vue 3, Pinia y Tailwind solo pintan la interfaz.
+Cliente SQL de escritorio, rápido y ligero, inspirado en Tabularis. Go + Wails 3 en el backend; Vue 3, Pinia y Tailwind solo pintan la interfaz.
 
 > **Estado: 0.1.0, en desarrollo.** Solo MySQL/MariaDB. Los binarios **no están firmados** (ver [Instalación](#instalación)).
 
@@ -18,7 +18,7 @@ Descarga el archivo de tu sistema desde [Releases](../../releases) y comprueba s
 
 | Sistema | Archivo | Primera apertura |
 |---|---|---|
-| macOS | `.zip` con `Dbacus.app` | Clic derecho → Abrir, o `xattr -dr com.apple.quarantine Dbacus.app` |
+| macOS | `.zip` con `dbacus.app` | Clic derecho → Abrir, o `xattr -dr com.apple.quarantine dbacus.app` |
 | Windows | `.exe` | SmartScreen: «Más información» → «Ejecutar de todas formas» |
 | Linux | `.tar.gz` | Requiere GTK 4 y WebKitGTK 6.0 |
 
