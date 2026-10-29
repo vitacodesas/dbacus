@@ -127,7 +127,7 @@ Método nuevo: `QueryService.Page(req)` → `StatementResult`.
 - El rango del pie es el de **la página entera** (`Filas 21–40`), no el que enseña el scroll del grid; tras «Última» el número de página no se conoce y el rango es relativo a la página.
 - Botones deshabilitados según `HasPrev`/`HasNext`; con `tie_at_edge` el avance bloqueado muestra el aviso.
 - Insignias: «Paginación aproximada» (modo `approx`, con su advertencia), «Sin índice para este orden» (`no_index`), y en `none` el motivo.
-- El selector se renombra «Filas por página» (20/50/100/500/1000/Sin límite). Sigue siendo estado de UI (no se persiste en `Settings`).
+- El selector se renombra «Filas por página» (20/50/100/500/1000/Sin límite). **El techo real es `Settings.MaxRows`** (Go nunca lee más por resultado): el selector solo ofrece tamaños ≤ ese máximo, muestra el valor efectivo `min(elegido, maxRows)` sin pisar lo guardado, y «Sin límite» dice «(máx. N)». Sigue siendo estado de UI (no se persiste en `Settings`).
 - Accesibilidad: botones con `aria-label`, estado `disabled` real, texto del rango en una región `aria-live="polite"`. Sin atajos de teclado en esta versión (Alt+←/→ choca con el historial del webview).
 - Mientras llega una página, los botones se deshabilitan y el pie muestra «Cargando página…»; el botón «Detener» de la barra la cancela (`Cancel(queryId)`).
 - `ExportDialog` recibe `paged` (HasNext o HasPrev) y propone repetir la consulta completa con el texto «Solo está cargada una página…».

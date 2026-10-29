@@ -128,7 +128,7 @@ export default {
   },
   query: {
     newTab: "Nueva consulta", closeTab: "Cerrar pestaña", rename: "Renombrar", run: "Ejecutar todo", runSelection: "Ejecutar selección o sentencia actual",
-    stop: "Detener", format: "Formatear", limit: "Filas por página", limitNone: "Sin límite", database: "Base de datos", defaultDatabase: "Predeterminada ({db})", noDatabase: "(sin base)",
+    stop: "Detener", format: "Formatear", limit: "Filas por página", limitNone: "Sin límite (máx. {n})", database: "Base de datos", defaultDatabase: "Predeterminada ({db})", noDatabase: "(sin base)",
     nothingToRun: "No hay nada que ejecutar.", needSession: "Conéctate a una base de datos para crear una consulta.",
     noConnection: "Sin conexión", connectToRun: "Se conectará al ejecutar", running: "Ejecutando…", rowsReceived: "{n} filas recibidas",
     emptyTitle: "Sin consultas abiertas", emptyDescription: "Abre una consulta nueva o haz doble clic en una tabla del esquema.",

@@ -130,7 +130,7 @@ const en: typeof es = {
   },
   query: {
     newTab: "New query", closeTab: "Close tab", rename: "Rename", run: "Run all", runSelection: "Run selection or current statement",
-    stop: "Stop", format: "Format", limit: "Rows per page", limitNone: "No limit", database: "Database", defaultDatabase: "Default ({db})", noDatabase: "(no database)",
+    stop: "Stop", format: "Format", limit: "Rows per page", limitNone: "No limit (max {n})", database: "Database", defaultDatabase: "Default ({db})", noDatabase: "(no database)",
     nothingToRun: "There is nothing to run.", needSession: "Connect to a database to create a query.",
     noConnection: "Not connected", connectToRun: "It will connect when you run", running: "Running…", rowsReceived: "{n} rows received",
     emptyTitle: "No open queries", emptyDescription: "Open a new query or double-click a table in the schema.",

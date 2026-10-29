@@ -124,6 +124,33 @@ describe("componentes de consultas", () => {
       expect(w.emitted("stop")).toHaveLength(1);
     });
 
+    it("«Filas por página» no ofrece más que el máximo de filas de Ajustes y enseña el valor efectivo", async () => {
+      const { tabs } = await boot();
+      const { useUiStore } = await import("../../stores/ui");
+      const ui = useUiStore();
+      const id = tabs.openTab({ profileId: "p1" });
+      const w = mount(QueryToolbar, { props: { tab: tabs.byId(id)! }, global: { plugins } });
+      const select = () => w.get('[data-testid="limit-select"]');
+      const values = () => select().findAll("option").map((o) => o.element.value);
+
+      ui.maxRows = 20;
+      ui.autoLimit = 1000; // lo elegido antes; Go solo lee 20 por resultado
+      await w.vm.$nextTick();
+      expect(values()).toEqual(["20", "0"]);
+      expect((select().element as HTMLSelectElement).value).toBe("20");
+      expect(select().findAll("option")[1].text()).toContain("máx. 20");
+      expect(ui.autoLimit).toBe(1000); // no se pisa lo guardado
+
+      ui.maxRows = 300;
+      await w.vm.$nextTick();
+      expect(values()).toEqual(["20", "50", "100", "300", "0"]);
+      expect((select().element as HTMLSelectElement).value).toBe("300");
+
+      ui.maxRows = 100_000;
+      await w.vm.$nextTick();
+      expect((select().element as HTMLSelectElement).value).toBe("1000"); // al subir el ajuste vuelve lo elegido
+    });
+
     it("el selector de base cambia la base de la pestaña y el de límite el límite automático", async () => {
       const { tabs } = await boot();
       const id = tabs.openTab({ profileId: "p1" });

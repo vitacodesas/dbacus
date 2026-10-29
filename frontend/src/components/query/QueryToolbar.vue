@@ -35,7 +35,15 @@ const systemDbs = computed(() => allDatabases.value.filter((d) => d.isSystem).ma
 // La base elegida en la pestaña siempre aparece, aunque aún no haya llegado la lista.
 const extraDb = computed(() => (props.tab.database && ![...userDbs.value, ...systemDbs.value].includes(props.tab.database) ? [props.tab.database] : []));
 
-const limits = computed(() => [20, 50, 100, 500, 1000, 0].map((v) => ({ value: v, label: v === 0 ? t("query.limitNone") : String(v) })));
+// «Filas por página»: Go nunca lee más de `maxRows` por resultado (Ajustes), así que ese ajuste es el techo real. El selector
+// no ofrece más que eso, enseña el valor efectivo (sin tocar lo guardado: al subir el ajuste vuelve lo elegido) y «Sin límite»
+// dice hasta cuántas filas llega.
+const shown = computed(() => (ui.autoLimit === 0 ? 0 : Math.min(ui.autoLimit, ui.maxRows)));
+const limits = computed(() => {
+  const sizes = new Set([20, 50, 100, 500, 1000].filter((v) => v <= ui.maxRows));
+  if (shown.value > 0) sizes.add(shown.value);
+  return [...[...sizes].sort((a, b) => a - b).map((v) => ({ value: v, label: String(v) })), { value: 0, label: t("query.limitNone", { n: ui.maxRows.toLocaleString() }) }];
+});
 const key = (combo: string) => `${modKey}${combo}`;
 </script>
 
@@ -83,7 +91,7 @@ const key = (combo: string) => `${modKey}${combo}`;
 
     <label class="ml-auto flex items-center gap-1 text-xs whitespace-nowrap text-muted">
       {{ t("query.limit") }}
-      <select v-model.number="ui.autoLimit" class="h-7 rounded-md border border-border bg-panel px-1.5 text-xs text-fg" data-testid="limit-select">
+      <select :value="shown" @change="ui.autoLimit = Number(($event.target as HTMLSelectElement).value)" class="h-7 rounded-md border border-border bg-panel px-1.5 text-xs text-fg" data-testid="limit-select">
         <option v-for="o in limits" :key="o.value" :value="o.value">{{ o.label }}</option>
       </select>
     </label>
