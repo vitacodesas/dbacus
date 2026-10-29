@@ -2,6 +2,7 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import * as api from "../api/connections";
 import { asAppError } from "../api/errors";
+import { useUiStore } from "./ui";
 import type { AppError, ConnectionGroup, ConnectionProfile, ConnectionSecrets, DriverInfo } from "../types";
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
@@ -37,6 +38,7 @@ export const useConnectionsStore = defineStore("connections", () => {
       [profiles.value, drivers.value, groups.value] = await Promise.all([api.listProfiles(), api.listDrivers(), api.listGroups()]);
       profiles.value.sort(byName);
       groups.value.sort(byName);
+      useUiStore().pruneGroups(groups.value.map((g) => g.id));
       loaded.value = true;
     } catch (e) {
       lastError.value = asAppError(e);

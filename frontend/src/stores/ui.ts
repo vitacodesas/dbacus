@@ -4,6 +4,7 @@ import * as api from "../api/settings";
 import { asAppError } from "../api/errors";
 import { setLocale, type Locale } from "../i18n";
 import type { AppError, Settings } from "../types";
+import { NO_GROUP } from "../composables/connectionGroups";
 
 export type Theme = "light" | "dark" | "system";
 export type SidebarView = "connections" | "schema" | "history";
@@ -38,6 +39,7 @@ export const useUiStore = defineStore("ui", () => {
   const settingsOpen = ref(false);
   /** Grupos de conexiones plegados en la lista (spec 17); NO_GROUP = «Sin grupo». Se guarda con el resto de ajustes. */
   const collapsedGroups = ref<string[]>([]);
+  let knownGroupIds: string[] | null = null;
   /** LIMIT automático para SELECT simples (0 = sin límite; el tope real es MaxRows de Go). */
   const autoLimit = ref(1000);
   const toasts = ref<Toast[]>([]);
@@ -96,11 +98,27 @@ export const useUiStore = defineStore("ui", () => {
     sidebarWidth.value = s.sidebarWidth;
     splitRatio.value = s.splitRatio;
     collapsedGroups.value = [...(s.collapsedGroups ?? [])];
+    prune();
   }
 
   const isGroupCollapsed = (id: string) => collapsedGroups.value.includes(id);
   function toggleGroup(id: string) {
     collapsedGroups.value = isGroupCollapsed(id) ? collapsedGroups.value.filter((x) => x !== id) : [...collapsedGroups.value, id];
+  }
+  /**
+   * Olvida los ids de grupos que ya no existen. Si un guardado se pierde (p. ej. al cerrar justo después de borrar un
+   * grupo), el id quedaría para siempre y, al llegar al tope de Go (500), este campo haría fallar TODOS los ajustes.
+   */
+  function pruneGroups(existingIds: string[]) {
+    knownGroupIds = existingIds;
+    prune();
+  }
+  // La carga de ajustes y la de grupos arrancan a la vez y pueden acabar en cualquier orden: se poda al llegar la
+  // lista de grupos y también al aplicar los ajustes, y da igual cuál sea la última.
+  function prune() {
+    if (!knownGroupIds) return;
+    const keep = collapsedGroups.value.filter((id) => id === NO_GROUP || knownGroupIds!.includes(id));
+    if (keep.length !== collapsedGroups.value.length) collapsedGroups.value = keep;
   }
   /** Al borrar un grupo, su id deja de recordarse (si no, la lista de ajustes crecería con ids muertos). */
   function forgetGroup(id: string) {
@@ -150,7 +168,7 @@ export const useUiStore = defineStore("ui", () => {
   return {
     theme, systemDark, resolvedTheme, sidebarWidth, sidebarCollapsed, splitRatio, sidebarView, locale, autoLimit, toasts,
     showSystemDatabases, confirmEdits, maxRows, maxResultMemoryMiB, historyRetention, settingsOpen, collapsedGroups, isGroupCollapsed,
-    toggleGroup, forgetGroup, load, saveSettings,
+    toggleGroup, forgetGroup, pruneGroups, load, saveSettings,
     setSidebarWidth, resizeSidebar, setSplitRatio, toggleSidebar, selectSidebarView, toast, dismissToast,
   };
 });

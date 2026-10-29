@@ -4,6 +4,7 @@ const api = vi.hoisted(() => ({ getSettings: vi.fn(), setSettings: vi.fn() }));
 vi.mock("../api/settings", () => api);
 
 import type { Settings } from "../types";
+import { NO_GROUP } from "../composables/connectionGroups";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "./ui";
 
 describe("ui store", () => {
@@ -108,6 +109,22 @@ describe("ui store", () => {
       ui.toggleGroup("g9");
       ui.forgetGroup("g9");
       expect(ui.collapsedGroups).toEqual([]);
+    });
+
+    it("pruneGroups olvida los ids de grupos inexistentes y conserva «Sin grupo»", async () => {
+      api.getSettings.mockResolvedValue({ ...saved, collapsedGroups: ["vivo", "muerto", NO_GROUP] });
+      const ui = useUiStore();
+      await ui.load();
+      ui.pruneGroups(["vivo"]);
+      expect(ui.collapsedGroups).toEqual(["vivo", NO_GROUP]);
+    });
+
+    it("poda igual aunque los grupos lleguen ANTES que los ajustes", async () => {
+      api.getSettings.mockResolvedValue({ ...saved, collapsedGroups: ["vivo", "muerto"] });
+      const ui = useUiStore();
+      ui.pruneGroups(["vivo"]); // connections.load() terminó primero
+      await ui.load(); // los ajustes llegan después con el id viejo
+      expect(ui.collapsedGroups).toEqual(["vivo"]);
     });
 
     it("no guarda nada si los ajustes no se llegaron a cargar", async () => {

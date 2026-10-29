@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../api/connections", () => api);
 
 import { useConnectionsStore } from "./connections";
+import { useUiStore } from "./ui";
 
 describe("connections store", () => {
   beforeEach(() => {
@@ -103,6 +104,16 @@ describe("connections store", () => {
       await s.load();
       expect(s.groupOf(s.byId.get("a"))).toBeUndefined();
       expect(s.colorOf(s.byId.get("a"))).toBe("");
+    });
+
+    it("al cargar, olvida los grupos plegados que ya no existen", async () => {
+      api.listProfiles.mockResolvedValue([]);
+      api.listDrivers.mockResolvedValue([]);
+      api.listGroups.mockResolvedValue([grp("vivo", "Prod")]);
+      const ui = useUiStore();
+      ui.collapsedGroups = ["vivo", "borrado"];
+      await useConnectionsStore().load();
+      expect(ui.collapsedGroups).toEqual(["vivo"]);
     });
 
     it("saveGroup inserta o actualiza y mantiene el orden", async () => {
