@@ -5,6 +5,7 @@ import { defineComponent, h } from "vue";
 import { i18n } from "../../i18n";
 
 const api = vi.hoisted(() => ({
+  page: vi.fn(),
   execute: vi.fn(), cancel: vi.fn(), getRows: vi.fn(), getCell: vi.fn(), rowsAsInsert: vi.fn(), releaseResult: vi.fn(), closeTab: vi.fn(),
   statementAt: vi.fn(), formatSql: vi.fn(), saveTabs: vi.fn(), loadTabs: vi.fn(),
   listProfiles: vi.fn(), listDrivers: vi.fn(), listSessions: vi.fn(), startConnect: vi.fn(),
@@ -206,6 +207,60 @@ describe("componentes de consultas", () => {
       expect(w.findAll('[role="tab"]').map((t) => t.text())).toEqual(["Resultado 1", "Mensajes"]);
       expect(w.findAll('[role="grid"]')).toHaveLength(1);
       expect(w.get('[data-testid="range"]').text()).toContain("1");
+    });
+
+    describe("paginación por cursor", () => {
+      const paging = (over: Record<string, unknown> = {}) => ({ mode: "keyset", reason: "", pageSize: 20, hasNext: true, hasPrev: false, page: 1, keyColumns: ["id"], warning: "", estimated: 0, ...over });
+      async function paged(over: Record<string, unknown> = {}) {
+        const p = await pane();
+        await run(p);
+        const s = stmt(0, { rowCount: 1, paging: paging(over) });
+        p.results.handleStatement({ queryId: "q1", result: s });
+        p.results.handleDone({ queryId: "q1", results: [s], elapsedMs: 1, database: "" });
+        const w = p.mount();
+        await flushPromises();
+        return { ...p, w };
+      }
+
+      it("pinta los botones según HasPrev/HasNext y el rango absoluto con la página", async () => {
+        const { w } = await paged({ page: 3, hasPrev: true, estimated: 5_000 });
+        expect(w.get('[data-testid="range"]').text()).toMatch(/Filas 41–41 · Página 3 · ≈ 5[.,]000 filas/);
+        expect(w.get('[data-testid="page-first"]').attributes("disabled")).toBeUndefined();
+        expect(w.get('[data-testid="page-next"]').attributes("disabled")).toBeUndefined();
+        const { w: first } = await paged();
+        expect(first.get('[data-testid="page-prev"]').attributes("disabled")).toBeDefined();
+        expect(first.get('[data-testid="page-first"]').attributes("disabled")).toBeDefined();
+        const { w: lastPage } = await paged({ hasNext: false, hasPrev: true });
+        expect(lastPage.get('[data-testid="page-next"]').attributes("disabled")).toBeDefined();
+        expect(lastPage.get('[data-testid="page-last"]').attributes("disabled")).toBeDefined();
+      });
+
+      it("cada botón pide su dirección a Go", async () => {
+        const { w, results, id } = await paged({ page: 2, hasPrev: true });
+        api.page.mockResolvedValue(stmt(0, { paging: paging({ page: 3, hasPrev: true }) }));
+        for (const [testid, dir] of [["page-next", "next"], ["page-prev", "prev"], ["page-first", "first"], ["page-last", "last"]] as const) {
+          api.page.mockClear();
+          await w.get(`[data-testid="${testid}"]`).trigger("click");
+          await flushPromises();
+          expect(api.page).toHaveBeenCalledWith({ queryId: "q1", stmtIndex: 0, direction: dir, column: "" });
+        }
+        expect(results.of(id).pageSeq).toBe(4);
+      });
+
+      it("sin paginación (none) no hay botones y se explica el motivo; el aviso de índice se ve", async () => {
+        const { w } = await paged({ mode: "none", reason: "multi_table", hasNext: false });
+        expect(w.find('[data-testid="paging"]').exists()).toBe(false);
+        expect(w.get('[data-testid="paging-none"]').text()).toContain("JOIN");
+        const { w: noIdx } = await paged({ warning: "no_index" });
+        expect(noIdx.get('[data-testid="paging-no-index"]').text()).toContain("Sin índice");
+      });
+
+      it("con tie_at_edge el avance queda bloqueado y se avisa", async () => {
+        const { w } = await paged({ mode: "approx", warning: "tie_at_edge" });
+        expect(w.get('[data-testid="page-next"]').attributes("disabled")).toBeDefined();
+        expect(w.find('[data-testid="paging-tie"]').exists()).toBe(true);
+        expect(w.find('[data-testid="paging-approx"]').exists()).toBe(true);
+      });
     });
 
     it("un resultado vacío dice '0 filas'; una sentencia sin filas resume lo afectado", async () => {

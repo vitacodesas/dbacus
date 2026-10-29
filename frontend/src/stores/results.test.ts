@@ -2,10 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import type { Cell, StatementResult } from "../types";
 
-const api = vi.hoisted(() => ({ execute: vi.fn(), cancel: vi.fn(), getRows: vi.fn(), getCell: vi.fn(), releaseResult: vi.fn(), closeTab: vi.fn() }));
+const api = vi.hoisted(() => ({ page: vi.fn(), execute: vi.fn(), cancel: vi.fn(), getRows: vi.fn(), getCell: vi.fn(), releaseResult: vi.fn(), closeTab: vi.fn() }));
 vi.mock("../api/queries", () => api);
+const editsApi = vi.hoisted(() => ({ getEditInfo: vi.fn(), discardEdits: vi.fn() }));
+vi.mock("../api/edits", () => editsApi);
 
 import { MAX_CACHED_WINDOWS, WINDOW, useResultsStore } from "./results";
+import { useEditsStore } from "./edits";
+import { useUiStore } from "./ui";
 
 const TAB = "tab1";
 const stmt = (index: number, over: Partial<StatementResult> = {}): StatementResult =>
@@ -214,6 +218,129 @@ describe("results store", () => {
       const rows = await s.fetchRange(TAB, 0, 0, 2500);
       expect(rows).toHaveLength(2500);
       expect(api.getRows.mock.calls.map((c) => [c[2], c[3]])).toEqual([[0, 1000], [1000, 1000], [2000, 500]]);
+    });
+  });
+
+  describe("paginación por cursor (spec 18)", () => {
+    const pg = (over: Record<string, unknown> = {}) => ({ mode: "keyset", reason: "", pageSize: 20, hasNext: true, hasPrev: false, page: 1, keyColumns: ["id"], warning: "", estimated: 0, ...over });
+    const paged = (over: Record<string, unknown> = {}) => stmt(0, { rowCount: 20, paging: pg(over) } as Partial<StatementResult>);
+    async function ready(s: ReturnType<typeof useResultsStore>, first = paged()) {
+      await start(s);
+      s.handleDone({ queryId: "q1", results: [first], elapsedMs: 1, database: "app" });
+    }
+
+    it("sustituye la sentencia, sube pageSeq y vacía las ventanas", async () => {
+      const s = useResultsStore();
+      await ready(s);
+      api.getRows.mockResolvedValue({ offset: 0, rows: rowsOf(0, 20), total: 20, complete: true });
+      s.rowAt(TAB, 0, 0);
+      await flush();
+      expect(s.rowAt(TAB, 0, 0)).toBeDefined();
+      api.page.mockResolvedValue(paged({ page: 2, hasPrev: true }));
+      await s.page(TAB, 0, "next");
+      expect(api.page).toHaveBeenCalledWith({ queryId: "q1", stmtIndex: 0, direction: "next", column: "" });
+      expect(s.of(TAB).pageSeq).toBe(1);
+      expect(s.pagingOf(TAB, 0)).toMatchObject({ page: 2, hasPrev: true });
+      expect(s.paging[TAB]).toBe(false);
+      api.getRows.mockReturnValue(new Promise(() => {}));
+      expect(s.rowAt(TAB, 0, 0)).toBeUndefined(); // la caché de la página anterior ya no está
+    });
+
+    it("una ventana pedida antes del cambio de página no se guarda cuando llega después", async () => {
+      const s = useResultsStore();
+      await ready(s);
+      let late!: (v: unknown) => void;
+      api.getRows.mockReturnValue(new Promise((r) => (late = r)));
+      s.rowAt(TAB, 0, 0);
+      api.page.mockResolvedValue(paged({ page: 2 }));
+      await s.page(TAB, 0, "next");
+      late({ offset: 0, rows: rowsOf(900, 20), total: 20, complete: true });
+      await flush();
+      api.getRows.mockReturnValue(new Promise(() => {}));
+      expect(s.rowAt(TAB, 0, 0)).toBeUndefined();
+    });
+
+    it("con cambios pendientes pide confirmación y, si se rechaza, no llama a Go", async () => {
+      const s = useResultsStore();
+      await ready(s);
+      const edits = useEditsStore();
+      edits.infos = { "q1:0": { pending: 2 } as never };
+      const p = s.page(TAB, 0, "next");
+      await flush();
+      expect(edits.discardPrompt).toMatchObject({ tabId: TAB, count: 2 });
+      edits.answerDiscard(false);
+      await p;
+      expect(api.page).not.toHaveBeenCalled();
+      expect(s.of(TAB).pageSeq).toBe(0);
+    });
+
+    it("con cambios pendientes y confirmación los descarta antes de pedir la página", async () => {
+      const s = useResultsStore();
+      await ready(s);
+      const edits = useEditsStore();
+      edits.infos = { "q1:0": { pending: 1 } as never };
+      editsApi.discardEdits.mockResolvedValue({ pending: 0 });
+      api.page.mockResolvedValue(paged({ page: 2 }));
+      const p = s.page(TAB, 0, "next");
+      await flush();
+      edits.answerDiscard(true);
+      await p;
+      expect(editsApi.discardEdits).toHaveBeenCalledWith("q1", 0);
+      expect(api.page).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignora una segunda petición mientras hay una página en curso", async () => {
+      const s = useResultsStore();
+      await ready(s);
+      let done!: (v: unknown) => void;
+      api.page.mockReturnValue(new Promise((r) => (done = r)));
+      const first = s.page(TAB, 0, "next");
+      await s.page(TAB, 0, "next");
+      expect(api.page).toHaveBeenCalledTimes(1);
+      expect(s.paging[TAB]).toBe(true);
+      done(paged({ page: 2 }));
+      await first;
+      expect(s.paging[TAB]).toBe(false);
+    });
+
+    it("«siguiente» sin filas nuevas avisa «No hay más filas»", async () => {
+      const s = useResultsStore();
+      await ready(s);
+      api.page.mockResolvedValue(paged({ hasNext: false }));
+      await s.page(TAB, 0, "next");
+      expect(useUiStore().toasts.at(-1)?.message).toMatch(/No hay más filas|No more rows/);
+    });
+
+    it("RESULT_EXPIRED marca el resultado como caducado y otros errores avisan", async () => {
+      const s = useResultsStore();
+      await ready(s);
+      api.page.mockRejectedValue({ cause: { code: "RESULT_EXPIRED", message: "caducado", detail: "" } });
+      await s.page(TAB, 0, "next");
+      expect(s.of(TAB).expired).toBe(true);
+      s.of(TAB).expired = false;
+      api.page.mockRejectedValue({ cause: { code: "QUERY_FAILED", message: "falló", detail: "" } });
+      await s.page(TAB, 0, "prev");
+      expect(useUiStore().toasts.at(-1)?.message).toBe("falló");
+      expect(s.paging[TAB]).toBe(false);
+    });
+
+    it("no hace nada si la sentencia no tiene paginación o la ejecución no terminó", async () => {
+      const s = useResultsStore();
+      await start(s);
+      await s.page(TAB, 0, "next");
+      s.handleDone({ queryId: "q1", results: [stmt(0, { rowCount: 3 })], elapsedMs: 1, database: "app" });
+      await s.page(TAB, 0, "next");
+      expect(api.page).not.toHaveBeenCalled();
+    });
+
+    it("cancel cancela también una página en curso", async () => {
+      const s = useResultsStore();
+      await ready(s);
+      api.page.mockReturnValue(new Promise(() => {}));
+      void s.page(TAB, 0, "last");
+      await flush();
+      await s.cancel(TAB);
+      expect(api.cancel).toHaveBeenCalledWith("q1");
     });
   });
 

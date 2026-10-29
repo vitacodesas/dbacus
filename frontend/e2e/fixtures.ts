@@ -4,6 +4,8 @@ export interface MockSeed {
   profiles?: Record<string, unknown>[];
   groups?: Record<string, unknown>[];
   latencyMs?: number;
+  /** Activa la paginación por cursor simulada (spec 18). */
+  paging?: boolean;
 }
 
 /** Conexión de ejemplo ya guardada (el backend simulado empieza vacío en cada carga). */

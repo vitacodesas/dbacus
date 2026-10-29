@@ -7,6 +7,11 @@ type Any = any;
 interface Seed {
   profiles?: Any[];
   groups?: Any[];
+  /**
+   * Simula la paginación por cursor (spec 18) para `SELECT * FROM <tabla con clave>`. Es opt-in porque con ella activa los
+   * resultados dejan de cargarse enteros y los E2E anteriores a T12.6 dan por hecho el LIMIT automático.
+   */
+  paging?: boolean;
   /** Milisegundos de latencia simulada en cada llamada (por defecto 20). */
   latencyMs?: number;
 }
@@ -78,6 +83,8 @@ interface Run {
   // Spec 14: filas nuevas sin aplicar (col → valor), filas marcadas para borrar, y lo ya aplicado (quitadas y añadidas).
   newRows: Record<number, Map<number, Any>[]>; deleted: Record<number, Set<number>>
   removed: Record<number, number[]>; appended: Record<number, Any[][]>
+  // Spec 18: estado de la paginación simulada por sentencia (la tabla completa y la página actual).
+  pages: Record<number, { table: Any; start: number; size: number; known: boolean }>
 }
 const runs = new Map<string, Run>();
 
@@ -88,10 +95,21 @@ function planStatement(sql: string, index: number, start: number, maxRows: numbe
   if (/^(insert|update|delete|create|drop|alter)\b/.test(lower)) return { stmt: { ...base, kind: "exec", affectedRows: 3 } };
   if (/sleep\s*\(/.test(lower)) return { stmt: base, sleep: true, table: { rows: 1, cell: () => ({ v: 0 }), cols: [col("SLEEP(60)", "int")] } };
   const name = Object.keys(TABLES).find((t) => new RegExp(`\\b${t}\\b`).test(lower));
+  if (seed.paging && /^select\b.*\bjoin\b/.test(lower) && name) {
+    const t = TABLES[name];
+    const n = Math.min(t.rows, autoLimit > 0 ? autoLimit : maxRows);
+    return { tableName: name, stmt: { ...base, columns: asMeta(t.cols), rowCount: n, paging: { mode: "none", reason: "multi_table", pageSize: 0, hasNext: false, hasPrev: false, page: 0, keyColumns: null, warning: "", estimated: 0 } }, table: { ...t, rows: n } };
+  }
   if (lower.startsWith("select") && name) {
     const t = TABLES[name];
     // Como Go: LIMIT automático solo a un SELECT simple sin LIMIT; no cuenta como truncado.
     const limit = autoLimit > 0 && !/\blimit\b/.test(lower) ? autoLimit : 0;
+    if (seed.paging && autoLimit > 0 && /^select\s+\*\s+from\s+\w+\s*;?$/.test(lower) && t.cols[0]?.isPrimaryKey) {
+      const size = Math.min(maxRows, autoLimit);
+      const n = Math.min(t.rows, size);
+      const paging = { mode: "keyset", reason: "", pageSize: size, hasNext: t.rows > size, hasPrev: false, page: 1, keyColumns: [t.cols[0].name], warning: "", estimated: 0 };
+      return { tableName: name, stmt: { ...base, columns: asMeta(t.cols), rowCount: n, paging }, table: { ...t, rows: n }, page: { table: t, start: 0, size, known: true } };
+    }
     const cap = limit > 0 ? Math.min(maxRows, limit) : maxRows;
     const total = Math.min(t.rows, cap);
     return { tableName: name, stmt: { ...base, columns: asMeta(t.cols), rowCount: total, truncated: limit === 0 && t.rows > maxRows, limitApplied: limit > 0 && t.rows > limit ? limit : limit > 0 ? limit : 0 }, table: { ...t, rows: total } };
@@ -128,6 +146,7 @@ async function runQuery(queryId: string, req: Any, run: Run) {
       return;
     }
     if (plan.table) run.data[idx] = { ...plan.table, name: plan.tableName, sql: part.text.trim() };
+    if (plan.page) run.pages[idx] = plan.page;
     Events.Emit("query:statement", { queryId, result: plan.stmt });
     if (plan.sleep) {
       await new Promise<void>((resolve) => {
@@ -289,7 +308,7 @@ export const QueryService = {
         throw fail("QUERY_FAILED", "Esta conexión es de solo lectura: solo se permiten SELECT, SHOW, DESCRIBE y EXPLAIN", "readonly");
       }
       const queryId = uid("q");
-      const run: Run = { stmts: [], data: {}, canceled: false, sessionId: req.sessionId, pending: {}, newRows: {}, deleted: {}, removed: {}, appended: {} };
+      const run: Run = { stmts: [], data: {}, canceled: false, sessionId: req.sessionId, pending: {}, newRows: {}, deleted: {}, removed: {}, appended: {}, pages: {} };
       runs.set(queryId, run);
       void runQuery(queryId, req, run);
       return { queryId };
@@ -301,6 +320,31 @@ export const QueryService = {
         r.canceled = true;
         r.cancelWake?.();
       }
+    }),
+  // Spec 18: otra página de una sentencia paginada. Como Go, rechaza si hay cambios sin aplicar y sustituye el buffer.
+  Page: (req: Any) =>
+    cp(() => {
+      const run = runs.get(req.queryId);
+      const pg = run?.pages[req.stmtIndex];
+      const d = run?.data[req.stmtIndex];
+      if (!run || !pg || !d) throw fail("RESULT_EXPIRED", "El resultado ya no está en memoria");
+      if ((run.pending[req.stmtIndex]?.size ?? 0) + (run.newRows[req.stmtIndex]?.length ?? 0) + (run.deleted[req.stmtIndex]?.size ?? 0) > 0) {
+        throw fail("VALIDATION", "Hay cambios sin aplicar en esta página", "pending");
+      }
+      const total = pg.table.rows;
+      const last = Math.floor((total - 1) / pg.size) * pg.size;
+      const hasNext = pg.start + pg.size < total;
+      if (req.direction === "first") Object.assign(pg, { start: 0, known: true });
+      else if (req.direction === "last") Object.assign(pg, { start: last, known: false });
+      else if (req.direction === "next" && hasNext) pg.start += pg.size;
+      else if (req.direction === "prev" && pg.start > 0) pg.start -= pg.size;
+      const n = Math.min(pg.size, total - pg.start);
+      const base = pg.start;
+      run.data[req.stmtIndex] = { ...d, rows: n, cell: (i: number, c: number) => pg.table.cell(base + i, c) };
+      run.removed[req.stmtIndex] = [];
+      run.appended[req.stmtIndex] = [];
+      const paging = { mode: "keyset", reason: "", pageSize: pg.size, hasNext: base + pg.size < total, hasPrev: base > 0, page: pg.known ? base / pg.size + 1 : 0, keyColumns: [pg.table.cols[0].name], warning: "", estimated: 0 };
+      return { ...run.stmts[req.stmtIndex], index: req.stmtIndex, kind: "rows", columns: asMeta(pg.table.cols), rowCount: n, truncated: false, affectedRows: 0, lastInsertId: 0, warnings: 0, elapsedMs: 3, sql: d.sql ?? "", limitApplied: 0, paging };
     }),
   GetRows: (queryId: string, stmt: number, offset: number, limit: number) =>
     cp(() => {

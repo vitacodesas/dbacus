@@ -4,7 +4,9 @@ import * as api from "../api/queries";
 import { asAppError, ErrorCode } from "../api/errors";
 import { omit } from "../utils/record";
 import { useEditsStore } from "./edits";
-import type { AppError, Cell, QueryDone, QueryError, QueryProgress, QueryStarted, QueryStatement, StatementResult } from "../types";
+import { useUiStore } from "./ui";
+import { i18n } from "../i18n";
+import type { AppError, Cell, PagingInfo, QueryDone, QueryError, QueryProgress, QueryStarted, QueryStatement, StatementResult } from "../types";
 
 export type RunStatus = "idle" | "running" | "done" | "error" | "canceled";
 
@@ -27,6 +29,8 @@ export interface TabResult {
   database: string;
   /** El resultado ya no está en memoria en Go (RESULT_EXPIRED). */
   expired: boolean;
+  /** Cambia con cada página nueva de una sentencia: invalida ventanas en vuelo y remonta el grid (spec 18 §7). */
+  pageSeq: number;
 }
 
 /** Tamaño de ventana de filas que se pide a Go y cuántas ventanas se conservan por pestaña (spec 06). */
@@ -47,7 +51,7 @@ interface CachedWindow {
 
 const fresh = (over: Partial<TabResult> = {}): TabResult => ({
   queryId: null, sessionId: "", status: "idle", startedAt: 0, elapsedMs: 0, statements: [], rowCounts: {}, activeStmt: 0,
-  error: null, errorStmt: -1, errorRange: null, baseOffset: 0, database: "", expired: false, ...over,
+  error: null, errorStmt: -1, errorRange: null, baseOffset: 0, database: "", expired: false, pageSeq: 0, ...over,
 });
 
 /**
@@ -61,6 +65,8 @@ export const useResultsStore = defineStore("results", () => {
   // tabId → ("queryId:stmt:ventana" → ventana)
   const windows = new Map<string, Map<string, CachedWindow>>();
   const inFlight = new Set<string>();
+  /** Pestañas con un cambio de página en curso. */
+  const paging = ref<Record<string, boolean>>({});
   let tick = 0;
 
   const of = (tabId: string): TabResult => byTab.value[tabId] ?? fresh();
@@ -101,7 +107,47 @@ export const useResultsStore = defineStore("results", () => {
 
   async function cancel(tabId: string) {
     const r = byTab.value[tabId];
-    if (r?.status === "running" && r.queryId) await api.cancel(r.queryId);
+    if ((r?.status === "running" || paging.value[tabId]) && r?.queryId) await api.cancel(r.queryId);
+  }
+
+  const pagingOf = (tabId: string, stmt: number): PagingInfo | null => byTab.value[tabId]?.statements[stmt]?.paging ?? null;
+
+  /**
+   * Cambia de página una sentencia (spec 18 §7). Con cambios sin aplicar pide confirmación como al volver a ejecutar y los
+   * descarta antes (Go rechaza la página si siguen ahí). La página sustituye el buffer de la sentencia dentro del mismo queryId.
+   */
+  async function page(tabId: string, stmt: number, direction: "first" | "next" | "prev" | "last") {
+    const r = byTab.value[tabId];
+    const before = r?.statements[stmt]?.paging;
+    if (!r?.queryId || r.status !== "done" || !before || paging.value[tabId]) return;
+    const edits = useEditsStore();
+    if (edits.pendingFor(tabId) > 0 && !(await edits.confirmDiscard(tabId))) return;
+    const queryId = r.queryId;
+    paging.value = { ...paging.value, [tabId]: true };
+    try {
+      const res = await api.page({ queryId, stmtIndex: stmt, direction, column: "" });
+      const cur = byTab.value[tabId];
+      if (cur?.queryId !== queryId) return;
+      cur.statements[stmt] = res;
+      cur.rowCounts[stmt] = res.rowCount;
+      cur.pageSeq++;
+      dropWindows(tabId);
+      void edits.load(queryId, stmt);
+      // «Siguiente» sin filas nuevas (se borraron): Go deja la página actual y baja HasNext.
+      if (direction === "next" && before.hasNext && !res.paging?.hasNext && res.paging?.page === before.page) {
+        useUiStore().toast("info", i18n.global.t("paging.noMore"));
+      }
+    } catch (e) {
+      const err = asAppError(e);
+      if (err.code === ErrorCode.ResultExpired && byTab.value[tabId]?.queryId === queryId) {
+        byTab.value[tabId].expired = true;
+        dropWindows(tabId);
+      } else if (err.code !== ErrorCode.QueryCanceled) {
+        useUiStore().toast("error", err.message);
+      }
+    } finally {
+      paging.value = { ...paging.value, [tabId]: false };
+    }
   }
 
   const running = (tabId: string) => byTab.value[tabId]?.status === "running";
@@ -204,6 +250,7 @@ export const useResultsStore = defineStore("results", () => {
     const r = byTab.value[tabId];
     if (!r?.queryId || r.expired) return;
     const queryId = r.queryId;
+    const seq = r.pageSeq;
     const key = `${queryId}:${stmt}:${win}`;
     const flight = `${tabId}\u0001${key}`;
     const total = r.rowCounts[stmt] ?? 0;
@@ -212,7 +259,7 @@ export const useResultsStore = defineStore("results", () => {
     try {
       const res = await api.getRows(queryId, stmt, win * WINDOW, WINDOW);
       // Si mientras tanto se lanzó otra ejecución en la pestaña, esta respuesta ya no sirve.
-      if (byTab.value[tabId]?.queryId !== queryId) return;
+      if (byTab.value[tabId]?.queryId !== queryId || byTab.value[tabId].pageSeq !== seq) return;
       let cache = windows.get(tabId);
       if (!cache) windows.set(tabId, (cache = new Map()));
       const rows = (res.rows ?? []).map((row) => row ?? []);
@@ -238,6 +285,7 @@ export const useResultsStore = defineStore("results", () => {
     const cache = windows.get(tabId);
     if (!r?.queryId || !cache) return;
     const queryId = r.queryId;
+    const seq = r.pageSeq;
     const entries = [...cache.keys()].map((key) => {
       const [, stmt, win] = key.split(":");
       return { key, stmt: Number(stmt), win: Number(win) };
@@ -245,7 +293,7 @@ export const useResultsStore = defineStore("results", () => {
     await Promise.all(entries.map(async ({ key, stmt, win }) => {
       try {
         const res = await api.getRows(queryId, stmt, win * WINDOW, WINDOW);
-        if (byTab.value[tabId]?.queryId !== queryId) return;
+        if (byTab.value[tabId]?.queryId !== queryId || byTab.value[tabId].pageSeq !== seq) return;
         const rows = (res.rows ?? []).map((row) => row ?? []);
         cache.set(key, { rows, partial: !res.complete && rows.length < WINDOW, used: ++tick, deleted: new Set(res.deleted ?? []), newFrom: res.newFrom ?? -1 });
         // El total de Go incluye las filas nuevas y ya no cuenta las borradas: el grid usa ese número.
@@ -301,7 +349,7 @@ export const useResultsStore = defineStore("results", () => {
   }
 
   return {
-    byTab, version, of, tabOfQuery, running, execute, cancel,
+    byTab, version, paging, of, tabOfQuery, running, execute, cancel, page, pagingOf,
     handleStarted, handleStatement, handleProgress, handleDone, handleError,
     rowAt, rowFlags, ensureWindow, reloadCached, fetchRange, setActiveStatement, forgetTab,
   };

@@ -1,9 +1,10 @@
 // Único punto que importa QueryService (bindings generados). Ver docs/specs/02-contrato-go-vue.md.
 import { QueryService } from "../../bindings/github.com/vitacodesas/dbacus/internal/services";
-import type { ExecuteRequest, FullCell, RowWindow, StatementRange, TabState } from "../types";
+import type { ExecuteRequest, FullCell, PageRequest, StatementResult, RowWindow, StatementRange, TabState } from "../types";
 import { wrap } from "./errors";
 
 export const execute = async (req: ExecuteRequest): Promise<string> => (await wrap(QueryService.Execute(req))).queryId;
+export const page = (req: PageRequest): Promise<StatementResult> => wrap(QueryService.Page(req));
 export const cancel = (queryId: string): Promise<void> => wrap(QueryService.Cancel(queryId));
 export const getRows = (queryId: string, stmtIndex: number, offset: number, limit: number): Promise<RowWindow> =>
   wrap(QueryService.GetRows(queryId, stmtIndex, offset, limit));

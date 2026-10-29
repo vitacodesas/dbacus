@@ -110,10 +110,14 @@ Método nuevo: `QueryService.Page(req)` → `StatementResult`.
 
 ## 8. Interfaz
 - Pie del resultado: `⏮ ◀  Filas 1–20 · Página 3 ▶ ⏭` (`Página` solo si se conoce; con `Estimated`: «≈ 5,2 M filas»). `◀`/`▶` son los controles principales (los dos iconos pedidos); **`⏮`/`⏭` (primera/última) son un añadido propuesto aquí**, porque con solo `<` `>` llegar al final de una tabla grande exige recorrerla entera, y con cursor la última página cuesta una consulta. Si no se quieren, se quitan sin afectar al resto.
+- El rango del pie es el de **la página entera** (`Filas 21–40`), no el que enseña el scroll del grid; tras «Última» el número de página no se conoce y el rango es relativo a la página.
 - Botones deshabilitados según `HasPrev`/`HasNext`; con `tie_at_edge` el avance bloqueado muestra el aviso.
 - Insignias: «Paginación aproximada» (modo `approx`, con su advertencia), «Sin índice para este orden» (`no_index`), y en `none` el motivo.
 - El selector se renombra «Filas por página» (20/50/100/500/1000/Sin límite). Sigue siendo estado de UI (no se persiste en `Settings`).
 - Accesibilidad: botones con `aria-label`, estado `disabled` real, texto del rango en una región `aria-live="polite"`. Sin atajos de teclado en esta versión (Alt+←/→ choca con el historial del webview).
+- Mientras llega una página, los botones se deshabilitan y el pie muestra «Cargando página…»; el botón «Detener» de la barra la cancela (`Cancel(queryId)`).
+- `ExportDialog` recibe `paged` (HasNext o HasPrev) y propone repetir la consulta completa con el texto «Solo está cargada una página…».
+- El backend simulado de los E2E pagina solo si el seed trae `paging: true` (los E2E anteriores dan por hecho el LIMIT automático); pagina `SELECT * FROM <tabla con clave>` y marca los JOIN como `multi_table`.
 - i18n es/en con las mismas claves (exige `i18n.test.ts`).
 
 ## 9. Rendimiento (criterio central)

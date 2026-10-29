@@ -35,7 +35,7 @@ const systemDbs = computed(() => allDatabases.value.filter((d) => d.isSystem).ma
 // La base elegida en la pestaña siempre aparece, aunque aún no haya llegado la lista.
 const extraDb = computed(() => (props.tab.database && ![...userDbs.value, ...systemDbs.value].includes(props.tab.database) ? [props.tab.database] : []));
 
-const limits = computed(() => [100, 500, 1000, 0].map((v) => ({ value: v, label: v === 0 ? t("query.limitNone") : String(v) })));
+const limits = computed(() => [20, 50, 100, 500, 1000, 0].map((v) => ({ value: v, label: v === 0 ? t("query.limitNone") : String(v) })));
 const key = (combo: string) => `${modKey}${combo}`;
 </script>
 

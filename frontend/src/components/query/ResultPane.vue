@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useEditsStore } from "../../stores/edits";
 import { useResultsStore } from "../../stores/results";
 import { useUiStore } from "../../stores/ui";
-import { Download, Plus } from "lucide-vue-next";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Plus } from "lucide-vue-next";
 import ExportDialog from "../export/ExportDialog.vue";
 import BaseButton from "../ui/BaseButton.vue";
 import BaseEmptyState from "../ui/BaseEmptyState.vue";
@@ -83,10 +83,41 @@ const received = computed(() => Object.values(res.value.rowCounts).reduce((a, b)
 const exportOpen = ref(false);
 const range = ref<[number, number]>([0, 0]);
 const fmt = (n: number) => n.toLocaleString();
+const pg = computed(() => stmt.value?.paging ?? null);
+const paged = computed(() => pg.value?.mode === "keyset" || pg.value?.mode === "approx");
+const pageBusy = computed(() => !!results.paging[props.tabId]);
+function go(dir: "first" | "next" | "prev" | "last") {
+  void results.page(props.tabId, current.value, dir);
+}
+// Con página conocida, el rango es el de la página entera en filas absolutas (1–20, 21–40…), no lo que muestra el scroll;
+// tras «Última» el número de página no se conoce y el rango es relativo a la página.
+const pageText = computed(() => {
+  const p = pg.value;
+  const total = rowCount.value;
+  if (!p || !total) return "";
+  const base = p.page > 0 ? (p.page - 1) * p.pageSize : 0;
+  const parts = [t("paging.rows", { from: fmt(base + 1), to: fmt(base + total) })];
+  if (p.page > 0) parts.push(t("paging.page", { n: fmt(p.page) }));
+  if (p.estimated > 0) parts.push(t("paging.estimated", { n: fmt(p.estimated) }));
+  return parts.join(" · ");
+});
+const pagingNotes = computed(() => {
+  const p = pg.value;
+  if (!p) return [];
+  const out: { key: string; text: string; warn?: boolean }[] = [];
+  if (p.mode === "approx") out.push({ key: "approx", text: t("paging.approx") });
+  if (p.warning === "no_index") out.push({ key: "no-index", text: t("paging.noIndex"), warn: true });
+  if (p.warning === "tie_at_edge") out.push({ key: "tie", text: t("paging.tieAtEdge"), warn: true });
+  if (p.mode === "none" && p.reason) out.push({ key: "none", text: t(`paging.reasons.${p.reason}`) });
+  return out;
+});
+// Exportar siempre repite la consulta original sin límites: con paginación lo cargado es solo una página.
+const partialPage = computed(() => !!pg.value && (pg.value.hasNext || pg.value.hasPrev));
 const rangeText = computed(() => {
   const total = rowCount.value;
   if (!total) return t("query.noRows");
   const [a, b] = range.value;
+  if (paged.value) return pageText.value;
   const base = t("query.rowsRange", { from: fmt(a + 1), to: fmt(Math.min(b, total)), total: fmt(total) });
   return stmt.value?.truncated ? `${base} · ${t("query.truncated", { total: fmt(total) })}` : base;
 });
@@ -160,7 +191,7 @@ const summary = (i: number) => {
         <BaseButton v-if="showGrid && res.status !== 'running' && res.queryId" size="sm" variant="ghost" data-testid="export-open" :title="t('export.button')" @click="exportOpen = true">
           <Download class="size-3.5" />{{ t("export.button") }}
         </BaseButton>
-        <BaseButton v-if="res.status === 'running'" size="sm" variant="danger" @click="emit('cancel')">{{ t("query.stop") }}</BaseButton>
+        <BaseButton v-if="res.status === 'running' || pageBusy" size="sm" variant="danger" @click="emit('cancel')">{{ t("query.stop") }}</BaseButton>
       </div>
 
       <!-- Avisos -->
@@ -174,7 +205,7 @@ const summary = (i: number) => {
       <div class="min-h-0 flex-1">
         <ResultGrid
           v-if="showGrid && res.queryId && stmt"
-          :key="`${res.queryId}:${current}`"
+          :key="`${res.queryId}:${current}:${res.pageSeq}`"
           :tab-id="tabId"
           :query-id="res.queryId"
           :stmt-index="current"
@@ -223,7 +254,15 @@ const summary = (i: number) => {
 
       <!-- Estado del grid -->
       <footer v-if="showGrid" class="flex shrink-0 items-center gap-4 border-t border-border px-3 py-1 text-xs text-muted">
-        <span data-testid="range">{{ rangeText }}</span>
+        <span v-if="paged" class="flex shrink-0 items-center gap-0.5" role="group" :aria-label="t('paging.nav')" data-testid="paging">
+          <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasPrev || pageBusy" :aria-label="t('paging.first')" :title="t('paging.first')" data-testid="page-first" @click="go('first')"><ChevronsLeft class="size-3.5" /></BaseButton>
+          <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasPrev || pageBusy" :aria-label="t('paging.prev')" :title="t('paging.prev')" data-testid="page-prev" @click="go('prev')"><ChevronLeft class="size-3.5" /></BaseButton>
+          <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasNext || pageBusy || pg?.warning === 'tie_at_edge'" :aria-label="t('paging.next')" :title="t('paging.next')" data-testid="page-next" @click="go('next')"><ChevronRight class="size-3.5" /></BaseButton>
+          <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasNext || pageBusy" :aria-label="t('paging.last')" :title="t('paging.last')" data-testid="page-last" @click="go('last')"><ChevronsRight class="size-3.5" /></BaseButton>
+        </span>
+        <span data-testid="range" aria-live="polite">{{ rangeText }}</span>
+        <span v-if="pageBusy" class="flex items-center gap-1"><BaseSpinner class="size-3" />{{ t("paging.loading") }}</span>
+        <span v-for="n in pagingNotes" :key="n.key" class="truncate" :class="n.warn ? 'text-warning' : ''" :data-testid="`paging-${n.key}`" :title="n.text">{{ n.text }}</span>
         <span v-if="stmt?.limitApplied" class="text-warning">{{ t("query.limitApplied", { n: stmt.limitApplied }) }}</span>
         <span v-if="editNote" class="truncate" data-testid="edit-note" :title="editNote">{{ editNote }}</span>
         <span v-if="res.database" class="font-data ml-auto">{{ res.database }}</span>
@@ -235,6 +274,7 @@ const summary = (i: number) => {
       :query-id="res.queryId"
       :stmt-index="current"
       :truncated="!!stmt.truncated"
+      :paged="partialPage"
       :limit-applied="stmt.limitApplied ?? 0"
       :row-count="rowCount"
     />

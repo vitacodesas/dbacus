@@ -25,6 +25,8 @@ export type {
   SchemaInvalidated,
   ExecuteRequest,
   StatementResult,
+  PagingInfo,
+  PageRequest,
   RowWindow,
   FullCell,
   StatementRange,
