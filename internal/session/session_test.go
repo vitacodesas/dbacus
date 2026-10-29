@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/driver/fake"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/testutil/sshsrv"
-	"tabulariswails/internal/tunnel"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/driver/fake"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/testutil/sshsrv"
+	"github.com/vitacodesas/dbacus/internal/tunnel"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }

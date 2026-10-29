@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 // SettingsStore es lo que SettingsService necesita de la persistencia (lo implementa *store.Store).

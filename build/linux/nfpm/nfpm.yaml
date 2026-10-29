@@ -3,7 +3,7 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "tabularis-clon"
+name: "dbacus"
 arch: ${GOARCH}
 platform: "linux"
 version: "0.1.0"
@@ -17,12 +17,12 @@ license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/tabularis-clon"
-    dst: "/usr/local/bin/tabularis-clon"
+  - src: "./bin/dbacus"
+    dst: "/usr/local/bin/dbacus"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/tabularis-clon.png"
-  - src: "./build/linux/tabularis-clon.desktop"
-    dst: "/usr/share/applications/tabularis-clon.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/dbacus.png"
+  - src: "./build/linux/dbacus.desktop"
+    dst: "/usr/share/applications/dbacus.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

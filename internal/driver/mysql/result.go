@@ -3,8 +3,8 @@ package mysql
 import (
 	"database/sql"
 
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 type rowsResult struct {

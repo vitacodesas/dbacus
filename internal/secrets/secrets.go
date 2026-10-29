@@ -8,10 +8,14 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"tabulariswails/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/apperr"
 )
 
-const service = "tabularis-clon"
+const service = "dbacus"
+
+// legacyService es el servicio previo al renombrado (spec 15 §A). El llavero no se puede enumerar de forma
+// portable, así que los secretos se migran al leerlos; el original no se borra hasta eliminar el perfil.
+const legacyService = "tabularis-clon"
 
 type Kind string
 
@@ -50,9 +54,16 @@ func account(profileID string, kind Kind) string {
 }
 
 func (*Keyring) Get(profileID string, kind Kind) (Secret, bool, error) {
-	v, err := keyring.Get(service, account(profileID, kind))
+	acc := account(profileID, kind)
+	v, err := keyring.Get(service, acc)
 	if errors.Is(err, keyring.ErrNotFound) {
-		return "", false, nil
+		// Un fallo del servicio antiguo no debe romper la conexión: se trata como "no hay secreto".
+		old, oerr := keyring.Get(legacyService, acc)
+		if oerr != nil {
+			return "", false, nil
+		}
+		_ = keyring.Set(service, acc, old) // si falla, se reintenta en la siguiente lectura
+		return Secret(old), true, nil
 	}
 	if err != nil {
 		return "", false, unavailable(err)
@@ -68,10 +79,13 @@ func (*Keyring) Set(profileID string, kind Kind, value Secret) error {
 }
 
 func (*Keyring) Delete(profileID string, kind Kind) error {
-	err := keyring.Delete(service, account(profileID, kind))
+	acc := account(profileID, kind)
+	err := keyring.Delete(service, acc)
 	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
 		return unavailable(err)
 	}
+	// También el antiguo: si no, el secreto de un perfil borrado quedaría huérfano en el llavero.
+	_ = keyring.Delete(legacyService, acc)
 	return nil
 }
 

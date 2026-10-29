@@ -22,7 +22,7 @@ import * as $models from "./models.js";
  * AddRow añade una fila nueva vacía (todas las celdas en «DEFAULT») al final del resultado.
  */
 export function AddRow(queryID: string, stmtIndex: number): $CancellablePromise<$models.AddRowResult> {
-    return $Call.ByID(2205995259, queryID, stmtIndex);
+    return $Call.ByID(2165003596, queryID, stmtIndex);
 }
 
 /**
@@ -31,14 +31,14 @@ export function AddRow(queryID: string, stmtIndex: number): $CancellablePromise<
  * Tras el commit se releen las filas tocadas, porque triggers, valores por defecto y `ON UPDATE` pueden haberlas cambiado.
  */
 export function Apply(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.ApplyResult> {
-    return $Call.ByID(3310742094, queryID, stmtIndex);
+    return $Call.ByID(2841362071, queryID, stmtIndex);
 }
 
 /**
  * Discard descarta todos los cambios pendientes del resultado: ediciones, filas nuevas y marcas de borrado.
  */
 export function Discard(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Info> {
-    return $Call.ByID(574935152, queryID, stmtIndex);
+    return $Call.ByID(2111818277, queryID, stmtIndex);
 }
 
 /**
@@ -47,21 +47,21 @@ export function Discard(queryID: string, stmtIndex: number): $CancellablePromise
  * se marcan en el grid). Sirve de origen tanto una fila existente como una fila nueva.
  */
 export function DuplicateRows(queryID: string, stmtIndex: number, rows: number[] | null): $CancellablePromise<$models.AddRowResult> {
-    return $Call.ByID(539876770, queryID, stmtIndex, rows);
+    return $Call.ByID(457539015, queryID, stmtIndex, rows);
 }
 
 /**
  * FormatJSON da formato (sangría) a un texto JSON para el editor ampliado de celdas. No toca el servidor.
  */
 export function FormatJSON(text: string): $CancellablePromise<string> {
-    return $Call.ByID(2229656579, text);
+    return $Call.ByID(957714296, text);
 }
 
 /**
  * GetEditInfo dice si el resultado `stmtIndex` de la ejecución `queryID` se puede editar y qué columnas.
  */
 export function GetEditInfo(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Info> {
-    return $Call.ByID(1354692286, queryID, stmtIndex);
+    return $Call.ByID(3532527819, queryID, stmtIndex);
 }
 
 /**
@@ -69,14 +69,14 @@ export function GetEditInfo(queryID: string, stmtIndex: number): $CancellablePro
  * marcada se pierden. Se captura la clave y los valores verificables para detectar, al aplicar, que otra sesión la cambió.
  */
 export function MarkDelete(queryID: string, stmtIndex: number, rows: number[] | null): $CancellablePromise<edit$0.Info> {
-    return $Call.ByID(917768916, queryID, stmtIndex, rows);
+    return $Call.ByID(3664995023, queryID, stmtIndex, rows);
 }
 
 /**
  * Preview devuelve el SQL de cada fila modificada, con los valores a la vista, para que el usuario lo revise antes de aplicar.
  */
 export function Preview(queryID: string, stmtIndex: number): $CancellablePromise<edit$0.Preview[] | null> {
-    return $Call.ByID(269030410, queryID, stmtIndex);
+    return $Call.ByID(1687514987, queryID, stmtIndex);
 }
 
 /**
@@ -85,19 +85,19 @@ export function Preview(queryID: string, stmtIndex: number): $CancellablePromise
  * (índice tras la última real), da valor a esa celda de la fila nueva.
  */
 export function Stage(queryID: string, stmtIndex: number, row: number, col: number, v: edit$0.Value): $CancellablePromise<edit$0.Info> {
-    return $Call.ByID(458528560, queryID, stmtIndex, row, col, v);
+    return $Call.ByID(960929673, queryID, stmtIndex, row, col, v);
 }
 
 /**
  * UnmarkDelete quita la marca de borrado de las filas indicadas.
  */
 export function UnmarkDelete(queryID: string, stmtIndex: number, rows: number[] | null): $CancellablePromise<edit$0.Info> {
-    return $Call.ByID(4024706379, queryID, stmtIndex, rows);
+    return $Call.ByID(3942961476, queryID, stmtIndex, rows);
 }
 
 /**
  * Unstage retira el cambio pendiente de una celda; en una fila nueva la devuelve a «DEFAULT».
  */
 export function Unstage(queryID: string, stmtIndex: number, row: number, col: number): $CancellablePromise<edit$0.Info> {
-    return $Call.ByID(3159901181, queryID, stmtIndex, row, col);
+    return $Call.ByID(2726922496, queryID, stmtIndex, row, col);
 }

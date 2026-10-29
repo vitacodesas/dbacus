@@ -1,5 +1,5 @@
 // Único punto que importa SchemaService (bindings generados). Ver docs/specs/02-contrato-go-vue.md.
-import { SchemaService } from "../../bindings/tabulariswails/internal/services";
+import { SchemaService } from "../../bindings/github.com/vitacodesas/dbacus/internal/services";
 import type { CompletionCatalog, Database, Table, TableDetail } from "../types";
 import { wrap } from "./errors";
 

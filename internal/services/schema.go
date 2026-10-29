@@ -7,10 +7,10 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/schemacache"
-	"tabulariswails/internal/session"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/schemacache"
+	"github.com/vitacodesas/dbacus/internal/session"
 )
 
 // SchemaInvalidated avisa a Vue de que debe volver a leer el esquema (spec 02).

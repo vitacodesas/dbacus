@@ -1,5 +1,5 @@
 // Único punto que importa HistoryService (bindings generados). Ver docs/specs/07-historial-y-exportacion.md.
-import { HistoryService } from "../../bindings/tabulariswails/internal/services";
+import { HistoryService } from "../../bindings/github.com/vitacodesas/dbacus/internal/services";
 import type { HistoryEntry, HistoryQuery } from "../types";
 import { wrap } from "./errors";
 

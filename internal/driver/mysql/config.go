@@ -13,9 +13,9 @@ import (
 
 	gomysql "github.com/go-sql-driver/mysql"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 const defaultDialTimeout = 10 * time.Second

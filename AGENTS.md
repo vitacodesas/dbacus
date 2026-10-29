@@ -1,6 +1,6 @@
 # AGENTS.md — Reglas para agentes ejecutores
 
-Clon funcional de Tabularis (cliente SQL de escritorio). **Fuente de verdad: `docs/specs/`.** Si el código y un spec difieren, el spec manda; si el spec está mal, corrígelo en el mismo PR y di por qué.
+Dbacus: cliente SQL de escritorio, inspirado en Tabularis. **Fuente de verdad: `docs/specs/`.** Si el código y un spec difieren, el spec manda; si el spec está mal, corrígelo en el mismo PR y di por qué.
 
 ## Stack (no cambiar sin ADR)
 - Backend: Go (≥1.26) + **Wails 3 (v3.0.0 estable), versión exacta pineada en `go.mod`** (ver `docs/specs/adr/ADR-001`). Concurrencia con goroutines + `context`.
@@ -48,11 +48,11 @@ docs/specs/                  # specs y ADRs
 - Requisitos: Go ≥1.26, Node ≥24, `wails3` v3.0.0 (`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0`), Docker para integración.
 - Dev (hot reload): `wails3 dev` · Build: `wails3 build` (binario en `bin/`).
 - Bindings TS (tras cambiar servicios Go o eventos): `wails3 generate bindings -clean=true -ts -i`.
-- Go: `go vet ./... && go test -race ./...` · integración (Docker): `colima start`, luego `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock go test -tags=integration ./...`. Imágenes por defecto: mysql:8.0, mysql:8.4, mariadb:10.11 (`TABULARIS_IT_IMAGES` las cambia).
+- Go: `go vet ./... && go test -race ./...` · integración (Docker): `colima start`, luego `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock go test -tags=integration ./...`. Imágenes por defecto: mysql:8.0, mysql:8.4, mariadb:10.11 (`DBACUS_IT_IMAGES` las cambia).
 - Front (`cd frontend`): `npm run typecheck && npm run lint && npm test`.
 - Todo junto: `scripts/smoke.sh`. En macOS, `go vet`/`go test` sueltos imprimen avisos `ld: warning … built for newer 'macOS'`: son inocuos; `export MACOSX_DEPLOYMENT_TARGET=12.0 CGO_CFLAGS=-mmacosx-version-min=12.0 CGO_LDFLAGS=-mmacosx-version-min=12.0` los quita (smoke.sh ya lo hace; `wails3 build` también).
 - E2E de UI (backend simulado): `cd frontend && PW_CHANNEL=chrome npm run test:e2e` (usa el Chrome instalado; sin `PW_CHANNEL`, `npx playwright install chromium` primero). Rendimiento: `scripts/bench.sh [--integration]`; smoke manual en app real: `docs/smoke-manual.md`.
-- Pruebas de UI sin ventana nativa: `wails3 task build:server DEV=true && ./bin/tabularis-clon-server` y abrir `http://localhost:8080` (no soporta diálogos nativos).
+- Pruebas de UI sin ventana nativa: `wails3 task build:server DEV=true && ./bin/dbacus-server` y abrir `http://localhost:8080` (no soporta diálogos nativos).
 
 ## Notas de dependencias
 - **Monaco** está fijado en `0.56.0` y `dompurify` se fuerza a `3.4.17` con `overrides` en `frontend/package.json`: ambas versiones de Monaco (0.56 y 0.57) arrastran un `dompurify` con vulnerabilidades críticas y `npm audit` debe seguir limpio (spec 10). Al actualizar Monaco, comprobar `npm audit` antes de quitar el override.

@@ -14,9 +14,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/results"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/results"
 )
 
 // Value es lo que el usuario escribe en una celda: NULL explícito o texto (la cadena vacía NO es NULL).

@@ -21,10 +21,10 @@ const (
 	Database = "testdb"
 )
 
-// Images son las imágenes del matrix por defecto; se pueden sobrescribir con TABULARIS_IT_IMAGES="mysql:8.0,mariadb:10.11".
+// Images son las imágenes del matrix por defecto; se pueden sobrescribir con DBACUS_IT_IMAGES="mysql:8.0,mariadb:10.11".
 // MySQL 5.7 no tiene imagen arm64: añádela a mano (emulada) si hace falta.
 func Images() []string {
-	if v := os.Getenv("TABULARIS_IT_IMAGES"); v != "" {
+	if v := os.Getenv("DBACUS_IT_IMAGES"); v != "" {
 		return strings.Split(v, ",")
 	}
 	return []string{"mysql:8.0", "mysql:8.4", "mariadb:10.11"}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 func col(name, typ string, mut ...func(*model.Column)) model.Column {

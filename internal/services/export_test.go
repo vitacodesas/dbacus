@@ -10,11 +10,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/driver/fake"
-	"tabulariswails/internal/export"
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/driver/fake"
+	"github.com/vitacodesas/dbacus/internal/export"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 type exportEnv struct {

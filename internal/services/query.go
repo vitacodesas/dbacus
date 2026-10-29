@@ -12,13 +12,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/results"
-	"tabulariswails/internal/session"
-	"tabulariswails/internal/sqlfmt"
-	"tabulariswails/internal/sqlsplit"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/results"
+	"github.com/vitacodesas/dbacus/internal/session"
+	"github.com/vitacodesas/dbacus/internal/sqlfmt"
+	"github.com/vitacodesas/dbacus/internal/sqlsplit"
 )
 
 const (

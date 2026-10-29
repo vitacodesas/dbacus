@@ -16,8 +16,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/export"
-	"tabulariswails/internal/testutil/mysqlbox"
+	"github.com/vitacodesas/dbacus/internal/export"
+	"github.com/vitacodesas/dbacus/internal/testutil/mysqlbox"
 )
 
 func TestExportServiceIntegration(t *testing.T) {

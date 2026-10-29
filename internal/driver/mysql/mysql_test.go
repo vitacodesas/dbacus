@@ -24,9 +24,9 @@ import (
 	gomysql "github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/apperr"
-	drv "tabulariswails/internal/driver"
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	drv "github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 func code(t *testing.T, err error) string {

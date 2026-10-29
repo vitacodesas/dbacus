@@ -56,10 +56,10 @@ function applyMarker() {
   const m = models.get(props.tabId);
   if (!m) return;
   const mk = props.marker;
-  if (!mk) return monaco.editor.setModelMarkers(m, "tabularis", []);
+  if (!mk) return monaco.editor.setModelMarkers(m, "dbacus", []);
   const a = m.getPositionAt(mk.startOffset);
   const b = m.getPositionAt(mk.endOffset);
-  monaco.editor.setModelMarkers(m, "tabularis", [
+  monaco.editor.setModelMarkers(m, "dbacus", [
     { severity: monaco.MarkerSeverity.Error, message: mk.message, startLineNumber: a.lineNumber, startColumn: a.column, endLineNumber: b.lineNumber, endColumn: b.column },
   ]);
 }
@@ -85,9 +85,9 @@ onMounted(() => {
   });
 
   const mod = monaco.KeyMod.CtrlCmd;
-  editor.addAction({ id: "tabularis.run", label: "Ejecutar todo", keybindings: [mod | monaco.KeyCode.Enter], run: () => emit("run") });
-  editor.addAction({ id: "tabularis.runSelection", label: "Ejecutar selección o sentencia actual", keybindings: [mod | monaco.KeyMod.Shift | monaco.KeyCode.Enter], run: () => emit("runSelection") });
-  editor.addAction({ id: "tabularis.format", label: "Formatear SQL", keybindings: [mod | monaco.KeyMod.Alt | monaco.KeyCode.KeyL], contextMenuGroupId: "1_modification", run: () => emit("format") });
+  editor.addAction({ id: "dbacus.run", label: "Ejecutar todo", keybindings: [mod | monaco.KeyCode.Enter], run: () => emit("run") });
+  editor.addAction({ id: "dbacus.runSelection", label: "Ejecutar selección o sentencia actual", keybindings: [mod | monaco.KeyMod.Shift | monaco.KeyCode.Enter], run: () => emit("runSelection") });
+  editor.addAction({ id: "dbacus.format", label: "Formatear SQL", keybindings: [mod | monaco.KeyMod.Alt | monaco.KeyCode.KeyL], contextMenuGroupId: "1_modification", run: () => emit("format") });
 
   show(props.tabId);
 });

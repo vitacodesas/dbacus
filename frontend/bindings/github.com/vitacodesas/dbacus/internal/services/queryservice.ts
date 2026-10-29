@@ -23,50 +23,50 @@ import * as $models from "./models.js";
  * basta se cancela el contexto, que el driver resuelve cerrando la conexión. Es idempotente.
  */
 export function Cancel(queryID: string): $CancellablePromise<void> {
-    return $Call.ByID(3874278806, queryID);
+    return $Call.ByID(159876559, queryID);
 }
 
 /**
  * CloseTab cancela lo que la pestaña esté ejecutando, libera sus resultados y devuelve su conexión al pool.
  */
 export function CloseTab(tabID: string): $CancellablePromise<void> {
-    return $Call.ByID(4225558199, tabID);
+    return $Call.ByID(2094322006, tabID);
 }
 
 /**
  * Execute valida y lanza la ejecución; devuelve de inmediato y el trabajo sigue en una goroutine.
  */
 export function Execute(req: $models.ExecuteRequest): $CancellablePromise<$models.ExecuteResponse> {
-    return $Call.ByID(3924382195, req);
+    return $Call.ByID(938761236, req);
 }
 
 /**
  * FormatSQL formatea el script (cambia espacios y mayúsculas de palabras reservadas, nada más).
  */
 export function FormatSQL(sql: string): $CancellablePromise<string> {
-    return $Call.ByID(534640993, sql);
+    return $Call.ByID(388187306, sql);
 }
 
 /**
  * GetCell devuelve el valor completo de una celda (textos/binarios truncados en la ventana).
  */
 export function GetCell(queryID: string, stmtIndex: number, row: number, col: number): $CancellablePromise<$models.FullCell> {
-    return $Call.ByID(895356412, queryID, stmtIndex, row, col);
+    return $Call.ByID(3619438975, queryID, stmtIndex, row, col);
 }
 
 export function GetRows(queryID: string, stmtIndex: number, offset: number, limit: number): $CancellablePromise<$models.RowWindow> {
-    return $Call.ByID(988261509, queryID, stmtIndex, offset, limit);
+    return $Call.ByID(2287183470, queryID, stmtIndex, offset, limit);
 }
 
 export function LoadTabs(): $CancellablePromise<model$0.TabState[] | null> {
-    return $Call.ByID(222278076);
+    return $Call.ByID(3293876437);
 }
 
 /**
  * ReleaseResult libera la memoria de una ejecución que la UI ya no muestra.
  */
 export function ReleaseResult(queryID: string): $CancellablePromise<void> {
-    return $Call.ByID(3489242280, queryID);
+    return $Call.ByID(2153621035, queryID);
 }
 
 /**
@@ -74,19 +74,19 @@ export function ReleaseResult(queryID: string): $CancellablePromise<void> {
  * literales escapados por el driver de la sesión. El front nunca arma SQL.
  */
 export function RowsAsInsert(queryID: string, stmtIndex: number, offset: number, limit: number, table: string): $CancellablePromise<string> {
-    return $Call.ByID(4225070300, queryID, stmtIndex, offset, limit, table);
+    return $Call.ByID(1446391057, queryID, stmtIndex, offset, limit, table);
 }
 
 /**
  * SaveTabs / LoadTabs persisten las pestañas abiertas (spec 06).
  */
 export function SaveTabs(tabs: model$0.TabState[] | null): $CancellablePromise<void> {
-    return $Call.ByID(499777217, tabs);
+    return $Call.ByID(318001728, tabs);
 }
 
 /**
  * StatementAt devuelve la sentencia bajo el cursor (offset en UTF-16, como Monaco).
  */
 export function StatementAt(sql: string, offset: number): $CancellablePromise<$models.StatementRange> {
-    return $Call.ByID(3850168364, sql, offset);
+    return $Call.ByID(3367315911, sql, offset);
 }

@@ -12,10 +12,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/testutil/mysqlbox"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/testutil/mysqlbox"
 )
 
 func openPool(t *testing.T, in mysqlbox.Instance, mut func(*driver.ConnConfig)) driver.Pool {

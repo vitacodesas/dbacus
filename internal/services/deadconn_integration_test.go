@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/testutil/mysqlbox"
+	"github.com/vitacodesas/dbacus/internal/testutil/mysqlbox"
 )
 
 // Reproduce el fallo «sql: connection is already closed»: la conexión que la sesión tiene guardada para la pestaña está

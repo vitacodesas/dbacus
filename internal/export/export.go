@@ -15,9 +15,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/results"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/results"
 )
 
 const (

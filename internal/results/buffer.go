@@ -6,8 +6,8 @@ import (
 	"sort"
 	"sync"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 // ErrExpired indica que el resultado ya no está en memoria (liberado o expulsado por el límite global).

@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/results"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/results"
 )
 
 func mcol(dataType, columnType string, nullable bool) model.Column {

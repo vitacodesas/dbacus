@@ -6,7 +6,7 @@ Preparación: MySQL 8.x local (p. ej. `docker run --rm --tmpfs /var/lib/mysql -e
 
 ## Conexiones y secretos
 - [ ] Crear conexión con «Guardar contraseña» activo → **Probar** muestra todos los pasos en verde.
-- [ ] Cerrar y reabrir la app: la conexión sigue, conecta sin pedir contraseña (llavero del SO: en macOS aparece una entrada de «Tabularis Clon» en Acceso a Llaveros).
+- [ ] Cerrar y reabrir la app: la conexión sigue, conecta sin pedir contraseña (llavero del SO: en macOS aparece una entrada de «dbacus» en Acceso a Llaveros).
 - [ ] Con «Guardar contraseña» desactivado, al conectar pide la contraseña y no queda nada en el llavero.
 - [ ] Eliminar la conexión borra su entrada del llavero.
 - [ ] Contraseña incorrecta → mensaje claro (`AUTH_FAILED`), sin la contraseña en `~/Library/Logs/…` (buscar con `grep`).

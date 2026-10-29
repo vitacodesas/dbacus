@@ -9,12 +9,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/schemacache"
-	"tabulariswails/internal/secrets"
-	"tabulariswails/internal/tunnel"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/schemacache"
+	"github.com/vitacodesas/dbacus/internal/secrets"
+	"github.com/vitacodesas/dbacus/internal/tunnel"
 )
 
 const (

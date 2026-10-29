@@ -1,7 +1,7 @@
 import type es from "./es";
 
 const en: typeof es = {
-  app: { name: "Tabularis Clone" },
+  app: { name: "Dbacus" },
   common: { cancel: "Cancel", confirm: "Confirm", close: "Close", save: "Save", delete: "Delete", loading: "Loading…" },
   activity: { connections: "Connections", schema: "Schema", history: "History", settings: "Settings" },
   sidebar: {
@@ -12,7 +12,7 @@ const en: typeof es = {
     toggle: "Show or hide the sidebar",
   },
   welcome: {
-    title: "Welcome to Tabularis Clone",
+    title: "Welcome to Dbacus",
     description: "Create a connection to explore your databases and run queries.",
     newConnection: "New connection",
     soon: "Coming soon",

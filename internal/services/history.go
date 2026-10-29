@@ -7,9 +7,9 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/store"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/store"
 )
 
 // HistoryAdded avisa a Vue de que hay entradas nuevas en el historial de un perfil (spec 07).

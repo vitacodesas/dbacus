@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"tabulariswails/internal/sqlsplit"
+	"github.com/vitacodesas/dbacus/internal/sqlsplit"
 )
 
 const indent = "  "

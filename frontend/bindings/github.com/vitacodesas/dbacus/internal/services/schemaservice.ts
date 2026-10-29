@@ -15,34 +15,34 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as model$0 from "../model/models.js";
 
 export function DescribeTable(sessionID: string, db: string, table: string): $CancellablePromise<model$0.TableDetail> {
-    return $Call.ByID(2550424660, sessionID, db, table);
+    return $Call.ByID(4215778625, sessionID, db, table);
 }
 
 /**
  * GetCompletionCatalog devuelve tablas y columnas de una base para el autocompletado del editor.
  */
 export function GetCompletionCatalog(sessionID: string, db: string): $CancellablePromise<model$0.CompletionCatalog> {
-    return $Call.ByID(941326924, sessionID, db);
+    return $Call.ByID(283786663, sessionID, db);
 }
 
 export function ListDatabases(sessionID: string): $CancellablePromise<model$0.Database[] | null> {
-    return $Call.ByID(3617270629, sessionID);
+    return $Call.ByID(3148058852, sessionID);
 }
 
 export function ListTables(sessionID: string, db: string): $CancellablePromise<model$0.Table[] | null> {
-    return $Call.ByID(1346721952, sessionID, db);
+    return $Call.ByID(747249775, sessionID, db);
 }
 
 /**
  * Refresh invalida la caché (de una base o de toda la sesión si db == "") y avisa a Vue.
  */
 export function Refresh(sessionID: string, db: string): $CancellablePromise<void> {
-    return $Call.ByID(3860758668, sessionID, db);
+    return $Call.ByID(2656099757, sessionID, db);
 }
 
 /**
  * SelectStatement arma un SELECT * con los identificadores escapados por el driver (el front nunca arma SQL).
  */
 export function SelectStatement(sessionID: string, db: string, table: string, limit: number): $CancellablePromise<string> {
-    return $Call.ByID(223405094, sessionID, db, table, limit);
+    return $Call.ByID(761952455, sessionID, db, table, limit);
 }

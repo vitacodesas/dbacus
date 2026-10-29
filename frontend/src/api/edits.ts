@@ -1,5 +1,5 @@
 // Único punto que importa EditService (bindings generados). Ver docs/specs/13-edicion-de-celdas.md.
-import { EditService } from "../../bindings/tabulariswails/internal/services";
+import { EditService } from "../../bindings/github.com/vitacodesas/dbacus/internal/services";
 import type { EditAddRowResult, EditApplyResult, EditInfo, EditPreview, EditValue } from "../types";
 import { wrap } from "./errors";
 

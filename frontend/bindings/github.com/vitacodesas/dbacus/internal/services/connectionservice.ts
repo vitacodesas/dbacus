@@ -19,56 +19,56 @@ import * as model$0 from "../model/models.js";
 import * as $models from "./models.js";
 
 export function Clone(id: string): $CancellablePromise<model$0.ConnectionProfile> {
-    return $Call.ByID(97523307, id);
+    return $Call.ByID(657596862, id);
 }
 
 /**
  * Connect abre una sesión. overrides aporta secretos no guardados (modo "pedir cada vez").
  */
 export function Connect(id: string, overrides: $models.ConnectionSecrets | null): $CancellablePromise<$models.SessionInfo> {
-    return $Call.ByID(2715259292, id, overrides);
+    return $Call.ByID(930923933, id, overrides);
 }
 
 /**
  * Delete elimina el perfil, cierra sus sesiones y borra sus secretos; el historial solo si deleteHistory.
  */
 export function Delete(id: string, deleteHistory: boolean): $CancellablePromise<void> {
-    return $Call.ByID(3481303769, id, deleteHistory);
+    return $Call.ByID(4048725486, id, deleteHistory);
 }
 
 export function Disconnect(sessionID: string): $CancellablePromise<void> {
-    return $Call.ByID(2411114064, sessionID);
+    return $Call.ByID(2974422943, sessionID);
 }
 
 export function Get(id: string): $CancellablePromise<model$0.ConnectionProfile> {
-    return $Call.ByID(949725114, id);
+    return $Call.ByID(1104620235, id);
 }
 
 export function List(): $CancellablePromise<model$0.ConnectionProfile[] | null> {
-    return $Call.ByID(1625652826);
+    return $Call.ByID(1180751893);
 }
 
 export function ListDrivers(): $CancellablePromise<$models.DriverInfo[] | null> {
-    return $Call.ByID(345077973);
+    return $Call.ByID(4090837844);
 }
 
 export function ListSessions(): $CancellablePromise<$models.SessionInfo[] | null> {
-    return $Call.ByID(3117092599);
+    return $Call.ByID(3934137596);
 }
 
 export function ParseDSN(dsn: string): $CancellablePromise<$models.ParsedDSN> {
-    return $Call.ByID(2147640430, dsn);
+    return $Call.ByID(3543425657, dsn);
 }
 
 export function PickFile(title: string): $CancellablePromise<string> {
-    return $Call.ByID(1494461281, title);
+    return $Call.ByID(4005340122, title);
 }
 
 /**
  * Save crea (ID vacío) o actualiza un perfil y aplica los cambios de secretos.
  */
 export function Save(profile: model$0.ConnectionProfile, sec: $models.ConnectionSecrets): $CancellablePromise<model$0.ConnectionProfile> {
-    return $Call.ByID(2955784171, profile, sec);
+    return $Call.ByID(2651213916, profile, sec);
 }
 
 /**
@@ -76,12 +76,12 @@ export function Save(profile: model$0.ConnectionProfile, sec: $models.Connection
  * conexión viajan dentro del TestResult con el paso que falló. Cancelable y con tope de 15 s.
  */
 export function Test(profile: model$0.ConnectionProfile, sec: $models.ConnectionSecrets): $CancellablePromise<$models.TestResult> {
-    return $Call.ByID(496252054, profile, sec);
+    return $Call.ByID(3094121089, profile, sec);
 }
 
 /**
  * TrustHostKey confía en la huella mostrada tras SSH_HOSTKEY_UNKNOWN.
  */
 export function TrustHostKey(host: string, port: number, fingerprint: string): $CancellablePromise<void> {
-    return $Call.ByID(1289681685, host, port, fingerprint);
+    return $Call.ByID(1208527706, host, port, fingerprint);
 }

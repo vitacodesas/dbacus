@@ -7,7 +7,7 @@ import type { Events } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import type * as services$0 from "../../../../../tabulariswails/internal/services/models.js";
+import type * as services$0 from "../../../../vitacodesas/dbacus/internal/services/models.js";
 
 declare module "@wailsio/runtime" {
     namespace Events {

@@ -16,7 +16,7 @@ export type {
   TabState,
   HistoryEntry,
   Settings,
-} from "../../bindings/tabulariswails/internal/model";
+} from "../../bindings/github.com/vitacodesas/dbacus/internal/model";
 export type {
   ConnectionSecrets,
   SessionInfo,
@@ -45,7 +45,7 @@ export type {
   ExportDone,
   EditApplied,
   AddRowResult as EditAddRowResult,
-} from "../../bindings/tabulariswails/internal/services";
+} from "../../bindings/github.com/vitacodesas/dbacus/internal/services";
 export type {
   Info as EditInfo,
   Column as EditColumn,
@@ -53,7 +53,7 @@ export type {
   Preview as EditPreview,
   ApplyResult as EditApplyResult,
   Conflict as EditConflict,
-} from "../../bindings/tabulariswails/internal/edit";
-export type { AppError } from "../../bindings/tabulariswails/internal/apperr";
-export type { Cell } from "../../bindings/tabulariswails/internal/results";
-export type { Options as ExportOptions } from "../../bindings/tabulariswails/internal/export";
+} from "../../bindings/github.com/vitacodesas/dbacus/internal/edit";
+export type { AppError } from "../../bindings/github.com/vitacodesas/dbacus/internal/apperr";
+export type { Cell } from "../../bindings/github.com/vitacodesas/dbacus/internal/results";
+export type { Options as ExportOptions } from "../../bindings/github.com/vitacodesas/dbacus/internal/export";

@@ -15,7 +15,7 @@ const CSP = [
   "worker-src 'self' blob:", "connect-src 'self'", "object-src 'none'", "base-uri 'none'", "form-action 'none'",
 ].join("; ");
 const cspPlugin = {
-  name: "tabularis-csp",
+  name: "dbacus-csp",
   apply: "build" as const,
   transformIndexHtml: (html: string) => html.replace("<head>", `<head>\n    <meta http-equiv="Content-Security-Policy" content="${CSP}">`),
 };
@@ -31,7 +31,7 @@ export default defineConfig({
     ...(mock
       ? [
           { find: /^@wailsio\/runtime$/, replacement: src("mock/runtime.ts") },
-          { find: /^.*bindings\/tabulariswails\/internal\/services$/, replacement: src("mock/services.ts") },
+          { find: /^.*bindings\/github\.com\/vitacodesas\/dbacus\/internal\/services$/, replacement: src("mock/services.ts") },
         ]
       : []),
     { find: /^monaco-editor\/esm\/(.*)$/, replacement: fileURLToPath(new URL("./node_modules/monaco-editor/esm/$1", import.meta.url)) },

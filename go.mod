@@ -1,4 +1,4 @@
-module tabulariswails
+module github.com/vitacodesas/dbacus
 
 go 1.26.0
 

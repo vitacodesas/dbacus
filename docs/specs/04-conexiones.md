@@ -25,7 +25,7 @@ Pie: **Probar conexión**, **Guardar**, **Guardar y conectar**, **Cancelar**.
 `ConnectionService.Test` ejecuta pasos en orden y los reporta (`TestStep`): `ssh` → `tcp` → `tls` → `auth` → `query` (`SELECT VERSION()`). TLS y autenticación ocurren dentro del mismo handshake del protocolo MySQL, así que el paso (`tls` o `auth`) se atribuye por el tipo de error devuelto (`TLS_ERROR` → tls; `AUTH_FAILED`/BD inexistente → auth). Con modo `preferred`, `tls ✓` no garantiza que la sesión esté cifrada (puede haber caído a texto plano). UI muestra checklist (✓/✗, ms) y el mensaje del primer paso fallido con sugerencia (p. ej. "Puerto cerrado: ¿MySQL escucha en 3306?"). Timeout total 15 s; botón Cancelar. No guarda nada. Usa la contraseña del formulario (no la del llavero) si fue escrita; si el perfil existe y el campo está vacío, usa la del llavero.
 
 ## Persistencia y secretos
-- Perfil (sin secretos) en SQLite `connection_profiles`; secretos en el llavero: servicio `tabularis-clon`, cuenta `profile:<id>:password|ssh_password|ssh_passphrase`.
+- Perfil (sin secretos) en SQLite `connection_profiles`; secretos en el llavero: servicio `dbacus`, cuenta `profile:<id>:password|ssh_password|ssh_passphrase`. Secretos del servicio anterior `tabularis-clon`: se leen como respaldo y se copian al servicio `dbacus` en la primera lectura; el original se conserva hasta eliminar el perfil (se borra de ambos).
 - `SavePassword=false` → no se guarda; se pide en un diálogo al conectar y vive solo en memoria de la sesión.
 - Edición: campos secretos muestran "••••• (guardada)"; vacío = sin cambios; "Borrar contraseña" explícito.
 - Llavero no disponible → `KEYRING_UNAVAILABLE`; ofrecer "pedir cada vez" (no hay fallback en texto plano).

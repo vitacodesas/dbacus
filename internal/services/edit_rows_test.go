@@ -8,12 +8,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/driver/fake"
-	"tabulariswails/internal/edit"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/results"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/driver/fake"
+	"github.com/vitacodesas/dbacus/internal/edit"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/results"
 )
 
 // newRowsEnv: tabla t(id AUTO_INCREMENT PK, name NOT NULL sin DEFAULT, note NULL) con dos filas cargadas.

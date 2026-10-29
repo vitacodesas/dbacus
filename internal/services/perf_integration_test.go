@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/testutil/mysqlbox"
+	"github.com/vitacodesas/dbacus/internal/testutil/mysqlbox"
 )
 
 // TestQueryPerfIntegration mide los criterios de rendimiento del spec 06 con 1 M de filas reales:

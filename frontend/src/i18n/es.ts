@@ -1,5 +1,5 @@
 export default {
-  app: { name: "Tabularis Clon" },
+  app: { name: "Dbacus" },
   common: { cancel: "Cancelar", confirm: "Confirmar", close: "Cerrar", save: "Guardar", delete: "Eliminar", loading: "Cargando…" },
   activity: { connections: "Conexiones", schema: "Esquema", history: "Historial", settings: "Ajustes" },
   sidebar: {
@@ -10,7 +10,7 @@ export default {
     toggle: "Mostrar u ocultar la barra lateral",
   },
   welcome: {
-    title: "Bienvenido a Tabularis Clon",
+    title: "Bienvenido a Dbacus",
     description: "Crea una conexión para explorar tus bases de datos y ejecutar consultas.",
     newConnection: "Nueva conexión",
     soon: "Disponible pronto",

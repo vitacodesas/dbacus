@@ -18,12 +18,12 @@ import * as $models from "./models.js";
  * CancelExport aborta una exportación; el archivo parcial se borra. Es idempotente.
  */
 export function CancelExport(jobID: string): $CancellablePromise<void> {
-    return $Call.ByID(1842800860, jobID);
+    return $Call.ByID(2957672471, jobID);
 }
 
 /**
  * Export pide el destino con el diálogo nativo y lanza la escritura. Bloquea solo mientras el diálogo está abierto.
  */
 export function Export(req: $models.ExportRequest): $CancellablePromise<$models.ExportStart> {
-    return $Call.ByID(4017541986, req);
+    return $Call.ByID(2824344757, req);
 }

@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"testing"
 
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/results"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/results"
 )
 
 var benchCols = []model.ColumnMeta{{Name: "id", DataType: "bigint"}, {Name: "txt", DataType: "varchar"}, {Name: "at", DataType: "datetime"}, {Name: "n", DataType: "int", Nullable: true}}

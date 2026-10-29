@@ -13,8 +13,8 @@ import (
 	"go.uber.org/goleak"
 	"golang.org/x/crypto/ssh"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/testutil/sshsrv"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/testutil/sshsrv"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }

@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 func (s *Store) ListProfiles(ctx context.Context) ([]model.ConnectionProfile, error) {

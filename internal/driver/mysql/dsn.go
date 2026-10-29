@@ -8,10 +8,10 @@ import (
 
 	gomysql "github.com/go-sql-driver/mysql"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/secrets"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/secrets"
 )
 
 // ParseDSN acepta URLs (mysql://u:p@h:3306/db?x=y, mariadb://…) y el formato del driver Go (u:p@tcp(h:3306)/db?x=y).

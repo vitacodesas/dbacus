@@ -14,7 +14,7 @@ import (
 
 	gomysql "github.com/go-sql-driver/mysql"
 
-	"tabulariswails/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/apperr"
 )
 
 // mapError traduce errores del driver/red a AppError (spec 02). Devuelve nil si err es nil.

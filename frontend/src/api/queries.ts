@@ -1,5 +1,5 @@
 // Único punto que importa QueryService (bindings generados). Ver docs/specs/02-contrato-go-vue.md.
-import { QueryService } from "../../bindings/tabulariswails/internal/services";
+import { QueryService } from "../../bindings/github.com/vitacodesas/dbacus/internal/services";
 import type { ExecuteRequest, FullCell, RowWindow, StatementRange, TabState } from "../types";
 import { wrap } from "./errors";
 

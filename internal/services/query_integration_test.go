@@ -12,12 +12,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/apperr"
-	_ "tabulariswails/internal/driver/mysql"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/results"
-	"tabulariswails/internal/session"
-	"tabulariswails/internal/testutil/mysqlbox"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	_ "github.com/vitacodesas/dbacus/internal/driver/mysql"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/results"
+	"github.com/vitacodesas/dbacus/internal/session"
+	"github.com/vitacodesas/dbacus/internal/testutil/mysqlbox"
 )
 
 type liveEnv struct {

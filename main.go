@@ -5,7 +5,7 @@ import (
 	"io/fs"
 	"log"
 
-	"tabulariswails/internal/app"
+	"github.com/vitacodesas/dbacus/internal/app"
 )
 
 //go:embed all:frontend/dist

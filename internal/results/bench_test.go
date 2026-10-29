@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 func benchRows(n int) [][]Cell {

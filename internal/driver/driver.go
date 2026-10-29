@@ -5,8 +5,8 @@ import (
 	"context"
 	"net"
 
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/secrets"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/secrets"
 )
 
 type Capabilities struct {

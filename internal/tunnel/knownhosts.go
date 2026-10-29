@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"tabulariswails/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/apperr"
 )
 
 // KnownHosts guarda huellas SHA256 de host keys SSH confiadas, una por línea: "host:puerto SHA256:…".

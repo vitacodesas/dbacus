@@ -9,7 +9,7 @@ import (
 
 	gomysql "github.com/go-sql-driver/mysql"
 
-	"tabulariswails/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/driver"
 )
 
 const (

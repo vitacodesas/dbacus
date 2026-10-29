@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/session"
-	"tabulariswails/internal/testutil/mysqlbox"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/session"
+	"github.com/vitacodesas/dbacus/internal/testutil/mysqlbox"
 )
 
 // El servidor es la garantía real del modo solo lectura (spec 10): aunque algo se colara por el guardia de Go, una

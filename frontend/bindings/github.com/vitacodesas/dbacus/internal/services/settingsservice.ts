@@ -16,12 +16,12 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as model$0 from "../model/models.js";
 
 export function Get(): $CancellablePromise<model$0.Settings> {
-    return $Call.ByID(723701941);
+    return $Call.ByID(1316654712);
 }
 
 /**
  * Set valida y persiste; devuelve lo guardado para que Vue no tenga que releerlo.
  */
 export function Set(st: model$0.Settings): $CancellablePromise<model$0.Settings> {
-    return $Call.ByID(2838559305, st);
+    return $Call.ByID(3496764644, st);
 }

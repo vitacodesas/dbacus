@@ -8,13 +8,13 @@
         AllowPromptForPassword="false">
     </Settings>
     <Installer
-        Path="tabularis-clon"
+        Path="dbacus"
         Arguments=""
-        InstallLocation="C:\Program Files\Laika\Tabularis Clon">
+        InstallLocation="C:\Program Files\Laika\Dbacus">
     </Installer>
     <PackageInformation
-        PackageName="Tabularis Clon"
-        PackageDisplayName="Tabularis Clon"
+        PackageName="Dbacus"
+        PackageDisplayName="Dbacus"
         PublisherName="CN=Laika"
         PublisherDisplayName="Laika"
         Version="0.1.0.0"
@@ -25,10 +25,10 @@
         </Capabilities>
         <Applications>
             <Application
-                Id="pet.laika.tabularisclon"
+                Id="io.github.vitacodesas.dbacus"
                 Description="Cliente SQL de escritorio"
-                DisplayName="Tabularis Clon"
-                ExecutableName="tabularis-clon"
+                DisplayName="Dbacus"
+                ExecutableName="dbacus"
                 EntryPoint="Windows.FullTrustApplication">
                 
             </Application>
@@ -41,13 +41,13 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>Tabularis Clon</DisplayName>
+            <DisplayName>Dbacus</DisplayName>
             <PublisherDisplayName>Laika</PublisherDisplayName>
             <Description>Cliente SQL de escritorio</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>
-    <SaveLocation PackagePath="tabularis-clon.msix" />
+    <SaveLocation PackagePath="dbacus.msix" />
     <PackageIntegrity>
         <CertificatePath></CertificatePath>
     </PackageIntegrity>

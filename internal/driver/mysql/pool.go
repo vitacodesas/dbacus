@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"tabulariswails/internal/apperr"
 
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/sqlsplit"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/sqlsplit"
 )
 
 type pool struct {

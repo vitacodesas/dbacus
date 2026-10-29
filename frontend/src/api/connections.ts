@@ -1,6 +1,6 @@
 // Único punto que importa ConnectionService (bindings generados). Ver docs/specs/02-contrato-go-vue.md.
 import type { CancellablePromise } from "@wailsio/runtime";
-import { ConnectionService } from "../../bindings/tabulariswails/internal/services";
+import { ConnectionService } from "../../bindings/github.com/vitacodesas/dbacus/internal/services";
 import type { ConnectionProfile, ConnectionSecrets, DriverInfo, ParsedDSN, SessionInfo, TestResult } from "../types";
 import { wrap } from "./errors";
 

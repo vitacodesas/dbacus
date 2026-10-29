@@ -39,17 +39,17 @@ jobs:
           case "$RUNNER_OS" in
             macOS)
               wails3 package
-              ditto -c -k --keepParent bin/tabularis-clon.app dist-artifacts/tabularis-clon-macos.zip ;;
+              ditto -c -k --keepParent bin/dbacus.app dist-artifacts/dbacus-macos.zip ;;
             Windows)
               wails3 build
-              cp bin/tabularis-clon.exe dist-artifacts/tabularis-clon-windows.exe ;;
+              cp bin/dbacus.exe dist-artifacts/dbacus-windows.exe ;;
             Linux)
               wails3 build
-              tar czf dist-artifacts/tabularis-clon-linux.tar.gz -C bin tabularis-clon ;;
+              tar czf dist-artifacts/dbacus-linux.tar.gz -C bin dbacus ;;
           esac
       - uses: actions/upload-artifact@v4
         with:
-          name: tabularis-clon-${{ runner.os }}
+          name: dbacus-${{ runner.os }}
           path: dist-artifacts/*
           if-no-files-found: error
           retention-days: 14

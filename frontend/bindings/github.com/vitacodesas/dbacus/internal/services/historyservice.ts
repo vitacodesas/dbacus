@@ -10,13 +10,13 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 export function Clear(profileID: string): $CancellablePromise<void> {
-    return $Call.ByID(3613705965, profileID);
+    return $Call.ByID(358987042, profileID);
 }
 
 export function Delete(id: string): $CancellablePromise<void> {
-    return $Call.ByID(875544923, id);
+    return $Call.ByID(2509757770, id);
 }
 
 export function List(q: $models.HistoryQuery): $CancellablePromise<$models.HistoryPage> {
-    return $Call.ByID(3885941192, q);
+    return $Call.ByID(641141121, q);
 }

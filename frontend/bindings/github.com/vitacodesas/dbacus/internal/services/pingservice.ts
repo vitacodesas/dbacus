@@ -11,12 +11,12 @@
 import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 export function Hello(name: string): $CancellablePromise<string> {
-    return $Call.ByID(58480982, name);
+    return $Call.ByID(4271195379, name);
 }
 
 /**
  * PickFile abre el diálogo nativo de archivo y devuelve la ruta ("" si se cancela).
  */
 export function PickFile(): $CancellablePromise<string> {
-    return $Call.ByID(2965433849);
+    return $Call.ByID(794064358);
 }

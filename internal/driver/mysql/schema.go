@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 // Bases internas de MySQL/MariaDB: se marcan IsSystem y la UI las oculta por defecto.

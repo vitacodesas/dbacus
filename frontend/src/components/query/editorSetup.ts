@@ -34,14 +34,14 @@ export function setupMonaco() {
   });
 
   // Colores equivalentes a los tokens de la app (styles/main.css): Monaco no lee variables CSS.
-  monaco.editor.defineTheme("tabularis-light", {
+  monaco.editor.defineTheme("dbacus-light", {
     base: "vs", inherit: true, rules: [],
     colors: { "editor.background": "#ffffff", "editorGutter.background": "#ffffff", "editorLineNumber.foreground": "#94a3b8", "editor.lineHighlightBackground": "#f1f5f9" },
   });
-  monaco.editor.defineTheme("tabularis-dark", {
+  monaco.editor.defineTheme("dbacus-dark", {
     base: "vs-dark", inherit: true, rules: [],
     colors: { "editor.background": "#111c33", "editorGutter.background": "#111c33", "editorLineNumber.foreground": "#64748b", "editor.lineHighlightBackground": "#1a2742" },
   });
 }
 
-export const themeName = (resolved: "light" | "dark") => (resolved === "dark" ? "tabularis-dark" : "tabularis-light");
+export const themeName = (resolved: "light" | "dark") => (resolved === "dark" ? "dbacus-dark" : "dbacus-light");

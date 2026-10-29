@@ -7,8 +7,8 @@ import (
 	"errors"
 	"slices"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 const (

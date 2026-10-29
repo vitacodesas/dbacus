@@ -10,21 +10,21 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"tabulariswails/internal/apperr"
-	_ "tabulariswails/internal/driver/mysql" // registra el driver MySQL/MariaDB
-	"tabulariswails/internal/logging"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/paths"
-	"tabulariswails/internal/results"
-	"tabulariswails/internal/secrets"
-	"tabulariswails/internal/services"
-	"tabulariswails/internal/session"
-	"tabulariswails/internal/store"
-	"tabulariswails/internal/tunnel"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	_ "github.com/vitacodesas/dbacus/internal/driver/mysql" // registra el driver MySQL/MariaDB
+	"github.com/vitacodesas/dbacus/internal/logging"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/paths"
+	"github.com/vitacodesas/dbacus/internal/results"
+	"github.com/vitacodesas/dbacus/internal/secrets"
+	"github.com/vitacodesas/dbacus/internal/services"
+	"github.com/vitacodesas/dbacus/internal/session"
+	"github.com/vitacodesas/dbacus/internal/store"
+	"github.com/vitacodesas/dbacus/internal/tunnel"
 )
 
 const (
-	appName         = "Tabularis Clon"
+	appName         = "Dbacus"
 	shutdownTimeout = 5 * time.Second
 )
 
@@ -42,6 +42,12 @@ func Run(assets fs.FS) error {
 	}
 	lc.OnShutdown("logging", logCloser.Close)
 	slog.Info("arranque", "config", p.Config, "logs", p.Logs)
+	if p.MigratedFrom != "" {
+		slog.Info("estado migrado desde la carpeta anterior", "origen", p.MigratedFrom)
+	}
+	if p.MigrationErr != nil {
+		slog.Error("migración del estado anterior incompleta; se reintentará al reiniciar", "err", p.MigrationErr)
+	}
 
 	st, err := store.Open(lc.Context(), p.DB())
 	if err != nil {

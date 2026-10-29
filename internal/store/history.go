@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 // MaxHistorySQLBytes limita el SQL guardado por entrada (spec 07).

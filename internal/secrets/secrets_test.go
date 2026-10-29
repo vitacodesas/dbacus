@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zalando/go-keyring"
 
-	"tabulariswails/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/apperr"
 )
 
 func stores(t *testing.T) map[string]Store {
@@ -68,4 +68,39 @@ func TestKeyringErrorMapsToUnavailable(t *testing.T) {
 	require.Equal(t, apperr.KeyringUnavailable, ae.Code)
 	_, _, err = NewKeyring().Get("p", Password)
 	require.ErrorAs(t, err, &ae)
+}
+
+func TestKeyringMigratesLegacySecretOnRead(t *testing.T) {
+	keyring.MockInit()
+	require.NoError(t, keyring.Set(legacyService, account("p1", Password), "s3cret"))
+
+	got, ok, err := NewKeyring().Get("p1", Password)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "s3cret", got.Reveal())
+
+	// Quedó copiado al servicio nuevo y el antiguo se conserva.
+	v, err := keyring.Get(service, account("p1", Password))
+	require.NoError(t, err)
+	require.Equal(t, "s3cret", v)
+	_, err = keyring.Get(legacyService, account("p1", Password))
+	require.NoError(t, err)
+}
+
+func TestKeyringNewSecretWinsOverLegacy(t *testing.T) {
+	keyring.MockInit()
+	require.NoError(t, keyring.Set(legacyService, account("p1", Password), "old"))
+	require.NoError(t, keyring.Set(service, account("p1", Password), "new"))
+	got, _, err := NewKeyring().Get("p1", Password)
+	require.NoError(t, err)
+	require.Equal(t, "new", got.Reveal())
+}
+
+func TestKeyringDeleteRemovesLegacyCopyToo(t *testing.T) {
+	keyring.MockInit()
+	require.NoError(t, keyring.Set(legacyService, account("p1", SSHPassword), "old"))
+	require.NoError(t, NewKeyring().DeleteAll("p1"))
+	_, ok, err := NewKeyring().Get("p1", SSHPassword)
+	require.NoError(t, err)
+	require.False(t, ok)
 }

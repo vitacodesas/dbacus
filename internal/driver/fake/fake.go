@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/model"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/model"
 )
 
 type Driver struct {

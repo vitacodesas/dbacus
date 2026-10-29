@@ -1,5 +1,5 @@
 // Único punto que importa ExportService (bindings generados). Ver docs/specs/07-historial-y-exportacion.md.
-import { ExportService } from "../../bindings/tabulariswails/internal/services";
+import { ExportService } from "../../bindings/github.com/vitacodesas/dbacus/internal/services";
 import type { ExportRequest, ExportStart } from "../types";
 import { wrap } from "./errors";
 

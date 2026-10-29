@@ -12,9 +12,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/driver/fake"
-	"tabulariswails/internal/logging"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/driver/fake"
+	"github.com/vitacodesas/dbacus/internal/logging"
 )
 
 // Criterio del spec 10: la contraseña de prueba no aparece en app.db, ni en los logs, ni en lo que viaja a Vue

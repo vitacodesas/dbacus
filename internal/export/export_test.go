@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/results"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/results"
 )
 
 var cols = []model.ColumnMeta{{Name: "id", DataType: "BIGINT"}, {Name: "name", DataType: "VARCHAR"}, {Name: "at", DataType: "DATETIME"}}

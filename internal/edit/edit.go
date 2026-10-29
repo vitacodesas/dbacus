@@ -5,8 +5,8 @@ package edit
 import (
 	"strings"
 
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/sqlsplit"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/sqlsplit"
 )
 
 // Motivos por los que un resultado (Info.Reason) o una columna (Column.Reason) no son editables. La UI los traduce.

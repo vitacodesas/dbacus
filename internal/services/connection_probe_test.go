@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/testutil/sshsrv"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/testutil/sshsrv"
 )
 
 func stepNames(r TestResult) []string {

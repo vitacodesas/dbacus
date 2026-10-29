@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/secrets"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/secrets"
 )
 
 const (

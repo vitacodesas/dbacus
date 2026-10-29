@@ -10,9 +10,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"tabulariswails/internal/apperr"
-	"tabulariswails/internal/edit"
-	"tabulariswails/internal/testutil/mysqlbox"
+	"github.com/vitacodesas/dbacus/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/edit"
+	"github.com/vitacodesas/dbacus/internal/testutil/mysqlbox"
 )
 
 // La elegibilidad depende de metadatos reales: columnas generadas, índices con prefijo, nulabilidad y vistas.

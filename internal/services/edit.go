@@ -10,13 +10,13 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"tabulariswails/internal/apperr"
+	"github.com/vitacodesas/dbacus/internal/apperr"
 
-	"tabulariswails/internal/driver"
-	"tabulariswails/internal/edit"
-	"tabulariswails/internal/model"
-	"tabulariswails/internal/results"
-	"tabulariswails/internal/session"
+	"github.com/vitacodesas/dbacus/internal/driver"
+	"github.com/vitacodesas/dbacus/internal/edit"
+	"github.com/vitacodesas/dbacus/internal/model"
+	"github.com/vitacodesas/dbacus/internal/results"
+	"github.com/vitacodesas/dbacus/internal/session"
 )
 
 // EditStore es lo que EditService necesita de la persistencia (lo implementa *store.Store).

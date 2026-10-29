@@ -5,13 +5,13 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "tabularis-clon"
+    !define INFO_PROJECTNAME "dbacus"
 !endif
 !ifndef INFO_COMPANYNAME
     !define INFO_COMPANYNAME "Laika"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "Tabularis Clon"
+    !define INFO_PRODUCTNAME "Dbacus"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "0.1.0"
