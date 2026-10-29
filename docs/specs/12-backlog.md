@@ -80,6 +80,14 @@ Alcance: goroutine por run, eventos, throttling, `KILL QUERY`, LIMIT automático
 **T8.4 ✅ · UI** — Dep: T8.3 · Specs: 14, 08, 09 · Alcance: botón «Nueva fila» y «Insertar nueva fila a partir de esta» en el menú contextual (una o varias filas), fila nueva en el grid, `Supr` y menú para eliminar/restaurar, barra de cambios ampliada, aviso de FKs en cascada. DoD: tests de componente.
 **T8.5 ✅ · E2E y cierre** — Dep: T8.4 · Specs: 11 · Alcance: mock ampliado, E2E, smoke manual, actualizar specs 02/08/09/13.
 
+## Épica 9 — Dbacus: renombrado, repositorio público y CI (spec 15)
+**T9.1 · Auditoría previa a publicar** — Specs: 15, 10 · Alcance: escaneo de secretos y datos internos en árbol e historial, revisión de licencias de dependencias, generalizar menciones internas en docs, decisión sobre el correo de los commits. DoD: informe y árbol limpio.
+**T9.2 · Renombrar a Dbacus con migración** — Dep: T9.1, dueño de GitHub · Specs: 15 · Alcance: nombre visible, binario, identificador, módulo Go y bindings, carpeta de datos, llavero y variable de entorno, `secrets.Migrate` y copia de `app.db`/`known_hosts`. DoD: tests de migración (idempotencia, llavero caído, copia corrupta), batería completa en verde y prueba manual con datos reales sin borrar los viejos.
+**T9.3 · Estabilizar `TestProbeViaSSH` (C2)** — Alcance: encontrar la causa del fallo intermitente. DoD: 200 ejecuciones seguidas con `-race` y carga sin fallo.
+**T9.4 · CI y release** — Dep: T9.3 · Specs: 15 · Alcance: reestructurar `ci.yml` (check, integration, security, build), `release.yml`, caché, permisos mínimos, `dependabot.yml`. DoD: `actionlint` limpio.
+**T9.5 · Primer push privado y bucle de CI** — Dep: T9.2, T9.4 · Alcance: repositorio privado, primer push, corregir lo que falle en Windows y Linux. DoD: verde en los tres sistemas.
+**T9.6 · Publicar** — Dep: T9.5 · Alcance: `LICENSE`, `README`, `SECURITY.md`, `CHANGELOG`, protección de `main`, hacerlo público, etiqueta `v0.1.0` y *release*. DoD: criterios de aceptación del spec 15.
+
 ## Grafo resumido
 T0.1 → {T0.2, T0.3, T0.4, T0.5} → T1.x → T2.x (conexiones) → T3.x → T4.x → T5.x → T6.x
 Se recomienda ejecutar primero el camino mínimo hasta una consulta real: T0.1–T0.5, T1.1, T1.3, T1.5, T2.1, T2.3–T2.6, T4.1–T4.5.
