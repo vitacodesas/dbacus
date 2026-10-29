@@ -19,6 +19,22 @@ func invalid(field, msg string) error {
 	return apperr.New(apperr.Validation, msg).WithDetail(field)
 }
 
+// validateGroup recorta y valida un grupo (spec 17). La unicidad del nombre la resuelve el almacén.
+func validateGroup(g *model.ConnectionGroup) error {
+	g.Name = strings.TrimSpace(g.Name)
+	g.Color = strings.TrimSpace(g.Color)
+	if g.Name == "" {
+		return invalid("name", "El nombre del grupo es obligatorio")
+	}
+	if len([]rune(g.Name)) > maxNameLen {
+		return invalid("name", "El nombre del grupo es demasiado largo")
+	}
+	if g.Color != "" && !colorRe.MatchString(g.Color) {
+		return invalid("color", "El color debe tener formato #RRGGBB")
+	}
+	return nil
+}
+
 // normalizeAndValidate recorta y completa valores por defecto y valida el perfil (spec 04). Es la validación autoritativa:
 // la del formulario es solo UX. El campo erróneo viaja en AppError.Detail con la ruta del DTO ("tls.caPath").
 func (s *ConnectionService) normalizeAndValidate(p *model.ConnectionProfile, _ ConnectionSecrets, _ *model.ConnectionProfile) error {
@@ -27,6 +43,7 @@ func (s *ConnectionService) normalizeAndValidate(p *model.ConnectionProfile, _ C
 	p.User = strings.TrimSpace(p.User)
 	p.Database = strings.TrimSpace(p.Database)
 	p.Color = strings.TrimSpace(p.Color)
+	p.GroupID = strings.TrimSpace(p.GroupID)
 
 	if p.Name == "" {
 		return invalid("name", "El nombre es obligatorio")

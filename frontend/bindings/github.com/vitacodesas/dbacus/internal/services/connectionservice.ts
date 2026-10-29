@@ -36,6 +36,13 @@ export function Delete(id: string, deleteHistory: boolean): $CancellablePromise<
     return $Call.ByID(4048725486, id, deleteHistory);
 }
 
+/**
+ * DeleteGroup elimina el grupo; sus conexiones pasan a «Sin grupo». No borra conexiones, secretos ni historial.
+ */
+export function DeleteGroup(id: string): $CancellablePromise<void> {
+    return $Call.ByID(1178161985, id);
+}
+
 export function Disconnect(sessionID: string): $CancellablePromise<void> {
     return $Call.ByID(2974422943, sessionID);
 }
@@ -50,6 +57,13 @@ export function List(): $CancellablePromise<model$0.ConnectionProfile[] | null> 
 
 export function ListDrivers(): $CancellablePromise<$models.DriverInfo[] | null> {
     return $Call.ByID(4090837844);
+}
+
+/**
+ * ListGroups devuelve los grupos de conexiones por nombre (spec 17).
+ */
+export function ListGroups(): $CancellablePromise<model$0.ConnectionGroup[] | null> {
+    return $Call.ByID(4086031709);
 }
 
 export function ListSessions(): $CancellablePromise<$models.SessionInfo[] | null> {
@@ -69,6 +83,13 @@ export function PickFile(title: string): $CancellablePromise<string> {
  */
 export function Save(profile: model$0.ConnectionProfile, sec: $models.ConnectionSecrets): $CancellablePromise<model$0.ConnectionProfile> {
     return $Call.ByID(2651213916, profile, sec);
+}
+
+/**
+ * SaveGroup crea (ID vacío) o actualiza un grupo.
+ */
+export function SaveGroup(g: model$0.ConnectionGroup): $CancellablePromise<model$0.ConnectionGroup> {
+    return $Call.ByID(519678415, g);
 }
 
 /**

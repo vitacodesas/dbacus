@@ -7,6 +7,7 @@ export type {
     Column,
     ColumnMeta,
     CompletionCatalog,
+    ConnectionGroup,
     ConnectionProfile,
     Database,
     ForeignKey,

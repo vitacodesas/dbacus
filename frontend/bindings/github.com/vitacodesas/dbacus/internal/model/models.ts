@@ -43,6 +43,17 @@ export interface CompletionCatalog {
     "tables": CatalogTable[] | null;
 }
 
+/**
+ * ConnectionGroup agrupa conexiones y les da una configuración común (spec 17). Hoy solo color.
+ */
+export interface ConnectionGroup {
+    "id": string;
+    "name": string;
+    "color": string;
+    "createdAt": string;
+    "updatedAt": string;
+}
+
 export interface ConnectionProfile {
     "id": string;
     "name": string;
@@ -52,6 +63,11 @@ export interface ConnectionProfile {
     "user": string;
     "database": string;
     "color": string;
+
+    /**
+     * GroupID es el grupo al que pertenece (spec 17); vacío = «Sin grupo». Va en el JSON del perfil, sin columna propia.
+     */
+    "groupId": string;
     "tls": TLSConfig;
     "ssh": SSHConfig;
     "params": { [_ in string]?: string } | null;

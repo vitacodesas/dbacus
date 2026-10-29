@@ -22,14 +22,16 @@ type SSHConfig struct {
 }
 
 type ConnectionProfile struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Driver       string            `json:"driver"`
-	Host         string            `json:"host"`
-	Port         int               `json:"port"`
-	User         string            `json:"user"`
-	Database     string            `json:"database"`
-	Color        string            `json:"color"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Driver   string `json:"driver"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	User     string `json:"user"`
+	Database string `json:"database"`
+	Color    string `json:"color"`
+	// GroupID es el grupo al que pertenece (spec 17); vacío = «Sin grupo». Va en el JSON del perfil, sin columna propia.
+	GroupID      string            `json:"groupId"`
 	TLS          TLSConfig         `json:"tls"`
 	SSH          SSHConfig         `json:"ssh"`
 	Params       map[string]string `json:"params"`
@@ -44,6 +46,15 @@ type ConnectionProfile struct {
 	HasSSHPassphrase bool      `json:"hasSshPassphrase"`
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+// ConnectionGroup agrupa conexiones y les da una configuración común (spec 17). Hoy solo color.
+type ConnectionGroup struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Color     string    `json:"color"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type HistoryEntry struct {

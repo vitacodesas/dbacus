@@ -8,7 +8,7 @@ Estado: aprobado (2026-10-29). Épica 10 del backlog. Contrato en el spec 02; pe
 Agrupar conexiones (p. ej. «Producción», «Staging») y darle a cada grupo una configuración propia. **Hoy solo color**; más adelante, configuración global por grupo (fuera de alcance, ver «Evolución»).
 
 ### Modelo
-- `ConnectionGroup { id, name, color, createdAt, updatedAt }` (spec 02). `name`: 1–100 caracteres sin espacios laterales, **único sin distinguir mayúsculas**. `color`: `#RRGGBB` o vacío (la misma regla que el color de una conexión).
+- `ConnectionGroup { id, name, color, createdAt, updatedAt }` (spec 02). `name`: 1–100 caracteres sin espacios laterales, **único sin distinguir mayúsculas, también en letras no ASCII** (`Producción` = `PRODUCCIÓN`): `COLLATE NOCASE` de SQLite solo pliega ASCII, así que el servicio lo comprueba con `strings.EqualFold` y el índice `UNIQUE` queda como segunda barrera. `color`: `#RRGGBB` o vacío (la misma regla que el color de una conexión).
 - `ConnectionProfile.groupId`: id del grupo o `""` («Sin grupo»). Va dentro del JSON del perfil (`connection_profiles.data`), sin columna nueva.
 - Tabla nueva `connection_groups` (migración `002_connection_groups.sql`). No hay clave foránea (el perfil es un blob JSON): la integridad la mantiene el servicio.
 - **No** se crea columna `settings` ahora: la configuración global por grupo llegará con su propia migración, cuando se sepa qué lleva.

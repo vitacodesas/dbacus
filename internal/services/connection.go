@@ -23,6 +23,10 @@ type ProfileStore interface {
 	GetProfile(ctx context.Context, id string) (model.ConnectionProfile, error)
 	SaveProfile(ctx context.Context, p model.ConnectionProfile) (model.ConnectionProfile, error)
 	DeleteProfile(ctx context.Context, id string) error
+	ListGroups(ctx context.Context) ([]model.ConnectionGroup, error)
+	GetGroup(ctx context.Context, id string) (model.ConnectionGroup, error)
+	SaveGroup(ctx context.Context, g model.ConnectionGroup) (model.ConnectionGroup, error)
+	DeleteGroup(ctx context.Context, id string) error
 	ClearHistory(ctx context.Context, profileID string) error
 }
 
@@ -92,6 +96,37 @@ func (s *ConnectionService) Get(ctx context.Context, id string) (model.Connectio
 	return p, toAppErr(err)
 }
 
+// ListGroups devuelve los grupos de conexiones por nombre (spec 17).
+func (s *ConnectionService) ListGroups(ctx context.Context) ([]model.ConnectionGroup, error) {
+	gs, err := s.d.Store.ListGroups(ctx)
+	return gs, toAppErr(err)
+}
+
+// SaveGroup crea (ID vacío) o actualiza un grupo.
+func (s *ConnectionService) SaveGroup(ctx context.Context, g model.ConnectionGroup) (model.ConnectionGroup, error) {
+	if err := validateGroup(&g); err != nil {
+		return model.ConnectionGroup{}, err
+	}
+	// COLLATE NOCASE de SQLite solo pliega ASCII («Producción» ≠ «PRODUCCIÓN»): la unicidad Unicode se comprueba aquí;
+	// el índice UNIQUE queda como segunda barrera.
+	others, err := s.d.Store.ListGroups(ctx)
+	if err != nil {
+		return model.ConnectionGroup{}, toAppErr(err)
+	}
+	for _, o := range others {
+		if o.ID != g.ID && strings.EqualFold(o.Name, g.Name) {
+			return model.ConnectionGroup{}, invalid("name", "Ya existe un grupo con ese nombre")
+		}
+	}
+	saved, err := s.d.Store.SaveGroup(ctx, g)
+	return saved, toAppErr(err)
+}
+
+// DeleteGroup elimina el grupo; sus conexiones pasan a «Sin grupo». No borra conexiones, secretos ni historial.
+func (s *ConnectionService) DeleteGroup(ctx context.Context, id string) error {
+	return toAppErr(s.d.Store.DeleteGroup(ctx, id))
+}
+
 // Save crea (ID vacío) o actualiza un perfil y aplica los cambios de secretos.
 func (s *ConnectionService) Save(ctx context.Context, profile model.ConnectionProfile, sec ConnectionSecrets) (model.ConnectionProfile, error) {
 	var existing *model.ConnectionProfile
@@ -109,6 +144,11 @@ func (s *ConnectionService) Save(ctx context.Context, profile model.ConnectionPr
 	}
 	if err := s.normalizeAndValidate(&profile, sec, existing); err != nil {
 		return model.ConnectionProfile{}, err
+	}
+	if profile.GroupID != "" {
+		if _, err := s.d.Store.GetGroup(ctx, profile.GroupID); err != nil {
+			return model.ConnectionProfile{}, invalid("groupId", "El grupo no existe")
+		}
 	}
 
 	if existing != nil { // secretos primero: si el llavero falla, el perfil no cambia
