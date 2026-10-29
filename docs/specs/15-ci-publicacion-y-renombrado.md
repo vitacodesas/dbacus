@@ -40,15 +40,18 @@ Pruebas: unitarias con llavero y carpetas simulados (copia correcta, idempotenci
 - **Conclusión**: Apache-2.0 es compatible. Al publicar, incluir un `THIRD_PARTY_NOTICES.md` generado (avisos de MPL/Apache/BSD).
 
 ## C. CI (T9.4 y T9.5)
-**Principios**: permisos mínimos (`permissions: contents: read` por defecto), `concurrency` que cancela ejecuciones obsoletas de una misma rama, versiones de acciones fijadas por hash (Dependabot las actualiza), sin secretos en los PR de forks.
+**Principios**: permisos mínimos (`permissions: contents: read` por defecto), `concurrency` que cancela ejecuciones obsoletas de una misma rama, versiones de acciones fijadas por hash con el tag en comentario (Dependabot las actualiza; se fijaron las mayores ya probadas: checkout v4, setup-go v5, setup-node v4, upload/download-artifact v4, cache v4), sin secretos en los PR de forks.
 
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
-| `ci.yml` → job **`check`** (ubuntu) | PR, push a `main` | `go vet`, `go test -race ./...`, frontend (typecheck, lint, tests), E2E Playwright sobre el build, bindings sin cambios (`wails3 generate` + `git diff --exit-code`) |
-| job **`integration`** (ubuntu + Docker) | PR, push a `main` | `-tags integration` contra MySQL 8.0/8.4 y MariaDB 10.11 |
-| job **`security`** (ubuntu) | PR, push a `main`, semanal | `govulncheck`, `npm audit`, `go mod verify`, revisión de dependencias en el PR |
-| job **`build`** (matriz macOS, Windows, ubuntu) | push a `main`, etiquetas `v*`, manual | compila y empaqueta; sube artefactos (14 días) |
-| `release.yml` | etiqueta `v*` | comprueba que la etiqueta coincide con la versión de `build/config.yml`, compila en los tres sistemas, genera `SHA256SUMS` y crea la *release* con los archivos y las notas del `CHANGELOG` |
+| `ci.yml` → job **`check`** (ubuntu) | PR, push a `main` | `go vet`, `go test -race ./...`, frontend (typecheck, lint, tests), E2E Playwright, bindings sin cambios (`wails3 generate` + `git status` limpio) |
+| `ci.yml` → job **`integration`** (ubuntu + Docker) | PR, push a `main` | `-tags integration` contra MySQL 8.0/8.4 y MariaDB 10.11 |
+| `ci.yml` → job **`build`** | push a `main` y manual, **no** en PR; tras `check` + `integration` | llama a `build.yml` (matriz macOS, Windows, ubuntu): compila, empaqueta y sube artefactos (14 días) |
+| `build.yml` | `workflow_call` | reutilizable; lo usan `ci.yml` y `release.yml` |
+| `security.yml` | PR, push a `main`, lunes 06:00 UTC, manual | `go mod verify`, `govulncheck`, `npm audit`; `dependency-review` en PR solo si el repo es público (en privados exige GitHub Advanced Security) |
+| `release.yml` | etiqueta `v*` (no se dispara también `ci.yml`) | `verify`: la etiqueta coincide con `info.version` de `build/config.yml` y el commit está en `main`; `build` (3 sistemas); `publish` (único job con `contents: write`): renombra con la versión, genera `SHA256SUMS` y crea la *release* con las notas de `CHANGELOG.md` o, si no hay sección, generadas desde los commits; las etiquetas con guion (`v0.2.0-rc.1`) salen como *prerelease* |
+| `.github/actions/setup` | acción local | Go, Node, dependencias de Linux (GTK4 + WebKitGTK 6.0), `wails3` de la versión de `go.mod` y `frontend/dist` (lo embebe `main.go`) |
+| `dependabot.yml` | semanal | `gomod`, `npm` (`/frontend`) y `github-actions`, agrupados; ignora `wails/v3` (fijado por ADR-001) y `monaco-editor`/`dompurify` (ver AGENTS.md) |
 
 - **Caché**: módulos de Go, `npm` y navegadores de Playwright; reduce minutos y tiempo.
 - **Instalación de `wails3`**: la versión exacta de `go.mod` (como hoy); en Linux, las dependencias GTK/WebKit; en Windows, WebView2 viene con el runner.
