@@ -24,7 +24,7 @@
 `BaseButton`, `BaseInput`, `BaseSelect`, `BaseCheckbox`, `BaseToggle`, `BaseModal`, `BaseDialogConfirm`, `BaseTabs`, `BaseTooltip`, `BaseContextMenu`, `BaseToast`, `BaseSplitter`, `BaseSpinner`, `BaseEmptyState`, `BaseKbd`, `ColorSwatches` (selector de color #RRGGBB, compartido por conexión y grupo). Sin librería de UI pesada (permitido headless: Reka UI/Radix-Vue para accesibilidad de menús/diálogos).
 
 ## Componentes de dominio
-`ConnectionList` (con secciones de grupo), `ConnectionGroupHeader`, `ConnectionGroupDialog`, `ConnectionCard`, `ConnectionForm` (+ `TlsSection`, `SshSection`, `AdvancedSection`, `TestResultPanel`, `HostKeyTrustDialog`), `SchemaTree`, `QueryTabsBar`, `SqlEditor`, `ResultGrid`, `ResultTabs`, `CellViewerModal`, `HistoryPanel`, `ExportDialog`, `StatusBar` (lleva la firma «Hecho con amor por vitacodesas» en la esquina inferior izquierda, spec 17), `SettingsDialog`.
+`ConnectionList` (con secciones de grupo), `ConnectionGroupHeader`, `ConnectionGroupDialog`, `ConnectionCard`, `ConnectionForm` (+ `TlsSection`, `SshSection`, `AdvancedSection`, `TestResultPanel`, `HostKeyTrustDialog`), `SchemaTree`, `QueryTabsBar`, `SqlEditor`, `ResultTabs` (el pie de `ResultPane` lleva la paginación por cursor: `⏮ ◀ ▶ ⏭`, rango y página, insignias y el selector «Paginar por…», spec 18 §8), `ResultGrid`, `CellViewerModal`, `HistoryPanel`, `ExportDialog`, `StatusBar` (lleva la firma «Hecho con amor por vitacodesas» en la esquina inferior izquierda, spec 17), `SettingsDialog`.
 
 ## Atajos globales
 | Acción | macOS | Win/Linux |

@@ -279,10 +279,10 @@ const summary = (i: number) => {
             <option v-for="c in candidates" :key="c" :value="c">{{ c }}</option>
           </select>
         </label>
-        <span data-testid="range" aria-live="polite">{{ rangeText }}</span>
+        <span class="shrink-0 whitespace-nowrap" data-testid="range" aria-live="polite">{{ rangeText }}</span>
         <span v-if="results.paging[tabId]" class="flex items-center gap-1"><BaseSpinner class="size-3" />{{ t("paging.loading") }}</span>
-        <span v-for="n in pagingNotes" :key="n.key" class="truncate" :class="n.warn ? 'text-warning' : ''" :data-testid="`paging-${n.key}`" :title="n.hint ?? n.text">{{ n.text }}</span>
-        <span v-if="stmt?.limitApplied" class="text-warning">{{ t("query.limitApplied", { n: stmt.limitApplied }) }}</span>
+        <span v-for="n in pagingNotes" :key="n.key" class="min-w-0 truncate" :class="n.warn ? 'text-warning' : ''" :data-testid="`paging-${n.key}`" :title="n.hint ?? n.text">{{ n.text }}</span>
+        <span v-if="stmt?.limitApplied" class="shrink-0 whitespace-nowrap text-warning">{{ t("query.limitApplied", { n: stmt.limitApplied }) }}</span>
         <span v-if="editNote" class="truncate" data-testid="edit-note" :title="editNote">{{ editNote }}</span>
         <span v-if="res.database" class="font-data ml-auto">{{ res.database }}</span>
       </footer>

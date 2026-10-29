@@ -147,16 +147,18 @@ Cada página es una lectura independiente: **no hay instantánea**. Con `keyset`
 - `DECIMAL` con escala: se compara con el texto exacto de la celda (sin formateo de la interfaz).
 
 ## 12. Criterios de aceptación
-- [ ] Un SELECT de una tabla con PK numérica y 1 M de filas se recorre de la primera a la última página con `<`/`>`, sin repetir ni saltar ninguna fila (test contra un oráculo en memoria con datos ordenados y con direcciones mixtas).
-- [ ] «Última» muestra las últimas N filas y `<` retrocede sin saltos, con el mismo oráculo.
-- [ ] Con `ORDER BY precio DESC` (columna numérica no nula) la paginación respeta ese orden y la clave desempata (valores repetidos incluidos).
-- [ ] Una página profunda con keyset tarda ≤ 3× la primera en la tabla de 5 M filas (§9); OFFSET profundo es mucho peor y queda registrado.
-- [ ] Un resultado con `LIMIT` propio, JOIN, GROUP BY, UNION o sin PK no usa `keyset` y muestra el motivo correcto de §6.
-- [ ] Modo aproximado: un JOIN con columna numérica pagina; con valores repetidos en el borde se bloquea «siguiente» con aviso y **ninguna fila se omite en silencio**.
-- [ ] Las páginas no aparecen en el historial; cambiar de página con ediciones pendientes pide confirmación; editar una celda de la página sigue funcionando.
-- [ ] «Exportar» tras paginar exporta la tabla completa (rerun), no solo la página.
-- [ ] Memoria acotada a la página; el grid no usa alturas de millones de píxeles.
-- [ ] `es`/`en` con las mismas claves; E2E en verde con el Chromium del CI tres veces seguidas.
+- [x] Un SELECT de una tabla con PK numérica y 1 M de filas se recorre de la primera a la última página con `<`/`>`, sin repetir ni saltar ninguna fila (test contra un oráculo en memoria con datos ordenados y con direcciones mixtas).
+- [x] «Última» muestra las últimas N filas y `<` retrocede sin saltos, con el mismo oráculo.
+- [x] Con `ORDER BY precio DESC` (columna numérica no nula) la paginación respeta ese orden y la clave desempata (valores repetidos incluidos).
+- [x] Una página profunda con keyset tarda ≤ 3× la primera en la tabla de 5 M filas (§9); OFFSET profundo es mucho peor y queda registrado.
+- [x] Un resultado con `LIMIT` propio, JOIN, GROUP BY, UNION o sin PK no usa `keyset` y muestra el motivo correcto de §6.
+- [x] Modo aproximado: un JOIN con columna numérica pagina; con valores repetidos en el borde se bloquea «siguiente» con aviso y **ninguna fila se omite en silencio**.
+- [x] Las páginas no aparecen en el historial; cambiar de página con ediciones pendientes pide confirmación; editar una celda de la página sigue funcionando.
+- [x] «Exportar» tras paginar exporta la tabla completa (rerun), no solo la página.
+- [x] Memoria acotada a la página; el grid no usa alturas de millones de píxeles.
+- [x] `es`/`en` con las mismas claves; E2E en verde con el Chromium del CI tres veces seguidas.
+
+Verificado el 2026-10-29: tests de Go con SQLite y con MySQL 8.0/8.4 y MariaDB 10.11 reales (recorridos completos ida y vuelta, empates, ids hasta 2⁶⁴-1, DECIMAL(30,10)); 5 M de filas medidas; E2E (57) tres veces seguidas con el Chromium de Playwright; y prueba manual en el servidor Go real (`build:server`) contra MySQL 8.0 con 10 000 filas: páginas por clave con `ORDER BY price DESC`, «Última», JOIN con «Paginar por…» y bloqueo por empate. **No** se ha probado en la ventana nativa de Wails (el servidor usa el mismo código de Go y el mismo front, pero no el WebView).
 
 ## 13. Fuera de alcance
 Total exacto (`COUNT(*)`); saltar a la página N; claves o `ORDER BY` de texto, UUID, fecha y `FLOAT` (versión posterior: collation, espacios finales, zona horaria de `TIMESTAMP`); ordenar haciendo clic en la cabecera (reescribiría el `ORDER BY`); `ORDER BY` por expresiones; paginación exacta de JOIN; instantánea consistente; atajos de teclado; persistir las filas por página.
