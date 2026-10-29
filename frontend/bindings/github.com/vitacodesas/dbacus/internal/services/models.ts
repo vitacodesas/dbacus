@@ -167,7 +167,7 @@ export interface PageRequest {
     "direction": string;
 
     /**
-     * solo modo aproximado (spec 18 §5); aún sin uso
+     * solo modo aproximado: empieza (o reinicia) la paginación por esa columna; ver Page
      */
     "column": string;
 }
@@ -208,6 +208,16 @@ export interface PagingInfo {
      * ≈ filas de la tabla (solo keyset y sin WHERE); 0 = desconocido
      */
     "estimated": number;
+
+    /**
+     * Modo aproximado (spec 18 §5). Column es la columna por la que se pagina (solo approx); Candidates, las que se pueden
+     * elegir con «Paginar por…» (en approx, y en none cuando el resultado llegó al límite y se podría paginar así);
+     * TieNext/TiePrev, que avanzar en esa dirección se saltaría filas empatadas en el borde y por eso está bloqueado.
+     */
+    "column": string;
+    "candidates": string[] | null;
+    "tieNext": boolean;
+    "tiePrev": boolean;
 }
 
 export interface ParsedDSN {

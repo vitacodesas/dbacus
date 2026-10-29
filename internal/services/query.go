@@ -402,6 +402,13 @@ func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn dri
 			}
 		} else if known {
 			out.Paging = &PagingInfo{Mode: paging.ModeNone, Reason: dec.Reason, PageSize: size}
+			// El analizador de una sola tabla se rinde en lo primero que no entiende (un alias, un JOIN); el LIMIT propio o
+			// el INTO/FOR UPDATE que vengan después son el motivo que le sirve a quien lo lee.
+			if dec.Reason != sqlsplit.ReasonNotSelect {
+				if _, r := sqlsplit.Wrap(st.Text); r == sqlsplit.ReasonUserLimit || r == sqlsplit.ReasonIntoLock {
+					out.Paging.Reason = r
+				}
+			}
 		}
 		if pstate == nil {
 			if t, ok := sqlsplit.InjectLimit(text, req.AutoLimit); ok {
@@ -511,6 +518,12 @@ func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn dri
 	buf.Finish(truncated)
 	out.RowCount, out.Truncated = int64(buf.Len()), buf.Truncated()
 	out.ElapsedMs = time.Since(started).Milliseconds()
+	// Sin paginación por cursor pero con el resultado al límite (puede haber más filas): se ofrece el modo aproximado.
+	if out.Paging != nil && applied > 0 && out.RowCount >= int64(applied) {
+		if names := offerApprox(out.Paging, st.Text, cols); names != nil {
+			buf.SetExt(&approxOffer{base: out, size: out.Paging.PageSize, candidates: names})
+		}
+	}
 	s.emit("query:progress", QueryProgress{QueryID: ar.queryID, StmtIndex: idx, RowCount: out.RowCount})
 	s.afterStatement(sess, st.Text)
 	record(nil)

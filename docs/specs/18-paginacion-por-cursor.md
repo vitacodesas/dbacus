@@ -59,7 +59,11 @@ Es una elección explícita del usuario y **tiene costes que la interfaz debe mo
 - **El orden pasa a ser por esa columna**: el `ORDER BY` original de una tabla derivada no se respeta.
 - **Cada página vuelve a ejecutar la consulta completa**: puede ser lenta; MySQL puede empujar el predicado hacia dentro de la tabla derivada, pero no está garantizado. No tiene la propiedad de coste constante del modo `keyset`.
 - **Valores repetidos**: `columna > último` se salta las filas que empatan con el borde. **Salvaguarda**: como se lee N+1, si el valor de la fila N es igual al de la fila N+1 el avance omitiría filas (las omitidas son exactamente las que empatan y vienen justo detrás en el orden), así que **se bloquea «siguiente»** con el aviso `tie_at_edge`, y se sugiere cambiar la columna («Paginar por…») o usar «Sin límite»/exportar. Lo mismo hacia atrás. Esto evita la pérdida **silenciosa** en el borde; no garantiza consistencia si los datos cambian entre páginas.
-- Columna por defecto: la primera columna numérica no nula del resultado; el menú «Paginar por…» permite elegir otra.
+- **No hay columna por defecto: la elige el usuario** («Paginar por…»). Un orden que cambia solo (el `ORDER BY` original deja de respetarse) y cada página que vuelve a ejecutar la consulta completa no se activan sin que se pida. La interfaz ofrece el selector solo cuando el resultado **llegó al límite** (si cabía entero no hay nada que paginar).
+- **Columnas elegibles** (`PagingInfo.Candidates`): numéricas exactas (`TINYINT…BIGINT` con o sin `UNSIGNED`, `DECIMAL`) y no nulas según el servidor (en un `LEFT JOIN` las del lado nulable no lo son). Si dos columnas del resultado se llaman igual (`SELECT * FROM a JOIN b` con dos `id`), la tabla derivada falla en MySQL: motivo `duplicate_columns` y no se ofrece (hay que dar alias).
+- **Cómo se elige**: `Page` con `Column` y `Direction` ignorada (siempre la primera página) empieza la paginación; con otra columna en una sentencia ya aproximada la reinicia. El nombre se valida contra `Candidates`: nunca llega a SQL texto del usuario. La sentencia original (`Source()`) no cambia: exportar vuelve a ejecutarla entera.
+- **Regla de empate por dirección**: hacia delante la fila de sondeo viene tras la última (`TieNext = más && sondeo == última`); hacia atrás, delante de la primera (`TiePrev`). En la otra dirección no hay empate posible: la página se pidió con comparación estricta contra la anterior. `Page` rechaza el avance bloqueado con `VALIDATION` y detalle `tie_at_edge` y la interfaz deshabilita el botón. Garantía comprobada con un oráculo: o se recorre todo sin repetir ni saltar, o se bloquea y toda fila estrictamente anterior al valor del bloqueo ya se vio.
+- Envoltura: `sqlsplit.Wrap` quita el `;` final y comprueba (palabras de nivel superior) `LIMIT` → `user_limit`; `INTO`/`FOR`/`LOCK` → `into_lock`; no `SELECT` o modificadores como `SQL_CALC_FOUND_ROWS` → `not_select`. Un `LIMIT` dentro de una subconsulta no cuenta. El texto va seguido de un salto de línea antes del `)`.
 - No disponible (motivo `no_numeric_column`, etc.) si no hay columna numérica no nula, si la sentencia no empieza por `SELECT` (`WITH`/CTE no se puede envolver), si lleva `INTO`/`FOR`/`LOCK`, o si tiene `LIMIT` propio.
 
 ## 6. Modo `none`: motivos
@@ -80,6 +84,9 @@ Es una elección explícita del usuario y **tiene costes que la interfaz debe mo
 | `order_by_unsupported` | `ORDER BY` con expresión, posición o `COLLATE` | ordena por columnas desnudas |
 | `nullable_order` | una columna del orden admite `NULL` | — |
 | `no_numeric_column` | (solo modo aproximado) ninguna columna numérica no nula | — |
+| `duplicate_columns` | (solo modo aproximado) dos columnas del resultado con el mismo nombre | pon alias distintos |
+
+Matices del motivo: el analizador de una tabla se rinde en lo primero que no entiende, así que un JOIN con alias de tabla (`FROM a x JOIN b y`) sale como `not_simple`, no `multi_table`; y un `LIMIT` o `FOR UPDATE` posterior prevalece (`user_limit`, `into_lock`) porque es lo que el usuario puede cambiar. En modo aproximado `multi_table` pasa a `no_numeric_column`/`duplicate_columns` cuando eso explica por qué no se ofrece.
 
 En `none` la sentencia se ejecuta como hoy: se inyecta `LIMIT N` si es un SELECT simple (`sqlsplit.InjectLimit`), `LimitApplied` se rellena y no hay botones `< >`.
 

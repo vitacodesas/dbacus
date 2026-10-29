@@ -113,6 +113,7 @@ export default {
     canceled: "Exportación cancelada", failed: "No se pudo exportar",
   },
   paging: {
+    by: "Paginar por", byPlaceholder: "elige columna…", approxHint: "El orden pasa a ser por «{col}» y cada página vuelve a ejecutar la consulta completa: puede ser lenta",
     nav: "Paginación", first: "Primera página", prev: "Página anterior", next: "Página siguiente", last: "Última página", loading: "Cargando página…",
     rows: "Filas {from}–{to}", page: "Página {n}", estimated: "≈ {n} filas", noMore: "No hay más filas",
     approx: "Paginación aproximada", noIndex: "Sin índice para este orden: cada página será lenta", tieAtEdge: "Valores repetidos en el borde: no se puede avanzar sin omitir filas",
@@ -121,6 +122,7 @@ export default {
       grouped: "Sin paginación: agrupa o elimina duplicados", compound: "Sin paginación: UNION o similar", into_lock: "Sin paginación: INTO o bloqueo de filas",
       view: "Sin paginación: es una vista", no_key: "Sin paginación: la tabla no tiene clave única numérica", key_type: "Sin paginación: la clave no es numérica",
       key_not_selected: "Sin paginación: falta la clave en las columnas seleccionadas", order_by_unsupported: "Sin paginación: ORDER BY no admitido (solo columnas)",
+      duplicate_columns: "Sin paginación: dos columnas del resultado se llaman igual",
       nullable_order: "Sin paginación: la columna del ORDER BY admite NULL", not_simple: "Sin paginación: consulta no admitida", no_numeric_column: "Sin paginación: no hay columna numérica",
     },
   },

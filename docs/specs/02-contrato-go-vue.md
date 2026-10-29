@@ -101,8 +101,11 @@ type PagingInfo struct {
   KeyColumns []string              // columnas del cursor, en orden
   Warning string                   // "" | "tie_at_edge" | "no_index"
   Estimated int64                  // ≈ filas (information_schema), solo keyset sin WHERE; 0 = desconocido
+  Column string                    // approx: columna por la que se pagina
+  Candidates []string              // columnas elegibles con «Paginar por…» (en approx, y en none si el resultado llegó al límite)
+  TieNext, TiePrev bool            // approx: avanzar en esa dirección omitiría filas empatadas en el borde: bloqueado
 }
-type PageRequest struct{ QueryID string; StmtIndex int; Direction string /* first|next|prev|last */; Column string /* solo approx; "" = la actual */ }
+type PageRequest struct{ QueryID string; StmtIndex int; Direction string /* first|next|prev|last */; Column string /* approx: empieza (o reinicia, desde la primera página) la paginación por esa columna; "" = seguir con la actual */ }
 type RowWindow struct{ Offset int; Rows [][]Cell; Total int64; Complete bool }
 type Cell struct{ V any /* null|string|number|bool */; T string /* "", "bytes", "bigint", "datetime", "json" */; Trunc bool }
 ```

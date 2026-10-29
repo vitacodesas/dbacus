@@ -83,4 +83,33 @@ test.describe("paginación por cursor", () => {
     await expect(page.getByTestId("paging-none")).toContainText("JOIN");
     await expect(page.getByTestId("paging")).toHaveCount(0);
   });
+
+  test("un JOIN que llega al límite ofrece «Paginar por…» y avanza por la columna elegida", async ({ app: page }) => {
+    await connect(page);
+    await runSql(page, "SELECT * FROM big_numbers JOIN x ON 1", "20");
+    await expect(page.getByTestId("paging-none")).toContainText("JOIN");
+    await expect(page.getByTestId("paging")).toHaveCount(0);
+    const by = page.getByTestId("page-by");
+    await expect(by.locator("option")).toHaveText(["elige columna…", "id", "n"]);
+
+    await by.selectOption("id");
+    await expect(page.getByTestId("paging-approx")).toBeVisible();
+    await expect(range(page)).toContainText("Filas 1–20 · Página 1");
+    await page.getByTestId("page-next").click();
+    await expect(range(page)).toContainText("Página 2");
+    await expect(page.getByTestId("page-prev")).toBeEnabled();
+    await expect(by).toHaveValue("id");
+  });
+
+  test("con valores repetidos en el borde bloquea «siguiente» en vez de saltarse filas", async ({ app: page }) => {
+    await connect(page);
+    await runSql(page, "SELECT * FROM big_numbers JOIN x ON 1", "20");
+    await page.getByTestId("page-by").selectOption("n");
+    await expect(page.getByTestId("paging-tie")).toBeVisible();
+    await expect(page.getByTestId("page-next")).toBeDisabled();
+
+    await page.getByTestId("page-by").selectOption("id"); // otra columna sin empates desbloquea
+    await expect(page.getByTestId("paging-tie")).toHaveCount(0);
+    await expect(page.getByTestId("page-next")).toBeEnabled();
+  });
 });

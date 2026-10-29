@@ -85,9 +85,15 @@ const range = ref<[number, number]>([0, 0]);
 const fmt = (n: number) => n.toLocaleString();
 const pg = computed(() => stmt.value?.paging ?? null);
 const paged = computed(() => pg.value?.mode === "keyset" || pg.value?.mode === "approx");
-const pageBusy = computed(() => !!results.paging[props.tabId]);
+// No se puede cambiar de página mientras la consulta sigue leyendo ni mientras llega otra página.
+const pageBusy = computed(() => !!results.paging[props.tabId] || res.value.status !== "done");
 function go(dir: "first" | "next" | "prev" | "last") {
   void results.page(props.tabId, current.value, dir);
+}
+// «Paginar por…» (modo aproximado, spec 18 §5): elegir una columna empieza o reinicia la paginación desde la primera página.
+const candidates = computed(() => pg.value?.candidates ?? []);
+function pageBy(column: string) {
+  if (column) void results.page(props.tabId, current.value, "first", column);
 }
 // Con página conocida, el rango es el de la página entera en filas absolutas (1–20, 21–40…), no lo que muestra el scroll;
 // tras «Última» el número de página no se conoce y el rango es relativo a la página.
@@ -104,8 +110,8 @@ const pageText = computed(() => {
 const pagingNotes = computed(() => {
   const p = pg.value;
   if (!p) return [];
-  const out: { key: string; text: string; warn?: boolean }[] = [];
-  if (p.mode === "approx") out.push({ key: "approx", text: t("paging.approx") });
+  const out: { key: string; text: string; warn?: boolean; hint?: string }[] = [];
+  if (p.mode === "approx") out.push({ key: "approx", text: t("paging.approx"), hint: t("paging.approxHint", { col: p.column }) });
   if (p.warning === "no_index") out.push({ key: "no-index", text: t("paging.noIndex"), warn: true });
   if (p.warning === "tie_at_edge") out.push({ key: "tie", text: t("paging.tieAtEdge"), warn: true });
   if (p.mode === "none" && p.reason) out.push({ key: "none", text: t(`paging.reasons.${p.reason}`) });
@@ -191,7 +197,7 @@ const summary = (i: number) => {
         <BaseButton v-if="showGrid && res.status !== 'running' && res.queryId" size="sm" variant="ghost" data-testid="export-open" :title="t('export.button')" @click="exportOpen = true">
           <Download class="size-3.5" />{{ t("export.button") }}
         </BaseButton>
-        <BaseButton v-if="res.status === 'running' || pageBusy" size="sm" variant="danger" @click="emit('cancel')">{{ t("query.stop") }}</BaseButton>
+        <BaseButton v-if="res.status === 'running' || results.paging[tabId]" size="sm" variant="danger" @click="emit('cancel')">{{ t("query.stop") }}</BaseButton>
       </div>
 
       <!-- Avisos -->
@@ -256,13 +262,26 @@ const summary = (i: number) => {
       <footer v-if="showGrid" class="flex shrink-0 items-center gap-4 border-t border-border px-3 py-1 text-xs text-muted">
         <span v-if="paged" class="flex shrink-0 items-center gap-0.5" role="group" :aria-label="t('paging.nav')" data-testid="paging">
           <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasPrev || pageBusy" :aria-label="t('paging.first')" :title="t('paging.first')" data-testid="page-first" @click="go('first')"><ChevronsLeft class="size-3.5" /></BaseButton>
-          <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasPrev || pageBusy" :aria-label="t('paging.prev')" :title="t('paging.prev')" data-testid="page-prev" @click="go('prev')"><ChevronLeft class="size-3.5" /></BaseButton>
-          <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasNext || pageBusy || pg?.warning === 'tie_at_edge'" :aria-label="t('paging.next')" :title="t('paging.next')" data-testid="page-next" @click="go('next')"><ChevronRight class="size-3.5" /></BaseButton>
+          <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasPrev || pageBusy || pg?.tiePrev" :aria-label="t('paging.prev')" :title="t('paging.prev')" data-testid="page-prev" @click="go('prev')"><ChevronLeft class="size-3.5" /></BaseButton>
+          <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasNext || pageBusy || pg?.tieNext" :aria-label="t('paging.next')" :title="t('paging.next')" data-testid="page-next" @click="go('next')"><ChevronRight class="size-3.5" /></BaseButton>
           <BaseButton size="sm" variant="ghost" :disabled="!pg?.hasNext || pageBusy" :aria-label="t('paging.last')" :title="t('paging.last')" data-testid="page-last" @click="go('last')"><ChevronsRight class="size-3.5" /></BaseButton>
         </span>
+        <label v-if="candidates.length" class="flex shrink-0 items-center gap-1">
+          {{ t("paging.by") }}
+          <select
+            class="h-6 rounded-md border border-border bg-panel px-1 text-xs text-fg"
+            :value="pg?.mode === 'approx' ? pg.column : ''"
+            :disabled="pageBusy"
+            data-testid="page-by"
+            @change="pageBy(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-if="pg?.mode !== 'approx'" value="">{{ t("paging.byPlaceholder") }}</option>
+            <option v-for="c in candidates" :key="c" :value="c">{{ c }}</option>
+          </select>
+        </label>
         <span data-testid="range" aria-live="polite">{{ rangeText }}</span>
-        <span v-if="pageBusy" class="flex items-center gap-1"><BaseSpinner class="size-3" />{{ t("paging.loading") }}</span>
-        <span v-for="n in pagingNotes" :key="n.key" class="truncate" :class="n.warn ? 'text-warning' : ''" :data-testid="`paging-${n.key}`" :title="n.text">{{ n.text }}</span>
+        <span v-if="results.paging[tabId]" class="flex items-center gap-1"><BaseSpinner class="size-3" />{{ t("paging.loading") }}</span>
+        <span v-for="n in pagingNotes" :key="n.key" class="truncate" :class="n.warn ? 'text-warning' : ''" :data-testid="`paging-${n.key}`" :title="n.hint ?? n.text">{{ n.text }}</span>
         <span v-if="stmt?.limitApplied" class="text-warning">{{ t("query.limitApplied", { n: stmt.limitApplied }) }}</span>
         <span v-if="editNote" class="truncate" data-testid="edit-note" :title="editNote">{{ editNote }}</span>
         <span v-if="res.database" class="font-data ml-auto">{{ res.database }}</span>

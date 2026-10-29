@@ -371,7 +371,8 @@ func TestUnpagedStatementsExplainWhyAndKeepTheAutomaticLimit(t *testing.T) {
 			require.Equal(t, c.reason, r.Paging.Reason)
 			require.Equal(t, 10, r.Paging.PageSize)
 			_, err := pe.q.Page(context.Background(), PageRequest{QueryID: qid, StmtIndex: 0, Direction: "next"})
-			require.Equal(t, "statement", apperr.From(err).Detail, "Page solo sirve para sentencias paginadas")
+			// Sin columna elegida solo sirve en las paginadas; si se ofrece el modo aproximado, pide la columna.
+			require.Contains(t, []string{"statement", "column"}, apperr.From(err).Detail)
 		})
 	}
 

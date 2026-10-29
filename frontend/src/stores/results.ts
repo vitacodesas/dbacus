@@ -116,7 +116,7 @@ export const useResultsStore = defineStore("results", () => {
    * Cambia de página una sentencia (spec 18 §7). Con cambios sin aplicar pide confirmación como al volver a ejecutar y los
    * descarta antes (Go rechaza la página si siguen ahí). La página sustituye el buffer de la sentencia dentro del mismo queryId.
    */
-  async function page(tabId: string, stmt: number, direction: "first" | "next" | "prev" | "last") {
+  async function page(tabId: string, stmt: number, direction: "first" | "next" | "prev" | "last", column = "") {
     const r = byTab.value[tabId];
     const before = r?.statements[stmt]?.paging;
     if (!r?.queryId || r.status !== "done" || !before || paging.value[tabId]) return;
@@ -125,7 +125,7 @@ export const useResultsStore = defineStore("results", () => {
     const queryId = r.queryId;
     paging.value = { ...paging.value, [tabId]: true };
     try {
-      const res = await api.page({ queryId, stmtIndex: stmt, direction, column: "" });
+      const res = await api.page({ queryId, stmtIndex: stmt, direction, column });
       const cur = byTab.value[tabId];
       if (cur?.queryId !== queryId) return;
       cur.statements[stmt] = res;

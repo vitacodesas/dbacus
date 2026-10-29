@@ -115,6 +115,7 @@ const en: typeof es = {
     canceled: "Export canceled", failed: "Couldn't export",
   },
   paging: {
+    by: "Paginate by", byPlaceholder: "pick a column…", approxHint: "The order becomes «{col}» and every page runs the whole query again: it can be slow",
     nav: "Pagination", first: "First page", prev: "Previous page", next: "Next page", last: "Last page", loading: "Loading page…",
     rows: "Rows {from}–{to}", page: "Page {n}", estimated: "≈ {n} rows", noMore: "No more rows",
     approx: "Approximate pagination", noIndex: "No index for this order: every page will be slow", tieAtEdge: "Repeated values at the edge: cannot advance without skipping rows",
@@ -123,6 +124,7 @@ const en: typeof es = {
       grouped: "Not paginated: it groups or removes duplicates", compound: "Not paginated: UNION or similar", into_lock: "Not paginated: INTO or row locking",
       view: "Not paginated: it is a view", no_key: "Not paginated: the table has no numeric unique key", key_type: "Not paginated: the key is not numeric",
       key_not_selected: "Not paginated: the key is missing from the selected columns", order_by_unsupported: "Not paginated: unsupported ORDER BY (plain columns only)",
+      duplicate_columns: "Not paginated: two result columns have the same name",
       nullable_order: "Not paginated: the ORDER BY column allows NULL", not_simple: "Not paginated: unsupported query", no_numeric_column: "Not paginated: no numeric column",
     },
   },

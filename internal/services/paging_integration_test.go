@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/vitacodesas/dbacus/internal/apperr"
 	"github.com/vitacodesas/dbacus/internal/paging"
 	"github.com/vitacodesas/dbacus/internal/results"
 	"github.com/vitacodesas/dbacus/internal/sqlsplit"
@@ -302,6 +303,63 @@ func TestKeysetPagingPerfIntegration(t *testing.T) {
 			require.LessOrEqual(t, worstKeyID, max(3*firstID, 20*time.Millisecond), "página profunda por id")
 			require.LessOrEqual(t, worstKeyV, max(3*firstV, 20*time.Millisecond), "página profunda por v desc")
 			require.Less(t, lastTook, max(3*firstID, 50*time.Millisecond), "«Última» cuesta como una página, no como recorrer la tabla")
+		})
+	}
+}
+
+// TestApproxPagingIntegration recorre JOIN reales por columnas únicas y con empates: lo que SQLite no confirma es que el
+// driver informe bien tipos (UNSIGNED BIGINT, DECIMAL) y nulabilidad (LEFT JOIN), y que el servidor acepte la tabla derivada.
+func TestApproxPagingIntegration(t *testing.T) {
+	for _, image := range mysqlbox.Images() {
+		t.Run(image, func(t *testing.T) {
+			e := newLiveEnv(t, mysqlbox.Start(t, image))
+			e.mustRun(t, "setup", "CREATE TABLE ap_a (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, amt DECIMAL(12,2) NOT NULL)")
+			e.mustRun(t, "setup", "CREATE TABLE ap_b (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, a_id BIGINT UNSIGNED NOT NULL, tag VARCHAR(5))")
+			e.mustRun(t, "setup", "INSERT INTO ap_a (amt) SELECT (d0.n + d1.n*10) % 6 * 1.25 FROM "+ten+" d0, "+ten+" d1")
+			e.mustRun(t, "setup", "INSERT INTO ap_b (a_id, tag) SELECT id, 'x' FROM ap_a WHERE id % 3 <> 0")
+			e.mustRun(t, "setup", "INSERT INTO ap_a (id, amt) VALUES (18446744073709551615, 7.50)")
+			e.mustRun(t, "setup", "INSERT INTO ap_b (a_id, tag) VALUES (18446744073709551615, 'big')")
+
+			const join = "SELECT a.id AS aid, a.amt AS amt, b.tag AS tag FROM ap_a a JOIN ap_b b ON b.a_id = a.id"
+			oqid, _ := e.mustRun(t, "oracle", join+" ORDER BY a.id")
+			want := e.col0(t, oqid, 0)
+			require.Greater(t, len(want), 60)
+
+			qid, done := e.mustRun(t, "pager", join, func(r *ExecuteRequest) { r.AutoLimit = 7 })
+			r := done.Results[0]
+			require.Equal(t, "none", r.Paging.Mode)
+			require.Equal(t, []string{"aid", "amt"}, r.Paging.Candidates, "numéricas exactas y no nulas; `tag` es texto")
+
+			// Por una columna única se recorre todo, incluido el id por encima de 2^63.
+			var err error
+			r, err = e.q.Page(context.Background(), PageRequest{QueryID: qid, StmtIndex: 0, Direction: "first", Column: "aid"})
+			require.NoError(t, err)
+			require.Equal(t, "approx", r.Paging.Mode)
+			got := e.col0(t, qid, 0)
+			for guard := 0; r.Paging.HasNext; guard++ {
+				require.Less(t, guard, 1000)
+				require.False(t, r.Paging.TieNext)
+				r = e.page(t, qid, "next")
+				got = append(got, e.col0(t, qid, 0)...)
+			}
+			require.Equal(t, want, got)
+			r = e.page(t, qid, "last")
+			require.Equal(t, want[len(want)-7:], e.col0(t, qid, 0))
+			require.True(t, r.Paging.HasPrev)
+			e.page(t, qid, "prev")
+			require.Equal(t, want[len(want)-14:len(want)-7], e.col0(t, qid, 0))
+
+			// Por el decimal con empates masivos, bloquea antes que perder filas.
+			r, err = e.q.Page(context.Background(), PageRequest{QueryID: qid, StmtIndex: 0, Direction: "first", Column: "amt"})
+			require.NoError(t, err)
+			require.True(t, r.Paging.TieNext, "siete filas por página con seis valores de amt")
+			require.Equal(t, "tie_at_edge", r.Paging.Warning)
+			_, err = e.q.Page(context.Background(), PageRequest{QueryID: qid, StmtIndex: 0, Direction: "next"})
+			require.Equal(t, "tie_at_edge", apperr.From(err).Detail)
+
+			// Un LEFT JOIN deja `bid` nulable: el servidor lo informa y no se ofrece.
+			_, done = e.mustRun(t, "left", "SELECT a.id AS aid, b.id AS bid FROM ap_a a LEFT JOIN ap_b b ON b.a_id = a.id", func(r *ExecuteRequest) { r.AutoLimit = 7 })
+			require.Equal(t, []string{"aid"}, done.Results[0].Paging.Candidates)
 		})
 	}
 }

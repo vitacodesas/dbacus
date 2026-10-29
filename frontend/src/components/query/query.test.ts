@@ -255,8 +255,36 @@ describe("componentes de consultas", () => {
         expect(noIdx.get('[data-testid="paging-no-index"]').text()).toContain("Sin índice");
       });
 
+      it("«Paginar por…» ofrece las columnas candidatas y pide la primera página por la elegida", async () => {
+        const { w } = await paged({ mode: "none", reason: "multi_table", hasNext: false, candidates: ["id", "n"] });
+        expect(w.find('[data-testid="paging"]').exists()).toBe(false);
+        const by = w.get('[data-testid="page-by"]');
+        expect(by.findAll("option").map((o) => o.text())).toEqual(["elige columna…", "id", "n"]);
+        api.page.mockResolvedValue(stmt(0, { paging: paging({ mode: "approx", column: "n", candidates: ["id", "n"] }) }));
+        await by.setValue("n");
+        await flushPromises();
+        expect(api.page).toHaveBeenCalledWith({ queryId: "q1", stmtIndex: 0, direction: "first", column: "n" });
+      });
+
+      it("sin candidatas no hay selector; en modo aproximado queda elegida la columna actual", async () => {
+        const { w } = await paged();
+        expect(w.find('[data-testid="page-by"]').exists()).toBe(false);
+        const { w: approx } = await paged({ mode: "approx", column: "id", candidates: ["id", "n"] });
+        expect((approx.get('[data-testid="page-by"]').element as HTMLSelectElement).value).toBe("id");
+        expect(approx.get('[data-testid="paging-approx"]').attributes("title")).toContain("«id»");
+      });
+
+      it("el bloqueo por empate es por dirección: tieNext no frena «anterior» y tiePrev no frena «siguiente»", async () => {
+        const { w } = await paged({ mode: "approx", column: "n", candidates: ["n"], hasPrev: true, tieNext: true, warning: "tie_at_edge" });
+        expect(w.get('[data-testid="page-next"]').attributes("disabled")).toBeDefined();
+        expect(w.get('[data-testid="page-prev"]').attributes("disabled")).toBeUndefined();
+        const { w: back } = await paged({ mode: "approx", column: "n", candidates: ["n"], hasPrev: true, tiePrev: true, warning: "tie_at_edge" });
+        expect(back.get('[data-testid="page-prev"]').attributes("disabled")).toBeDefined();
+        expect(back.get('[data-testid="page-next"]').attributes("disabled")).toBeUndefined();
+      });
+
       it("con tie_at_edge el avance queda bloqueado y se avisa", async () => {
-        const { w } = await paged({ mode: "approx", warning: "tie_at_edge" });
+        const { w } = await paged({ mode: "approx", warning: "tie_at_edge", tieNext: true });
         expect(w.get('[data-testid="page-next"]').attributes("disabled")).toBeDefined();
         expect(w.find('[data-testid="paging-tie"]').exists()).toBe(true);
         expect(w.find('[data-testid="paging-approx"]').exists()).toBe(true);

@@ -84,7 +84,7 @@ interface Run {
   newRows: Record<number, Map<number, Any>[]>; deleted: Record<number, Set<number>>
   removed: Record<number, number[]>; appended: Record<number, Any[][]>
   // Spec 18: estado de la paginación simulada por sentencia (la tabla completa y la página actual).
-  pages: Record<number, { table: Any; start: number; size: number; known: boolean }>
+  pages: Record<number, { table: Any; start: number; size: number; known: boolean; col?: string; offer?: boolean }>
 }
 const runs = new Map<string, Run>();
 
@@ -96,9 +96,13 @@ function planStatement(sql: string, index: number, start: number, maxRows: numbe
   if (/sleep\s*\(/.test(lower)) return { stmt: base, sleep: true, table: { rows: 1, cell: () => ({ v: 0 }), cols: [col("SLEEP(60)", "int")] } };
   const name = Object.keys(TABLES).find((t) => new RegExp(`\\b${t}\\b`).test(lower));
   if (seed.paging && /^select\b.*\bjoin\b/.test(lower) && name) {
+    // Un JOIN no se pagina por clave; si el resultado llega al límite se ofrece el modo aproximado por las columnas enteras.
     const t = TABLES[name];
-    const n = Math.min(t.rows, autoLimit > 0 ? autoLimit : maxRows);
-    return { tableName: name, stmt: { ...base, columns: asMeta(t.cols), rowCount: n, paging: { mode: "none", reason: "multi_table", pageSize: 0, hasNext: false, hasPrev: false, page: 0, keyColumns: null, warning: "", estimated: 0 } }, table: { ...t, rows: n } };
+    const size = Math.min(maxRows, autoLimit > 0 ? autoLimit : maxRows);
+    const n = Math.min(t.rows, size);
+    const candidates = autoLimit > 0 && t.rows > size ? t.cols.filter((c: Any) => /int/.test(c.dataType)).map((c: Any) => c.name) : [];
+    const paging = { mode: "none", reason: "multi_table", pageSize: size, hasNext: false, hasPrev: false, page: 0, keyColumns: null, warning: "", estimated: 0, column: "", candidates, tieNext: false, tiePrev: false };
+    return { tableName: name, stmt: { ...base, columns: asMeta(t.cols), rowCount: n, paging }, table: { ...t, rows: n }, ...(candidates.length ? { page: { table: t, start: 0, size, known: true, offer: true } } : {}) };
   }
   if (lower.startsWith("select") && name) {
     const t = TABLES[name];
@@ -107,7 +111,7 @@ function planStatement(sql: string, index: number, start: number, maxRows: numbe
     if (seed.paging && autoLimit > 0 && /^select\s+\*\s+from\s+\w+\s*;?$/.test(lower) && t.cols[0]?.isPrimaryKey) {
       const size = Math.min(maxRows, autoLimit);
       const n = Math.min(t.rows, size);
-      const paging = { mode: "keyset", reason: "", pageSize: size, hasNext: t.rows > size, hasPrev: false, page: 1, keyColumns: [t.cols[0].name], warning: "", estimated: 0 };
+      const paging = { mode: "keyset", reason: "", pageSize: size, hasNext: t.rows > size, hasPrev: false, page: 1, keyColumns: [t.cols[0].name], warning: "", estimated: 0, column: "", candidates: [], tieNext: false, tiePrev: false };
       return { tableName: name, stmt: { ...base, columns: asMeta(t.cols), rowCount: n, paging }, table: { ...t, rows: n }, page: { table: t, start: 0, size, known: true } };
     }
     const cap = limit > 0 ? Math.min(maxRows, limit) : maxRows;
@@ -322,6 +326,8 @@ export const QueryService = {
       }
     }),
   // Spec 18: otra página de una sentencia paginada. Como Go, rechaza si hay cambios sin aplicar y sustituye el buffer.
+  // Con `column` empieza la paginación aproximada; una columna que no es la primera simula empates masivos en el borde
+  // (el avance se bloquea con tie_at_edge, como la regla del spec 18 §5).
   Page: (req: Any) =>
     cp(() => {
       const run = runs.get(req.queryId);
@@ -331,19 +337,37 @@ export const QueryService = {
       if ((run.pending[req.stmtIndex]?.size ?? 0) + (run.newRows[req.stmtIndex]?.length ?? 0) + (run.deleted[req.stmtIndex]?.size ?? 0) > 0) {
         throw fail("VALIDATION", "Hay cambios sin aplicar en esta página", "pending");
       }
-      const total = pg.table.rows;
+      const intCols: string[] = pg.table.cols.filter((c: Any) => /int/.test(c.dataType)).map((c: Any) => c.name);
+      let dir = req.direction;
+      if (req.column) {
+        if (!intCols.includes(req.column)) throw fail("VALIDATION", "La columna no sirve para paginar", "column");
+        Object.assign(pg, { col: req.column, offer: false, start: 0, known: true });
+        dir = "first";
+      } else if (pg.offer) {
+        throw fail("VALIDATION", "Elige la columna por la que paginar", "column");
+      }
+      const unique = !pg.col || pg.col === pg.table.cols[0].name;
+      const total = unique ? pg.table.rows : 1000; // por una columna con empates, solo caben las filas con el valor del primer borde
       const last = Math.floor((total - 1) / pg.size) * pg.size;
-      const hasNext = pg.start + pg.size < total;
-      if (req.direction === "first") Object.assign(pg, { start: 0, known: true });
-      else if (req.direction === "last") Object.assign(pg, { start: last, known: false });
-      else if (req.direction === "next" && hasNext) pg.start += pg.size;
-      else if (req.direction === "prev" && pg.start > 0) pg.start -= pg.size;
+      const tieNextNow = !unique && pg.start + pg.size < total;
+      if (dir === "next" && tieNextNow) throw fail("VALIDATION", "Hay valores repetidos en el borde de la página", "tie_at_edge");
+      if (dir === "first") Object.assign(pg, { start: 0, known: true });
+      else if (dir === "last") Object.assign(pg, { start: last, known: false });
+      else if (dir === "next" && pg.start + pg.size < total) pg.start += pg.size;
+      else if (dir === "prev" && pg.start > 0) pg.start -= pg.size;
       const n = Math.min(pg.size, total - pg.start);
       const base = pg.start;
-      run.data[req.stmtIndex] = { ...d, rows: n, cell: (i: number, c: number) => pg.table.cell(base + i, c) };
+      run.data[req.stmtIndex] = { ...d, rows: n, cell: (i: number, c: number) => pg.table.cell(unique ? base + i : (base + i) * 1000, c) };
       run.removed[req.stmtIndex] = [];
       run.appended[req.stmtIndex] = [];
-      const paging = { mode: "keyset", reason: "", pageSize: pg.size, hasNext: base + pg.size < total, hasPrev: base > 0, page: pg.known ? base / pg.size + 1 : 0, keyColumns: [pg.table.cols[0].name], warning: "", estimated: 0 };
+      const hasNext = base + pg.size < total;
+      const tieNext = !unique && hasNext && base === 0;
+      const tiePrev = !unique && base > 0 && !pg.known;
+      const paging = {
+        mode: pg.col ? "approx" : "keyset", reason: "", pageSize: pg.size, hasNext, hasPrev: base > 0, page: pg.known ? base / pg.size + 1 : 0,
+        keyColumns: [pg.col || pg.table.cols[0].name], warning: tieNext || tiePrev ? "tie_at_edge" : "", estimated: 0,
+        column: pg.col ?? "", candidates: pg.col ? intCols : [], tieNext, tiePrev,
+      };
       return { ...run.stmts[req.stmtIndex], index: req.stmtIndex, kind: "rows", columns: asMeta(pg.table.cols), rowCount: n, truncated: false, affectedRows: 0, lastInsertId: 0, warnings: 0, elapsedMs: 3, sql: d.sql ?? "", limitApplied: 0, paging };
     }),
   GetRows: (queryId: string, stmt: number, offset: number, limit: number) =>

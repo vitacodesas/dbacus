@@ -29,22 +29,35 @@ type PagingInfo struct {
 	KeyColumns []string `json:"keyColumns"` // columnas del cursor, en orden
 	Warning    string   `json:"warning"`    // "" | "tie_at_edge" | "no_index"
 	Estimated  int64    `json:"estimated"`  // ≈ filas de la tabla (solo keyset y sin WHERE); 0 = desconocido
+	// Modo aproximado (spec 18 §5). Column es la columna por la que se pagina (solo approx); Candidates, las que se pueden
+	// elegir con «Paginar por…» (en approx, y en none cuando el resultado llegó al límite y se podría paginar así);
+	// TieNext/TiePrev, que avanzar en esa dirección se saltaría filas empatadas en el borde y por eso está bloqueado.
+	Column     string   `json:"column"`
+	Candidates []string `json:"candidates"`
+	TieNext    bool     `json:"tieNext"`
+	TiePrev    bool     `json:"tiePrev"`
 }
 
-const warnNoIndex = "no_index"
+const (
+	warnNoIndex = "no_index"
+	warnTie     = "tie_at_edge"
+)
 
 // PageRequest pide otra página de una sentencia ya paginada.
 type PageRequest struct {
 	QueryID   string `json:"queryId"`
 	StmtIndex int    `json:"stmtIndex"`
 	Direction string `json:"direction"` // first | next | prev | last
-	Column    string `json:"column"`    // solo modo aproximado (spec 18 §5); aún sin uso
+	Column    string `json:"column"`    // solo modo aproximado: empieza (o reinicia) la paginación por esa columna; ver Page
 }
 
 // pageState es lo que se cuelga de cada results.Buffer paginado (Buffer.Ext): el plan y los valores de borde de la
 // primera y la última fila mostradas, con los que se construye la página siguiente o la anterior.
 type pageState struct {
 	plan             paging.Plan
+	approx           *paging.Approx  // no nil: paginación aproximada (plan no se usa)
+	candidates       []string        // approx: columnas elegibles
+	tieNext, tiePrev bool            // approx: avanzar en esa dirección omitiría filas empatadas en el borde
 	base             StatementResult // índice, posición y SQL original de la sentencia
 	hasNext, hasPrev bool
 	page             int
@@ -53,11 +66,64 @@ type pageState struct {
 	estimated        int64
 }
 
-func (p *pageState) info() *PagingInfo {
-	return &PagingInfo{
-		Mode: paging.ModeKeyset, PageSize: p.plan.PageSize, HasNext: p.hasNext, HasPrev: p.hasPrev, Page: p.page,
-		KeyColumns: p.plan.KeyColumns(), Warning: p.warning, Estimated: p.estimated,
+// order son las columnas del cursor de la sentencia (las del orden efectivo, o la única del modo aproximado).
+func (p *pageState) order() []paging.Col {
+	if p.approx != nil {
+		return p.approx.Order()
 	}
+	return p.plan.Order
+}
+
+func (p *pageState) size() int {
+	if p.approx != nil {
+		return p.approx.PageSize
+	}
+	return p.plan.PageSize
+}
+
+func (p *pageState) info() *PagingInfo {
+	pi := &PagingInfo{
+		Mode: paging.ModeKeyset, PageSize: p.size(), HasNext: p.hasNext, HasPrev: p.hasPrev, Page: p.page,
+		Warning: p.warning, Estimated: p.estimated,
+	}
+	if p.approx != nil {
+		pi.Mode, pi.Column, pi.Candidates = paging.ModeApprox, p.approx.Column, p.candidates
+		pi.TieNext, pi.TiePrev = p.tieNext, p.tiePrev
+		pi.KeyColumns = []string{p.approx.Column}
+	} else {
+		pi.KeyColumns = p.plan.KeyColumns()
+	}
+	return pi
+}
+
+// approxOffer cuelga del buffer de una sentencia que no se pagina (modo none) pero admite el modo aproximado: guarda lo
+// necesario para que `Page` con Column la empiece. Solo existe cuando el resultado llegó al límite de filas.
+type approxOffer struct {
+	base       StatementResult
+	size       int
+	candidates []string
+}
+
+// offerApprox decide si una sentencia sin paginación por cursor se puede ofrecer en modo aproximado (spec 18 §5) y, si es
+// así, anota las columnas elegibles en `info`. Si no se puede, ajusta el motivo cuando hay uno más preciso.
+func offerApprox(info *PagingInfo, text string, cols []model.ColumnMeta) []string {
+	switch info.Reason {
+	case sqlsplit.ReasonNotSelect, sqlsplit.ReasonUserLimit, sqlsplit.ReasonIntoLock:
+		return nil
+	}
+	if _, reason := sqlsplit.Wrap(text); reason != "" {
+		info.Reason = reason
+		return nil
+	}
+	names, reason := paging.Candidates(cols)
+	if reason != "" {
+		if info.Reason == sqlsplit.ReasonMultiTable {
+			info.Reason = reason // lo útil para quien pensaba usar «Paginación aproximada»
+		}
+		return nil
+	}
+	info.Candidates = names
+	return names
 }
 
 // result es el StatementResult de la página que hay ahora en el buffer.
@@ -109,9 +175,9 @@ func newPageState(plan paging.Plan, detail model.TableDetail, base StatementResu
 	return st
 }
 
-// readPage lee del cursor las filas de una página: PageSize más una de sondeo, que solo dice si hay más y no se guarda.
-// Para las páginas leídas hacia atrás las filas llegan en orden inverso y se invierten aquí.
-func readPage(res driver.RunResult, cols []model.ColumnMeta, size int, dir paging.Dir) (rows [][]results.Cell, more bool, err error) {
+// readPage lee del cursor las filas de una página: PageSize más una de sondeo (`probe`, nil si no hubo), que solo dice si hay
+// más y no se guarda. Para las páginas leídas hacia atrás las filas llegan en orden inverso y se invierten aquí.
+func readPage(res driver.RunResult, cols []model.ColumnMeta, size int, dir paging.Dir) (rows [][]results.Cell, probe []results.Cell, err error) {
 	all := make([][]results.Cell, 0, size+1)
 	for res.Next() {
 		row := res.Row()
@@ -126,14 +192,17 @@ func readPage(res driver.RunResult, cols []model.ColumnMeta, size int, dir pagin
 	}
 	if len(all) <= size {
 		if err := res.Err(); err != nil {
-			return nil, false, err
+			return nil, nil, err
 		}
 	}
-	rows, more = paging.Page(all, size)
+	rows, more := paging.Page(all, size)
+	if more {
+		probe = all[size]
+	}
 	if dir.Backward() {
 		paging.Reverse(rows)
 	}
-	return rows, more, nil
+	return rows, probe, nil
 }
 
 // cellLiteral devuelve el texto exacto de una celda numérica para usarlo como valor de borde.
@@ -177,10 +246,10 @@ func (p *pageState) fillPage(buf *results.Buffer, rows [][]results.Cell) (bool, 
 	p.first, p.last = nil, nil
 	if len(rows) > 0 {
 		var err error
-		if p.first, err = edgeValues(cols, rows[0], p.plan.Order); err != nil {
+		if p.first, err = edgeValues(cols, rows[0], p.order()); err != nil {
 			return false, err
 		}
-		if p.last, err = edgeValues(cols, rows[len(rows)-1], p.plan.Order); err != nil {
+		if p.last, err = edgeValues(cols, rows[len(rows)-1], p.order()); err != nil {
 			return false, err
 		}
 	}
@@ -250,8 +319,19 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 		return StatementResult{}, toAppErr(err)
 	}
 	cur, _ := buf.Ext().(*pageState)
-	if cur == nil {
+	offer, _ := buf.Ext().(*approxOffer)
+	if cur == nil && offer == nil {
 		return StatementResult{}, invalid("statement", "Esta sentencia no se pagina por cursor")
+	}
+	if req.Column != "" {
+		// «Paginar por…»: empieza (o reinicia con otra columna) la paginación aproximada desde la primera página.
+		next, err := startApprox(buf, cur, offer, req.Column)
+		if err != nil {
+			return StatementResult{}, err
+		}
+		cur, dir = next, paging.First
+	} else if cur == nil {
+		return StatementResult{}, invalid("column", "Elige la columna por la que paginar")
 	}
 	sess, err := s.d.Sessions.Get(run.SessionID)
 	if err != nil {
@@ -266,6 +346,10 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 	if (dir == paging.Next && !cur.hasNext) || (dir == paging.Prev && !cur.hasPrev) {
 		return cur.result(buf), nil
 	}
+	// Avanzar con valores repetidos en el borde omitiría filas en silencio: la interfaz lo bloquea y aquí se impide también.
+	if (dir == paging.Next && cur.tieNext) || (dir == paging.Prev && cur.tiePrev) {
+		return StatementResult{}, invalid(warnTie, "Hay valores repetidos en el borde de la página: avanzar omitiría filas. Cambia la columna o usa Sin límite")
+	}
 
 	var edge []string
 	switch dir {
@@ -274,7 +358,7 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 	case paging.Prev:
 		edge = cur.first
 	}
-	sqlText, err := cur.plan.Build(dir, edge, sess.Driver.QuoteIdent)
+	sqlText, err := cur.build(dir, edge, sess.Driver.QuoteIdent)
 	if err != nil {
 		return StatementResult{}, apperr.Wrap(apperr.Internal, "No se pudo preparar la página", err)
 	}
@@ -306,13 +390,14 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 	}()
 
 	started := time.Now()
-	rows, more, cols, err := s.fetchPage(runCtx, ar, sess, run.TabID, sqlText, cur.plan.PageSize, dir)
+	rows, probe, cols, err := s.fetchPage(runCtx, ar, sess, run.TabID, sqlText, cur.size(), dir)
 	if err != nil {
 		if ar.canceled.Load() {
 			return StatementResult{}, apperr.Wrap(apperr.QueryCanceled, "Consulta cancelada", err)
 		}
 		return StatementResult{}, apperr.From(err)
 	}
+	more := probe != nil
 	// Se pidió «siguiente»/«anterior» y ya no queda nada (se borraron filas): se queda la página actual.
 	if len(rows) == 0 && (dir == paging.Next || dir == paging.Prev) {
 		if dir == paging.Next {
@@ -330,7 +415,7 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 	}
 	nb.SetSource(srcSQL, srcDB)
 
-	next := &pageState{plan: cur.plan, base: cur.base, warning: cur.warning, estimated: cur.estimated}
+	next := &pageState{plan: cur.plan, approx: cur.approx, candidates: cur.candidates, base: cur.base, warning: cur.warning, estimated: cur.estimated}
 	switch dir {
 	case paging.First:
 		next.hasNext, next.hasPrev, next.page = more, false, 1
@@ -356,6 +441,11 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 	if _, err := next.fillPage(nb, rows); err != nil {
 		return StatementResult{}, toAppErr(err)
 	}
+	if next.approx != nil {
+		if err := next.markTies(cols, dir, probe); err != nil {
+			return StatementResult{}, toAppErr(err)
+		}
+	}
 	nb.SetExt(next)
 	next.base.ElapsedMs = time.Since(started).Milliseconds()
 	return next.result(nb), nil
@@ -363,7 +453,7 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 
 // fetchPage ejecuta la consulta de una página y lee sus filas, reintentando una vez si la conexión de la pestaña había
 // muerto (igual que Execute).
-func (s *QueryService) fetchPage(ctx context.Context, ar *activeRun, sess *session.Session, tabID, sqlText string, size int, dir paging.Dir) ([][]results.Cell, bool, []model.ColumnMeta, error) {
+func (s *QueryService) fetchPage(ctx context.Context, ar *activeRun, sess *session.Session, tabID, sqlText string, size int, dir paging.Dir) ([][]results.Cell, []results.Cell, []model.ColumnMeta, error) {
 	for attempt := 0; ; attempt++ {
 		conn, err := sess.AcquireConn(ctx, tabID)
 		if err == nil {
@@ -373,18 +463,18 @@ func (s *QueryService) fetchPage(ctx context.Context, ar *activeRun, sess *sessi
 				cols := res.Columns()
 				if len(cols) == 0 {
 					_ = res.Close()
-					return nil, false, nil, apperr.New(apperr.Internal, "La página no devolvió columnas")
+					return nil, nil, nil, apperr.New(apperr.Internal, "La página no devolvió columnas")
 				}
-				rows, more, rerr := readPage(res, cols, size, dir)
+				rows, probe, rerr := readPage(res, cols, size, dir)
 				_ = res.Close()
-				return rows, more, cols, rerr
+				return rows, probe, cols, rerr
 			}
 		}
 		if attempt == 0 && connLost(err) && ctx.Err() == nil {
 			_ = sess.CloseTab(tabID)
 			continue
 		}
-		return nil, false, nil, err
+		return nil, nil, nil, err
 	}
 }
 
@@ -401,12 +491,12 @@ func pageSizeFor(autoLimit, maxRows int) int {
 // pedir las siguientes. El historial y la invalidación de esquema los hace el llamador con el resultado devuelto.
 func (s *QueryService) firstPage(res driver.RunResult, cols []model.ColumnMeta, buf *results.Buffer, st *pageState, out StatementResult,
 	started time.Time) (StatementResult, error) {
-	rows, more, err := readPage(res, cols, st.plan.PageSize, paging.First)
+	rows, probe, err := readPage(res, cols, st.plan.PageSize, paging.First)
 	if err != nil {
 		buf.Finish(false)
 		return out, err
 	}
-	st.hasNext, st.page = more, 1
+	st.hasNext, st.page = probe != nil, 1
 	st.base = out
 	if _, err := st.fillPage(buf, rows); err != nil {
 		return out, err
@@ -414,4 +504,74 @@ func (s *QueryService) firstPage(res driver.RunResult, cols []model.ColumnMeta, 
 	buf.SetExt(st)
 	st.base.ElapsedMs = time.Since(started).Milliseconds()
 	return st.result(buf), nil
+}
+
+// build es la consulta de una página según el modo de la sentencia.
+func (p *pageState) build(d paging.Dir, edge []string, quote func(string) string) (string, error) {
+	if p.approx == nil {
+		return p.plan.Build(d, edge, quote)
+	}
+	e := ""
+	if len(edge) > 0 {
+		e = edge[0]
+	}
+	return p.approx.Build(d, e, quote)
+}
+
+// markTies aplica la regla de empate del modo aproximado (spec 18 §5) a la página recién leída. Hacia delante, la fila de
+// sondeo viene justo detrás de la última; hacia atrás, justo delante de la primera. Si vale lo mismo que ese borde, la
+// consulta de la página siguiente (`columna > borde`) se saltaría las filas que empatan, así que ese avance se bloquea.
+// En la otra dirección no hay empate posible: la página se pidió con comparación estricta contra la que acabamos de dejar.
+func (p *pageState) markTies(cols []model.ColumnMeta, dir paging.Dir, probe []results.Cell) error {
+	p.tieNext, p.tiePrev = false, false
+	if probe != nil && len(p.first) > 0 {
+		pv, err := edgeValues(cols, probe, p.order())
+		if err != nil {
+			return err
+		}
+		if dir.Backward() {
+			p.tiePrev = paging.TieAtEdge(p.first[0], pv[0])
+		} else {
+			p.tieNext = paging.TieAtEdge(p.last[0], pv[0])
+		}
+	}
+	p.warning = ""
+	if p.tieNext || p.tiePrev {
+		p.warning = warnTie
+	}
+	return nil
+}
+
+// startApprox prepara el estado para paginar en modo aproximado por `column`, a partir de una sentencia sin paginar
+// (con oferta) o ya aproximada (cambio de columna). Las columnas elegibles son las del resultado; un nombre que no lo sea
+// se rechaza (nunca llega a SQL sin pasar por esta lista).
+func startApprox(buf *results.Buffer, cur *pageState, offer *approxOffer, column string) (*pageState, error) {
+	var (
+		base       StatementResult
+		size       int
+		candidates []string
+	)
+	switch {
+	case cur != nil && cur.approx != nil:
+		base, size, candidates = cur.base, cur.approx.PageSize, cur.candidates
+	case offer != nil:
+		base, size, candidates = offer.base, offer.size, offer.candidates
+	default:
+		return nil, invalid("column", "Esta sentencia se pagina por clave: no admite elegir columna")
+	}
+	var name string
+	for _, c := range candidates {
+		if strings.EqualFold(c, column) {
+			name = c
+		}
+	}
+	if name == "" {
+		return nil, invalid("column", "La columna no sirve para paginar: debe ser numérica y no admitir NULL")
+	}
+	src, _ := buf.Source()
+	inner, reason := sqlsplit.Wrap(src)
+	if reason != "" {
+		return nil, invalid("statement", "Esta sentencia no se puede paginar: "+reason)
+	}
+	return &pageState{approx: &paging.Approx{Inner: inner, Column: name, PageSize: size}, candidates: candidates, base: base}, nil
 }
