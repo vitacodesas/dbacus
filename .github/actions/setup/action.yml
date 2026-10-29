@@ -16,13 +16,13 @@ runs:
       with: { go-version-file: go.mod }
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with: { node-version: 24, cache: npm, cache-dependency-path: frontend/package-lock.json }
-    - uses: arduino/setup-task@24c5e13bce349197642746563945fcdf9355e8f4 # v2.0.0
-      if: inputs.wails == 'true'
     # Wails 3.0.0 usa GTK4 + WebKitGTK 6.0 por defecto en Linux (GTK3 solo con -tags gtk3).
     - name: Dependencias de Linux
       if: runner.os == 'Linux'
       shell: bash
       run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+    # wails3 trae su propio ejecutor de Task: no hace falta instalar `task` (y su instalador consulta la API de GitHub
+    # sin autenticar, que en los runners compartidos acaba en "API rate limit exceeded").
     - name: Instalar wails3 (versión de go.mod)
       if: inputs.wails == 'true'
       shell: bash
