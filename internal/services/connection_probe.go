@@ -184,7 +184,7 @@ func probeTCP(ctx context.Context, dial driver.DialFunc, target string, p model.
 	switch {
 	case errors.As(err, &dns):
 		return apperr.Wrap(apperr.NetworkUnreachable, "No se pudo resolver el host «"+p.Host+"»", err)
-	case errors.Is(err, syscall.ECONNREFUSED):
+	case isConnRefused(err):
 		return apperr.Wrap(apperr.NetworkUnreachable, "Conexión rechazada: el puerto "+strconv.Itoa(p.Port)+" está cerrado o el servidor no escucha ahí", err)
 	case errors.Is(err, context.Canceled):
 		return apperr.Wrap(apperr.QueryCanceled, "Prueba cancelada", err)
@@ -254,4 +254,14 @@ func (p *probe) record(name string, ok bool, start time.Time, ae *apperr.AppErro
 func (p *probe) finish() TestResult {
 	p.result.OK = p.result.Error == nil
 	return p.result
+}
+
+// isConnRefused reconoce "conexión rechazada" en todos los sistemas: en Windows el error real es WSAECONNREFUSED
+// (10061), distinto de syscall.ECONNREFUSED, y errors.Is no los equipara.
+func isConnRefused(err error) bool {
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return true
+	}
+	var en syscall.Errno
+	return errors.As(err, &en) && en == 10061
 }

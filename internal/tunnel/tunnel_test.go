@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -168,7 +169,9 @@ func TestKnownHostsValidationAndFile(t *testing.T) {
 	require.NoError(t, kh.Trust("HOST", 2222, "SHA256:def"))
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	if runtime.GOOS != "windows" { // Windows no tiene bits de permiso Unix: Perm() devuelve 0o666
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 	require.NoError(t, kh.Forget("nope", 1), "idempotente")
 }
 

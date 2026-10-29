@@ -2,8 +2,11 @@ package services
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
+	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -227,4 +230,12 @@ func TestProbeTCPIgnoresACloseErrorAfterConnecting(t *testing.T) {
 	}
 	require.NoError(t, probeTCP(context.Background(), dial, "db:3306", model.ConnectionProfile{Host: "db", Port: 3306}),
 		"si se pudo conectar, el EOF al cerrar no es un fallo")
+}
+
+func TestIsConnRefusedRecognisesWindowsWinsockCode(t *testing.T) {
+	require.True(t, isConnRefused(syscall.ECONNREFUSED))
+	// WSAECONNREFUSED envuelto como lo devuelve net.Dial en Windows.
+	require.True(t, isConnRefused(&net.OpError{Op: "dial", Err: os.NewSyscallError("connectex", syscall.Errno(10061))}))
+	require.False(t, isConnRefused(syscall.ETIMEDOUT))
+	require.False(t, isConnRefused(errors.New("otro")))
 }

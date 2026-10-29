@@ -15,7 +15,7 @@ func TestResolveWithHomeOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.DirExists(t, p.Config)
 	require.DirExists(t, p.Logs)
-	require.Equal(t, home+"/config/app.db", p.DB())
+	require.Equal(t, filepath.Join(home, "config", "app.db"), p.DB())
 	info, _ := os.Stat(p.Config)
 	require.Equal(t, os.FileMode(0o700), info.Mode().Perm())
 }
