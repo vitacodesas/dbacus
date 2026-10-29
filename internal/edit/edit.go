@@ -244,15 +244,9 @@ func Analyze(in Input) Plan {
 	return plan
 }
 
-// chooseKey elige la clave con la que se identifica una fila: la primaria y, si no hay o no está entera en el resultado,
-// un índice único completo (sin prefijos) sobre columnas NOT NULL. Devuelve un motivo si no hay ninguna utilizable.
-func chooseKey(d model.TableDetail, mapped []string) ([]string, string) {
-	selected := map[string]bool{}
-	for _, c := range mapped {
-		if c != "" {
-			selected[strings.ToLower(c)] = true
-		}
-	}
+// KeyCandidates son las claves únicas de la tabla por orden de preferencia: la primaria y, después, los índices únicos
+// completos (sin prefijos) sobre columnas NOT NULL. Lo usan la edición de celdas y la paginación por cursor (spec 13/18).
+func KeyCandidates(d model.TableDetail) [][]string {
 	nullable := map[string]bool{}
 	for _, c := range d.Columns {
 		nullable[strings.ToLower(c.Name)] = c.Nullable
@@ -290,6 +284,19 @@ func chooseKey(d model.TableDetail, mapped []string) ([]string, string) {
 			candidates = append(candidates, ix.Columns)
 		}
 	}
+	return candidates
+}
+
+// chooseKey elige la clave con la que se identifica una fila: la primaria y, si no hay o no está entera en el resultado,
+// un índice único completo (sin prefijos) sobre columnas NOT NULL. Devuelve un motivo si no hay ninguna utilizable.
+func chooseKey(d model.TableDetail, mapped []string) ([]string, string) {
+	selected := map[string]bool{}
+	for _, c := range mapped {
+		if c != "" {
+			selected[strings.ToLower(c)] = true
+		}
+	}
+	candidates := KeyCandidates(d)
 	if len(candidates) == 0 {
 		return nil, ReasonNoKey
 	}
