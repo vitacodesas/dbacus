@@ -6,7 +6,7 @@ Go es la fuente de verdad de datos; Pinia guarda **proyecciones** para pintar y 
 ## Stores
 | Store | Estado | Acciones principales | Fuente |
 |---|---|---|---|
-| `connections` | `profiles[]`, `loading`, `formDraft` | `load`, `save`, `clone`, `remove`, `test` | `ConnectionService` |
+| `connections` | `profiles[]`, `groups[]`, `loading`, `formDraft` | `load`, `save`, `clone`, `remove`, `test`, `saveGroup`, `removeGroup`; getter `colorOf(profile)` (color propio, si no el del grupo) | `ConnectionService` |
 | `sessions` | `byId`, `activeSessionId` | `connect`, `disconnect`, `onClosed` | `ConnectionService` + evento `session:closed` |
 | `schema` | árbol cacheado `[sessionId][db]`, `expanded`, `filter` | `loadDatabases`, `loadTables`, `loadDetail`, `refresh` | `SchemaService` + `schema:invalidated` |
 | `queryTabs` | `tabs[]` (`id, sessionId, title, sql, database, dirty`), `activeTabId` | `open`, `close`, `rename`, `setSql` (debounce → persistir en Go), `execute`, `cancel` | `QueryService` |

@@ -5,7 +5,7 @@
 ## Decisiones tomadas (2026-10-28)
 | # | Tema | Decisión |
 |---|---|---|
-| D1 | Nombre | **Dbacus** (ábaco + DBA). Binario `dbacus`; identificador de paquete `pet.laika.dbacus`; empresa «Laika». El nombre «Tabularis Clon» desaparece: «Tabularis» es un proyecto real de código abierto distinto. |
+| D1 | Nombre | **Dbacus** (ábaco + DBA). Binario `dbacus`; identificador de paquete `io.github.vitacodesas.dbacus`; empresa «Laika». El nombre «Tabularis Clon» desaparece: «Tabularis» es un proyecto real de código abierto distinto. |
 | D2 | Alcance del renombrado | **Todo**, con migración de datos: nombre visible, binario, identificador, módulo Go, carpeta de datos, llavero y variable de entorno. Nada de lo que el usuario ya guardó (perfiles, historial, ajustes, secretos, host keys) se pierde ni se borra. |
 | D3 | Alojamiento | **GitHub público**. Se crea primero **privado**, se deja el CI en verde en los tres sistemas y solo entonces se hace público (publicar es casi irreversible: se indexa y se clona). |
 | D4 | Disparadores del CI | Pull request: solo Linux (vet, tests, E2E, integración, seguridad). `main` y etiquetas `v*`: además compilan y empaquetan en macOS y Windows. |

@@ -4,11 +4,11 @@
 Configurar, probar, guardar y abrir conexiones MySQL con la menor fricción posible y diagnósticos claros cuando falle.
 
 ## Pantalla "Conexiones"
-- **Lista** (sidebar/launcher): tarjetas con nombre, color, `user@host:port/db`, indicador de estado (desconectada/conectada), menú: Conectar, Editar, Clonar, Eliminar. Búsqueda por texto. Doble clic = conectar.
+- **Lista** (sidebar/launcher): tarjetas con nombre, color, `user@host:port/db`, indicador de estado (desconectada/conectada), menú: Conectar, Editar, Clonar, Eliminar. Búsqueda por texto (también por nombre de grupo). Doble clic = conectar. **Grupos** (spec 17): si existen, la lista se organiza en secciones colapsables por grupo y «Sin grupo» al final; menú de cabecera: Editar grupo, Eliminar grupo.
 - **Botón "Nueva conexión"** abre el formulario en un panel/modal grande.
 
 ## Formulario (secciones)
-1. **General**: Nombre* (único), Driver* (selector; solo MySQL activo, otros "Próximamente"), Color, Host* (default `127.0.0.1`), Puerto* (default `3306`, 1–65535), Usuario*, Contraseña (con ojo mostrar/ocultar), checkbox "Guardar contraseña en el llavero", checkbox "No guardar el historial" (spec 07), checkbox "Solo lectura" (spec 10; la barra de estado lo señala), Base de datos (opcional).
+1. **General**: Nombre* (único), **Grupo** (selector: «Sin grupo», los existentes o «＋ Nuevo grupo…» con nombre y color; spec 17), Driver* (selector; solo MySQL activo, otros "Próximamente"), Color, Host* (default `127.0.0.1`), Puerto* (default `3306`, 1–65535), Usuario*, Contraseña (con ojo mostrar/ocultar), checkbox "Guardar contraseña en el llavero", checkbox "No guardar el historial" (spec 07), checkbox "Solo lectura" (spec 10; la barra de estado lo señala), Base de datos (opcional).
 2. **SSL/TLS**: Modo (`disable|preferred|required|verify-ca|verify-full`), rutas CA/Cert/Key con selector de archivo nativo (diálogo en Go).
 3. **Túnel SSH**: toggle; Host*, Puerto (22), Usuario*, Método (Contraseña | Clave privada); contraseña o ruta de clave + passphrase opcional.
 4. **Avanzado**: tabla clave/valor de `Params` (charset, `timeout`, `readTimeout`, `sql_mode` de sesión, etc.) con sugerencias.
@@ -30,7 +30,8 @@ Pie: **Probar conexión**, **Guardar**, **Guardar y conectar**, **Cancelar**.
 - Edición: campos secretos muestran "••••• (guardada)"; vacío = sin cambios; "Borrar contraseña" explícito.
 - Llavero no disponible → `KEYRING_UNAVAILABLE`; ofrecer "pedir cada vez" (no hay fallback en texto plano).
 - Eliminar perfil: confirmar; borrar secretos; cerrar sesiones activas; conservar historial opcionalmente (preguntar).
-- Clonar: copia perfil y secretos con nuevo ID.
+- Clonar: copia perfil y secretos con nuevo ID, y conserva el grupo.
+- Grupo (`groupId`) y color: el color efectivo es el de la conexión y, si no tiene, el de su grupo (spec 17). Los grupos viven en `connection_groups`; eliminar uno deja sus conexiones en «Sin grupo» y no toca secretos ni historial.
 
 ## Túnel SSH
 - `internal/tunnel` abre `ssh.Client` y expone `DialFunc` que hace `client.DialContext("tcp", host:port)` hacia MySQL; sin puerto local abierto (no hay listener).
@@ -49,6 +50,7 @@ Pie: **Probar conexión**, **Guardar**, **Guardar y conectar**, **Cancelar**.
 - [ ] Test muestra pasos y falla con mensaje distinto para: host inalcanzable, puerto cerrado, credenciales inválidas, TLS inválido, SSH auth fallida, host key desconocida.
 - [ ] Editar sin tocar contraseña no la pierde; "Borrar contraseña" la elimina del llavero.
 - [ ] Clonar crea perfil independiente (editar uno no afecta al otro).
+- [ ] Grupos (spec 17): se crea un grupo desde el modal, la conexión aparece bajo su cabecera, editar el color del grupo cambia el de las conexiones sin color propio y eliminar el grupo las deja en «Sin grupo» sin perder secretos ni historial.
 - [ ] Conectar vía túnel SSH a un MySQL no expuesto funciona y se cierra limpio al desconectar (sin goroutines huérfanas: test con `goleak`).
 - [ ] `ParseDSN` acepta `mysql://u:p%40ss@h:3307/db?charset=utf8mb4` y rellena el formulario.
 - [ ] Cancelar un Test colgado termina en < 1 s.

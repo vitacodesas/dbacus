@@ -25,7 +25,7 @@ Regla de dependencias: capas superiores dependen de inferiores; `driver` no cono
 `query:started`, `query:progress`, `query:done`, `query:error`, `session:closed`, `schema:invalidated`.
 
 ## Persistencia
-SQLite en `os.UserConfigDir()/Dbacus/app.db` con migraciones numeradas embebidas (`internal/store/migrations`). Tablas: `connection_profiles`, `query_history`, `settings`, `ui_state`. Secretos **no** van a SQLite (spec 10). Migración desde el nombre anterior (`Tabularis-Clon/`): al arrancar, si `Dbacus/app.db` no existe y la carpeta antigua sí, se **copian** `app.db` (+ `-wal`/`-shm`) y `known_hosts` y se deja el marcador `migrated-from-legacy`; nunca se borra ni se pisa nada. Un fallo se registra en el log y se reintenta al reiniciar.
+SQLite en `os.UserConfigDir()/Dbacus/app.db` con migraciones numeradas embebidas (`internal/store/migrations`). Tablas: `connection_profiles`, `connection_groups` (migración 002, spec 17), `query_history`, `settings`, `ui_state`. Secretos **no** van a SQLite (spec 10). Migración desde el nombre anterior (`Tabularis-Clon/`): al arrancar, si `Dbacus/app.db` no existe y la carpeta antigua sí, se **copian** `app.db` (+ `-wal`/`-shm`) y `known_hosts` y se deja el marcador `migrated-from-legacy`; nunca se borra ni se pisa nada. Un fallo se registra en el log y se reintenta al reiniciar.
 
 ## Frontend
 - `api/`: único lugar que importa los bindings generados; expone funciones tipadas y suscripciones a eventos (con unsubscribe).

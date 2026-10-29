@@ -35,7 +35,7 @@ wails3 build    # binario en bin/
 scripts/smoke.sh   # vet, tests, lint y build
 ```
 
-Los tests de integración (Docker) y el resto de comandos están en [AGENTS.md](AGENTS.md). Las especificaciones, en [docs/specs](docs/specs).
+Los tests de integración (Docker) y el resto de comandos están en [AGENTS.md](AGENTS.md). Las especificaciones, en [docs/specs](docs/specs). Para contribuir, lee [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentación
 

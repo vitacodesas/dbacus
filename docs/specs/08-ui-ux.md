@@ -21,10 +21,10 @@
 - Tema claro/oscuro/sistema; Monaco usa temas equivalentes.
 
 ## Componentes base (`components/ui`)
-`BaseButton`, `BaseInput`, `BaseSelect`, `BaseCheckbox`, `BaseToggle`, `BaseModal`, `BaseDialogConfirm`, `BaseTabs`, `BaseTooltip`, `BaseContextMenu`, `BaseToast`, `BaseSplitter`, `BaseSpinner`, `BaseEmptyState`, `BaseKbd`. Sin librería de UI pesada (permitido headless: Reka UI/Radix-Vue para accesibilidad de menús/diálogos).
+`BaseButton`, `BaseInput`, `BaseSelect`, `BaseCheckbox`, `BaseToggle`, `BaseModal`, `BaseDialogConfirm`, `BaseTabs`, `BaseTooltip`, `BaseContextMenu`, `BaseToast`, `BaseSplitter`, `BaseSpinner`, `BaseEmptyState`, `BaseKbd`, `ColorSwatches` (selector de color #RRGGBB, compartido por conexión y grupo). Sin librería de UI pesada (permitido headless: Reka UI/Radix-Vue para accesibilidad de menús/diálogos).
 
 ## Componentes de dominio
-`ConnectionList`, `ConnectionCard`, `ConnectionForm` (+ `TlsSection`, `SshSection`, `AdvancedSection`, `TestResultPanel`, `HostKeyTrustDialog`), `SchemaTree`, `QueryTabsBar`, `SqlEditor`, `ResultGrid`, `ResultTabs`, `CellViewerModal`, `HistoryPanel`, `ExportDialog`, `StatusBar`, `SettingsDialog`.
+`ConnectionList` (con secciones de grupo), `ConnectionGroupHeader`, `ConnectionGroupDialog`, `ConnectionCard`, `ConnectionForm` (+ `TlsSection`, `SshSection`, `AdvancedSection`, `TestResultPanel`, `HostKeyTrustDialog`), `SchemaTree`, `QueryTabsBar`, `SqlEditor`, `ResultGrid`, `ResultTabs`, `CellViewerModal`, `HistoryPanel`, `ExportDialog`, `StatusBar` (lleva la firma «Hecho con amor por vitacodesas» en la esquina inferior izquierda, spec 17), `SettingsDialog`.
 
 ## Atajos globales
 | Acción | macOS | Win/Linux |

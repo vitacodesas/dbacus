@@ -19,7 +19,8 @@ type ConnectionProfile struct {
   ID, Name, Driver string       // Driver: "mysql"
   Host string; Port int
   User, Database string         // Database opcional (BD por defecto)
-  Color string                  // etiqueta visual (hex o token)
+  Color string                  // etiqueta visual (hex o token); si está vacío se usa el del grupo (spec 17)
+  GroupID string                // grupo al que pertenece; "" = «Sin grupo» (spec 17)
   TLS  TLSConfig
   SSH  SSHConfig
   Params map[string]string      // opciones extra del DSN (charset, timeout, etc.)
@@ -28,6 +29,7 @@ type ConnectionProfile struct {
   HasPassword, HasSshPassword, HasSshPassphrase bool // solo lectura: los fija el servidor; evita leer el llavero al listar
   CreatedAt, UpdatedAt time.Time
 }
+type ConnectionGroup struct { ID, Name, Color string; CreatedAt, UpdatedAt time.Time } // spec 17; Color: #RRGGBB o vacío
 type TLSConfig struct { Mode string /* disable|preferred|required|verify-ca|verify-full */; CAPath, CertPath, KeyPath string }
 type SSHConfig struct {
   Enabled bool; Host string; Port int; User string
@@ -47,6 +49,9 @@ type TestStep struct { Name string /* ssh|tcp|tls|auth|query */; OK, Skipped boo
 | `Get(id)` | → `ConnectionProfile` |
 | `Save(profile, secrets)` | → `ConnectionProfile` (crea si `ID==""`) |
 | `Clone(id)` | → `ConnectionProfile` (nombre "X (copia)", copia secretos) |
+| `ListGroups()` | → `[]ConnectionGroup` (orden por nombre sin distinguir mayúsculas) |
+| `SaveGroup(group)` | → `ConnectionGroup` (crea si `ID==""`; nombre único sin distinguir mayúsculas → `VALIDATION`, Detail `name`) |
+| `DeleteGroup(id)` | → `error` (las conexiones del grupo pasan a «Sin grupo»; no borra conexiones, secretos ni historial; idempotente) |
 | `Delete(id, deleteHistory)` | → `error` (borra secretos del llavero y cierra sesiones; el historial solo si `deleteHistory`) |
 | `Test(profile, secrets)` | → `TestResult` (cancelable, timeout 15 s; error solo si el perfil es inválido, los fallos de red/auth van dentro del resultado) |
 | `ParseDSN(dsn)` | → `ConnectionProfile` parcial + `ConnectionSecrets` |
