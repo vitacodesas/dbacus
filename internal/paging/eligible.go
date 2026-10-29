@@ -126,7 +126,7 @@ func Decide(parts sqlsplit.SelectParts, detail model.TableDetail, pageSize int) 
 			}
 		}
 		if all {
-			return Decision{Mode: ModeKeyset, Plan: Plan{List: parts.List, From: parts.From, Where: parts.Where, Order: order, PageSize: pageSize}}
+			return Decision{Mode: ModeKeyset, Plan: Plan{List: parts.List, From: parts.From, Where: parts.Where, Order: order, PageSize: pageSize, Cap: parts.Limit}}
 		}
 	}
 	return none(ReasonKeyNotSelected)

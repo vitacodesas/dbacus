@@ -118,7 +118,7 @@ export default {
     rows: "Filas {from}–{to}", page: "Página {n}", estimated: "≈ {n} filas", noMore: "No hay más filas",
     approx: "Paginación aproximada", noIndex: "Sin índice para este orden: cada página será lenta", tieAtEdge: "Valores repetidos en el borde: no se puede avanzar sin omitir filas",
     reasons: {
-      not_select: "Sin paginación: no es un SELECT", user_limit: "Sin paginación: la consulta ya tiene LIMIT", multi_table: "Sin paginación: varias tablas (JOIN)",
+      not_select: "Sin paginación: no es un SELECT", user_limit: "Sin paginación: LIMIT con OFFSET o con dos números (usa solo LIMIT n)", multi_table: "Sin paginación: varias tablas (JOIN)",
       grouped: "Sin paginación: agrupa o elimina duplicados", compound: "Sin paginación: UNION o similar", into_lock: "Sin paginación: INTO o bloqueo de filas",
       view: "Sin paginación: es una vista", no_key: "Sin paginación: la tabla no tiene clave única numérica", key_type: "Sin paginación: la clave no es numérica",
       key_not_selected: "Sin paginación: falta la clave en las columnas seleccionadas", order_by_unsupported: "Sin paginación: ORDER BY no admitido (solo columnas)",

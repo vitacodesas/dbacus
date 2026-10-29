@@ -108,7 +108,7 @@ func TestDecideReasons(t *testing.T) {
 		reason    string
 	}{
 		{"no es un SELECT", "SHOW TABLES", d, sqlsplit.ReasonNotSelect},
-		{"LIMIT propio", "SELECT * FROM t LIMIT 5", d, sqlsplit.ReasonUserLimit},
+		{"LIMIT con OFFSET", "SELECT * FROM t LIMIT 5 OFFSET 2", d, sqlsplit.ReasonUserLimit},
 		{"JOIN", "SELECT * FROM t JOIN u ON 1", d, sqlsplit.ReasonMultiTable},
 		{"GROUP BY", "SELECT qty FROM t GROUP BY qty", d, sqlsplit.ReasonGrouped},
 		{"UNION", "SELECT * FROM t UNION SELECT * FROM t", d, sqlsplit.ReasonCompound},

@@ -48,6 +48,32 @@ func TestSplitSelectParts(t *testing.T) {
 	}
 }
 
+// Un `LIMIT n` final es el tope dentro del que se pagina: no cambia el WHERE ni el ORDER BY que se reconocen.
+func TestSplitSelectKeepsATrailingLimitAsTheCap(t *testing.T) {
+	cases := []struct {
+		sql   string
+		limit int64
+		where string
+		order []OrderItem
+	}{
+		{"SELECT * FROM t LIMIT 100", 100, "", nil},
+		{"select * from t limit 7;", 7, "", nil},
+		{"SELECT * FROM t WHERE a > 1 LIMIT 100", 100, "a > 1", nil},
+		{"SELECT * FROM t ORDER BY a DESC, b LIMIT 25", 25, "", []OrderItem{{"a", true}, {"b", false}}},
+		{"SELECT * FROM t WHERE a > 1 ORDER BY a LIMIT 3 -- nota", 3, "a > 1", []OrderItem{{"a", false}}},
+		{"SELECT * FROM t WHERE id IN (SELECT id FROM u LIMIT 2) LIMIT 9", 9, "id IN (SELECT id FROM u LIMIT 2)", nil},
+	}
+	for _, c := range cases {
+		got, reason := SplitSelect(c.sql)
+		require.Empty(t, reason, c.sql)
+		require.Equal(t, c.limit, got.Limit, c.sql)
+		require.Equal(t, c.where, got.Where, c.sql)
+		require.Equal(t, c.order, got.Order, c.sql)
+	}
+	got, _ := SplitSelect("SELECT * FROM t")
+	require.Zero(t, got.Limit)
+}
+
 func TestSplitSelectReasons(t *testing.T) {
 	cases := []struct{ sql, reason string }{
 		{"INSERT INTO t VALUES (1)", ReasonNotSelect},
@@ -58,8 +84,13 @@ func TestSplitSelectReasons(t *testing.T) {
 		{"SELECT 1", ReasonNotSimple},
 		{"SELECT DISTINCT a FROM t", ReasonGrouped},
 		{"SELECT SQL_CALC_FOUND_ROWS * FROM t", ReasonNotSimple},
-		{"SELECT * FROM t LIMIT 10", ReasonUserLimit},
 		{"SELECT * FROM t ORDER BY a LIMIT 10 OFFSET 5", ReasonUserLimit},
+		{"SELECT * FROM t LIMIT 5, 10", ReasonUserLimit},
+		{"SELECT * FROM t LIMIT 0", ReasonUserLimit},
+		{"SELECT * FROM t LIMIT 1.5", ReasonUserLimit},
+		{"SELECT * FROM t LIMIT 99999999999999999999", ReasonUserLimit},
+		{"SELECT * FROM t LIMIT 10 LIMIT 5", ReasonUserLimit},
+		{"SELECT * FROM t LIMIT 10 FOR UPDATE", ReasonUserLimit},
 		{"SELECT * FROM t JOIN u ON t.id = u.id", ReasonMultiTable},
 		{"SELECT * FROM t LEFT JOIN u ON t.id = u.id", ReasonMultiTable},
 		{"SELECT * FROM t LEFT OUTER JOIN u ON t.id = u.id", ReasonMultiTable},

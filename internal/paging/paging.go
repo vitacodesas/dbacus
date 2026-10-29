@@ -34,6 +34,47 @@ type Plan struct {
 	List, From, Where string // tal como se escribieron; Where sin la palabra WHERE
 	Order             []Col  // ORDER BY del usuario + columnas de la clave que falten (desempate)
 	PageSize          int
+	// Cap es el `LIMIT n` del usuario: tope de filas del resultado completo (0 = sin tope). Se pagina dentro de él, así que
+	// la última página puede ser más corta y «Última» no se lee hacia atrás desde el final de la tabla sino por posición.
+	Cap int64
+}
+
+// Window dice cuántas filas pedir para la página que empieza en la posición `start` (0-basada dentro del resultado
+// completo) y si hace falta la fila de sondeo. Sin tope: PageSize y sondeo. Con tope, la última página llega justo hasta
+// Cap y no lleva sondeo (no hay nada más que ofrecer, aunque la tabla tenga más filas). n == 0: no hay página ahí.
+func (p Plan) Window(start int64) (n int, probe bool) {
+	if p.Cap <= 0 {
+		return p.PageSize, true
+	}
+	rem := p.Cap - start
+	switch {
+	case rem <= 0:
+		return 0, false
+	case rem <= int64(p.PageSize):
+		return int(rem), false
+	}
+	return p.PageSize, true
+}
+
+// LastStart es la posición de la primera fila de la última página de un resultado de `total` filas (con tope, min(total, Cap)).
+func (p Plan) LastStart(total int64) int64 {
+	if p.Cap > 0 && total > p.Cap {
+		total = p.Cap
+	}
+	if total <= 0 {
+		return 0
+	}
+	return (total - 1) / int64(p.PageSize) * int64(p.PageSize)
+}
+
+// CountSQL cuenta las filas del resultado con tope (como mucho Cap): lo que hace falta para saber dónde empieza la última
+// página cuando la tabla tiene menos filas que el LIMIT. Cuesta lo que costaría leer el resultado hasta el tope.
+func (p Plan) CountSQL() string {
+	q := "SELECT 1 FROM " + p.From
+	if strings.TrimSpace(p.Where) != "" {
+		q += " WHERE (" + p.Where + "\n)"
+	}
+	return fmt.Sprintf("SELECT COUNT(*) FROM (%s LIMIT %d) _c", q, p.Cap)
 }
 
 // EffectiveOrder es el ORDER BY del usuario más las columnas de la clave que falten para que el orden sea total y único.
@@ -72,7 +113,13 @@ func ValidLiteral(v string) bool { return numberRe.MatchString(v) }
 // Order y en el mismo orden: el de la última fila para Next y el de la primera para Prev (ignorado en First y Last).
 // La consulta pide PageSize+1 filas: la última solo sirve para saber si hay más y no se muestra.
 func (p Plan) Build(d Dir, edge []string, quote func(string) string) (string, error) {
-	if len(p.Order) == 0 || p.PageSize <= 0 {
+	return p.BuildN(d, edge, quote, p.PageSize+1, 0)
+}
+
+// BuildN es Build con el número de filas a pedir y un desplazamiento (solo para la última página de un resultado con tope,
+// que se lee hacia delante por posición: el tope no permite leer desde el final de la tabla).
+func (p Plan) BuildN(d Dir, edge []string, quote func(string) string, limit int, offset int64) (string, error) {
+	if len(p.Order) == 0 || p.PageSize <= 0 || limit <= 0 {
 		return "", fmt.Errorf("paging: plan sin orden o sin tamaño de página")
 	}
 	var conds []string
@@ -107,7 +154,10 @@ func (p Plan) Build(d Dir, edge []string, quote func(string) string) (string, er
 			b.WriteString(" DESC")
 		}
 	}
-	fmt.Fprintf(&b, " LIMIT %d", p.PageSize+1)
+	fmt.Fprintf(&b, " LIMIT %d", limit)
+	if offset > 0 {
+		fmt.Fprintf(&b, " OFFSET %d", offset)
+	}
 	return b.String(), nil
 }
 

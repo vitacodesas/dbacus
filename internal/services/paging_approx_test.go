@@ -217,3 +217,102 @@ func TestApproxRefusesWithPendingEdits(t *testing.T) {
 	_, err = pe.q.Page(context.Background(), PageRequest{QueryID: qid, StmtIndex: 0, Direction: "next"})
 	require.Equal(t, "pending", apperr.From(err).Detail)
 }
+
+// ---- LIMIT propio como tope (spec 18 §4) ------------------------------------------------------------------------------
+
+func TestUserLimitIsTheCapOfAKeysetPagedResult(t *testing.T) {
+	pe := newPagingEnv(t, 100)
+	qid, r := pe.exec(t, "tab1", "SELECT * FROM items LIMIT 45", 10)
+	require.Equal(t, "keyset", r.Paging.Mode, r.Paging.Reason)
+	require.True(t, r.Paging.HasNext)
+	require.Zero(t, r.Paging.Estimated, "con tope la estimación de la tabla no vale")
+	require.Equal(t, seq(1, 10), pe.ids(t, qid, 0))
+	require.Contains(t, pe.lastRan(), "LIMIT 11", "una página más la fila de sondeo")
+
+	var all []int64
+	all = append(all, pe.ids(t, qid, 0)...)
+	pages := 1
+	for r.Paging.HasNext {
+		r = pe.page(t, qid, 0, "next")
+		all = append(all, pe.ids(t, qid, 0)...)
+		pages++
+	}
+	require.Equal(t, seq(1, 45), all, "exactamente las 45 primeras filas")
+	require.Equal(t, 5, pages)
+	require.Equal(t, 5, r.Paging.Page)
+	require.Len(t, pe.ids(t, qid, 0), 5, "la última página llega justo hasta el tope")
+	require.Contains(t, pe.lastRan(), "LIMIT 5", "sin fila de sondeo: más allá del tope no hay nada que ofrecer")
+	require.NotContains(t, pe.lastRan(), "LIMIT 6")
+
+	// Pasar del tope no avanza.
+	r = pe.page(t, qid, 0, "next")
+	require.Equal(t, 5, r.Paging.Page)
+
+	// Y de vuelta, página a página, hasta la primera.
+	for want := int64(4); want >= 1; want-- {
+		r = pe.page(t, qid, 0, "prev")
+		require.Equal(t, seq((want-1)*10+1, want*10), pe.ids(t, qid, 0))
+		require.Equal(t, int(want), r.Paging.Page)
+		require.True(t, r.Paging.HasNext)
+	}
+	require.False(t, r.Paging.HasPrev)
+}
+
+func TestCappedLastPageIsTheLastRowsOfTheCap(t *testing.T) {
+	pe := newPagingEnv(t, 100)
+	qid, _ := pe.exec(t, "tab1", "SELECT * FROM items ORDER BY price DESC, id DESC LIMIT 45", 10)
+	r := pe.page(t, qid, 0, "last")
+	require.Equal(t, 5, r.Paging.Page, "con tope la posición se conoce")
+	require.False(t, r.Paging.HasNext)
+	require.True(t, r.Paging.HasPrev)
+	rows, err := pe.db.Query("SELECT id FROM app.items ORDER BY price DESC, id DESC LIMIT 5 OFFSET 40")
+	require.NoError(t, err)
+	var want []int64
+	for rows.Next() {
+		var id int64
+		require.NoError(t, rows.Scan(&id))
+		want = append(want, id)
+	}
+	require.NoError(t, rows.Close())
+	require.Equal(t, want, pe.ids(t, qid, 0))
+
+	r = pe.page(t, qid, 0, "prev")
+	require.Equal(t, 4, r.Paging.Page)
+	require.Len(t, pe.ids(t, qid, 0), 10)
+	r = pe.page(t, qid, 0, "first")
+	require.Equal(t, 1, r.Paging.Page)
+}
+
+func TestCappedLastPageWhenTheTableIsShorterThanTheCap(t *testing.T) {
+	pe := newPagingEnv(t, 23)
+	qid, r := pe.exec(t, "tab1", "SELECT * FROM items LIMIT 500", 10)
+	require.True(t, r.Paging.HasNext)
+	r = pe.page(t, qid, 0, "last")
+	require.Equal(t, seq(21, 23), pe.ids(t, qid, 0))
+	require.Equal(t, 3, r.Paging.Page)
+	require.False(t, r.Paging.HasNext)
+
+	// Un tope que cabe en una página: no hay más.
+	_, r = pe.exec(t, "tab2", "SELECT * FROM items LIMIT 4", 10)
+	require.False(t, r.Paging.HasNext)
+	require.Equal(t, "keyset", r.Paging.Mode)
+}
+
+func TestCappedLastOfAnEmptyResultIsTheFirstPage(t *testing.T) {
+	pe := newPagingEnv(t, 30)
+	qid, r := pe.exec(t, "tab1", "SELECT * FROM items WHERE id > 1000 LIMIT 50", 10)
+	require.False(t, r.Paging.HasNext)
+	require.Equal(t, "keyset", r.Paging.Mode)
+	r = pe.page(t, qid, 0, "last")
+	require.Equal(t, 1, r.Paging.Page)
+	require.Empty(t, pe.ids(t, qid, 0))
+}
+
+func TestLimitWithOffsetOrCommaStaysUnpaged(t *testing.T) {
+	pe := newPagingEnv(t, 30)
+	for i, q := range []string{"SELECT * FROM items LIMIT 5 OFFSET 2", "SELECT * FROM items LIMIT 2, 5"} {
+		_, r := pe.exec(t, fmt.Sprintf("t%d", i), q, 10)
+		require.Equal(t, "none", r.Paging.Mode)
+		require.Equal(t, "user_limit", r.Paging.Reason)
+	}
+}

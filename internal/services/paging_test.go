@@ -361,7 +361,7 @@ func TestUnpagedStatementsExplainWhyAndKeepTheAutomaticLimit(t *testing.T) {
 		{"SELECT * FROM items WHERE id < 5 UNION SELECT * FROM items WHERE id > 25", "compound"},
 		{"SELECT * FROM items ORDER BY note", "key_type"},
 		{"SELECT note FROM items", "key_not_selected"},
-		{"SELECT * FROM items LIMIT 3", "user_limit"},
+		{"SELECT * FROM items LIMIT 3 OFFSET 1", "user_limit"},
 	}
 	for _, c := range cases {
 		t.Run(c.reason, func(t *testing.T) {

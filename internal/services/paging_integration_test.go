@@ -367,3 +367,47 @@ func TestApproxPagingIntegration(t *testing.T) {
 		})
 	}
 }
+
+// TestKeysetPagingUserLimitIntegration: un LIMIT propio es el tope del recorrido. Se compara con la consulta original sin
+// paginar (que MySQL resuelve con su propio LIMIT), por clave y por una columna con empates, y «Última» con su OFFSET.
+func TestKeysetPagingUserLimitIntegration(t *testing.T) {
+	for _, image := range mysqlbox.Images() {
+		t.Run(image, func(t *testing.T) {
+			e := newLiveEnv(t, mysqlbox.Start(t, image))
+			e.mustRun(t, "setup", "CREATE TABLE cap_t (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, price DECIMAL(10,2) NOT NULL, KEY k_price (price))")
+			e.mustRun(t, "setup", "INSERT INTO cap_t (price) SELECT (d0.n + d1.n*10 + d2.n*100) % 17 * 1.5 FROM "+ten+" d0, "+ten+" d1, "+ten+" d2")
+			for _, c := range []struct{ name, sql, oracle string }{
+				{"por clave", "SELECT * FROM cap_t LIMIT 450", "SELECT id FROM cap_t ORDER BY id LIMIT 450"},
+				{"con orden y empates", "SELECT * FROM cap_t ORDER BY price DESC LIMIT 450", "SELECT id FROM cap_t ORDER BY price DESC, id DESC LIMIT 450"},
+				{"con WHERE", "SELECT * FROM cap_t WHERE price > 3 LIMIT 305", "SELECT id FROM cap_t WHERE price > 3 ORDER BY id LIMIT 305"},
+				{"tope mayor que la tabla", "SELECT * FROM cap_t LIMIT 5000", "SELECT id FROM cap_t ORDER BY id"},
+			} {
+				t.Run(c.name, func(t *testing.T) {
+					oqid, _ := e.mustRun(t, "oracle", c.oracle)
+					want := e.col0(t, oqid, 0)
+					qid, done := e.mustRun(t, "pager", c.sql, func(r *ExecuteRequest) { r.AutoLimit = 100 })
+					r := done.Results[0]
+					require.Equal(t, "keyset", r.Paging.Mode, r.Paging.Reason)
+					got := e.col0(t, qid, 0)
+					for guard := 0; r.Paging.HasNext; guard++ {
+						require.Less(t, guard, 1000)
+						r = e.page(t, qid, "next")
+						got = append(got, e.col0(t, qid, 0)...)
+					}
+					require.Equal(t, want, got)
+
+					r = e.page(t, qid, "first")
+					r = e.page(t, qid, "last")
+					lastStart := (len(want) - 1) / 100 * 100
+					require.Equal(t, want[lastStart:], e.col0(t, qid, 0), "«Última»: las últimas filas del resultado acotado")
+					require.Equal(t, lastStart/100+1, r.Paging.Page)
+					require.False(t, r.Paging.HasNext)
+					if lastStart > 0 {
+						e.page(t, qid, "prev")
+						require.Equal(t, want[lastStart-100:lastStart], e.col0(t, qid, 0))
+					}
+				})
+			}
+		})
+	}
+}

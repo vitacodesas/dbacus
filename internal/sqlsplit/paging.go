@@ -28,6 +28,9 @@ type SelectParts struct {
 	From  string      // referencia a la tabla: `t` o `db`.`t`
 	Where string      // expresión del WHERE sin la palabra WHERE; "" si no hay
 	Order []OrderItem // ORDER BY del usuario; vacío si no hay
+	// Limit es el `LIMIT n` final del usuario (0 si no hay): se pagina dentro de ese tope en vez de rechazar la consulta.
+	// Solo se admite la forma `LIMIT n` sin OFFSET ni `LIMIT a, b`.
+	Limit int64
 }
 
 // SplitSelect descompone un SELECT de una sola tabla (sin alias, JOIN, UNION, GROUP BY, DISTINCT, LIMIT, INTO, FOR/LOCK)
@@ -120,6 +123,7 @@ func SplitSelect(stmt string) (SelectParts, string) {
 	// Recorrido de nivel superior tras la tabla: descalificadores y posición de cada cláusula.
 	var (
 		whereAt, orderAt = -1, -1
+		limitAt          = -1
 		d                int
 	)
 	for i, t := range rest {
@@ -157,7 +161,15 @@ func SplitSelect(stmt string) (SelectParts, string) {
 				orderAt = i
 			}
 		case "LIMIT":
-			return SelectParts{}, ReasonUserLimit
+			// Solo `LIMIT n` como último tramo de la sentencia; `LIMIT a, b` y `OFFSET` cambian qué filas son «las primeras».
+			n, ok := int64(0), false
+			if limitAt < 0 && i+2 == len(rest) && rest[i+1].kind == 'n' {
+				n, ok = parseLimit(rest[i+1].text)
+			}
+			if !ok {
+				return SelectParts{}, ReasonUserLimit
+			}
+			limitAt, parts.Limit = i, n
 		case "JOIN", "STRAIGHT_JOIN":
 			return SelectParts{}, ReasonMultiTable
 		case "INNER", "CROSS", "NATURAL":
@@ -183,12 +195,18 @@ func SplitSelect(stmt string) (SelectParts, string) {
 	if d != 0 {
 		return SelectParts{}, ReasonNotSimple
 	}
-	if len(rest) > 0 && whereAt != 0 && orderAt != 0 {
+	if len(rest) > 0 && whereAt != 0 && orderAt != 0 && limitAt != 0 {
 		return SelectParts{}, ReasonNotSimple
 	}
 
+	// Dónde acaban el WHERE y el ORDER BY: antes del LIMIT final, si lo hay.
+	tail := rest
+	endAt := end
+	if limitAt >= 0 {
+		tail, endAt = rest[:limitAt], rest[limitAt].start
+	}
 	if whereAt >= 0 {
-		stop := end
+		stop := endAt
 		if orderAt >= 0 {
 			stop = rest[orderAt].start
 		}
@@ -198,7 +216,7 @@ func SplitSelect(stmt string) (SelectParts, string) {
 		}
 	}
 	if orderAt >= 0 {
-		order, ok := parseOrderBy(rest[orderAt+2:], parts.SelectSource)
+		order, ok := parseOrderBy(tail[orderAt+2:], parts.SelectSource)
 		if !ok {
 			return SelectParts{}, ReasonOrderUnsupported
 		}
@@ -268,4 +286,19 @@ func orderItem(it []selTok, src SelectSource) (OrderItem, bool) {
 	}
 	item.Column = nameOf(it[len(it)-1])
 	return item, true
+}
+
+// parseLimit lee el número de un `LIMIT n`: entero positivo que cabe en int64.
+func parseLimit(text string) (int64, bool) {
+	if text == "" || len(text) > 18 {
+		return 0, false
+	}
+	var n int64
+	for _, c := range text {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int64(c-'0')
+	}
+	return n, n > 0
 }

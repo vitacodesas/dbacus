@@ -120,7 +120,7 @@ const en: typeof es = {
     rows: "Rows {from}–{to}", page: "Page {n}", estimated: "≈ {n} rows", noMore: "No more rows",
     approx: "Approximate pagination", noIndex: "No index for this order: every page will be slow", tieAtEdge: "Repeated values at the edge: cannot advance without skipping rows",
     reasons: {
-      not_select: "Not paginated: not a SELECT", user_limit: "Not paginated: the query already has a LIMIT", multi_table: "Not paginated: several tables (JOIN)",
+      not_select: "Not paginated: not a SELECT", user_limit: "Not paginated: LIMIT with OFFSET or two numbers (use LIMIT n only)", multi_table: "Not paginated: several tables (JOIN)",
       grouped: "Not paginated: it groups or removes duplicates", compound: "Not paginated: UNION or similar", into_lock: "Not paginated: INTO or row locking",
       view: "Not paginated: it is a view", no_key: "Not paginated: the table has no numeric unique key", key_type: "Not paginated: the key is not numeric",
       key_not_selected: "Not paginated: the key is missing from the selected columns", order_by_unsupported: "Not paginated: unsupported ORDER BY (plain columns only)",

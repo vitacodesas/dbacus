@@ -397,7 +397,11 @@ func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn dri
 		size := pageSizeFor(req.AutoLimit, maxRows)
 		dec, detail, known := s.planPaging(ctx, sess, st.Text, db, size)
 		if known && dec.Mode == paging.ModeKeyset {
-			if q, err := dec.Plan.Build(paging.First, nil, sess.Driver.QuoteIdent); err == nil {
+			n, probe := dec.Plan.Window(0)
+			if probe {
+				n++ // la fila de sondeo; con un LIMIT propio la última página llega justo hasta el tope y no lleva
+			}
+			if q, err := dec.Plan.BuildN(paging.First, nil, sess.Driver.QuoteIdent, n, 0); err == nil {
 				text, pstate = q, newPageState(dec.Plan, detail, out)
 			}
 		} else if known {

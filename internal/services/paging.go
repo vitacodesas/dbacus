@@ -58,6 +58,7 @@ type pageState struct {
 	approx           *paging.Approx  // no nil: paginación aproximada (plan no se usa)
 	candidates       []string        // approx: columnas elegibles
 	tieNext, tiePrev bool            // approx: avanzar en esa dirección omitiría filas empatadas en el borde
+	start            int64           // keyset con LIMIT propio: posición (0-basada) de la primera fila de la página en el resultado acotado
 	base             StatementResult // índice, posición y SQL original de la sentencia
 	hasNext, hasPrev bool
 	page             int
@@ -169,7 +170,7 @@ func (s *QueryService) planPaging(ctx context.Context, sess *session.Session, te
 // newPageState prepara el estado de una sentencia paginable (todavía sin página).
 func newPageState(plan paging.Plan, detail model.TableDetail, base StatementResult) *pageState {
 	st := &pageState{plan: plan, base: base}
-	if plan.Where == "" && detail.RowEstimate != nil && *detail.RowEstimate > 0 {
+	if plan.Where == "" && plan.Cap == 0 && detail.RowEstimate != nil && *detail.RowEstimate > 0 {
 		st.estimated = *detail.RowEstimate
 	}
 	return st
@@ -358,9 +359,24 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 	case paging.Prev:
 		edge = cur.first
 	}
-	sqlText, err := cur.build(dir, edge, sess.Driver.QuoteIdent)
-	if err != nil {
-		return StatementResult{}, apperr.Wrap(apperr.Internal, "No se pudo preparar la página", err)
+	// Con un LIMIT propio (spec 18 §4) las páginas se colocan por posición dentro del tope.
+	capped := cur.approx == nil && cur.plan.Cap > 0
+	n, probe := cur.size(), true // filas que se muestran y si hace falta la fila de sondeo
+	var nextStart int64          // posición de la primera fila de la página pedida (solo con tope)
+	if capped {
+		switch dir {
+		case paging.Next:
+			nextStart = cur.start + int64(buf.Len())
+		case paging.Prev:
+			nextStart = max(cur.start-int64(cur.size()), 0)
+		}
+		if dir != paging.Last {
+			n, probe = cur.plan.Window(nextStart)
+		}
+		if n == 0 { // se pidió pasar del tope: no hay más
+			cur.hasNext = false
+			return cur.result(buf), nil
+		}
 	}
 
 	runCtx, cancel := context.WithCancel(sess.Context())
@@ -390,14 +406,50 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 	}()
 
 	started := time.Now()
-	rows, probe, cols, err := s.fetchPage(runCtx, ar, sess, run.TabID, sqlText, cur.size(), dir)
+	readDir := dir
+	var sqlText string
+	if capped && dir == paging.Last {
+		// «Última» con tope: se cuentan las filas del resultado acotado y se lee por posición (no se puede leer desde el final
+		// de la tabla: el tope manda).
+		total, cerr := s.countCapped(runCtx, ar, sess, run.TabID, cur.plan)
+		if cerr != nil {
+			if ar.canceled.Load() {
+				return StatementResult{}, apperr.Wrap(apperr.QueryCanceled, "Consulta cancelada", cerr)
+			}
+			return StatementResult{}, apperr.From(cerr)
+		}
+		nextStart = cur.plan.LastStart(total)
+		if total == 0 {
+			dir, readDir = paging.First, paging.First
+			n, probe = cur.plan.Window(0)
+		} else {
+			readDir = paging.First
+			n, probe = cur.plan.Window(nextStart)
+			probe = false
+		}
+		sqlText, err = cur.plan.BuildN(paging.First, nil, sess.Driver.QuoteIdent, n, nextStart)
+	} else {
+		limit := n
+		if probe {
+			limit++
+		}
+		if capped {
+			sqlText, err = cur.plan.BuildN(dir, edge, sess.Driver.QuoteIdent, limit, 0)
+		} else {
+			sqlText, err = cur.build(dir, edge, sess.Driver.QuoteIdent)
+		}
+	}
+	if err != nil {
+		return StatementResult{}, apperr.Wrap(apperr.Internal, "No se pudo preparar la página", err)
+	}
+	rows, probeRow, cols, err := s.fetchPage(runCtx, ar, sess, run.TabID, sqlText, n, readDir)
 	if err != nil {
 		if ar.canceled.Load() {
 			return StatementResult{}, apperr.Wrap(apperr.QueryCanceled, "Consulta cancelada", err)
 		}
 		return StatementResult{}, apperr.From(err)
 	}
-	more := probe != nil
+	more := probeRow != nil
 	// Se pidió «siguiente»/«anterior» y ya no queda nada (se borraron filas): se queda la página actual.
 	if len(rows) == 0 && (dir == paging.Next || dir == paging.Prev) {
 		if dir == paging.Next {
@@ -438,11 +490,22 @@ func (s *QueryService) Page(ctx context.Context, req PageRequest) (StatementResu
 			next.page = 1 // cabe todo en una página
 		}
 	}
+	if capped {
+		// La posición manda: el número de página siempre se conoce y hacia atrás se llega al principio justo en la posición 0.
+		next.start = nextStart
+		next.page = int(nextStart/int64(cur.size())) + 1
+		switch dir {
+		case paging.Prev:
+			next.hasPrev = nextStart > 0
+		case paging.Last:
+			next.hasNext, next.hasPrev = false, nextStart > 0
+		}
+	}
 	if _, err := next.fillPage(nb, rows); err != nil {
 		return StatementResult{}, toAppErr(err)
 	}
 	if next.approx != nil {
-		if err := next.markTies(cols, dir, probe); err != nil {
+		if err := next.markTies(cols, dir, probeRow); err != nil {
 			return StatementResult{}, toAppErr(err)
 		}
 	}
@@ -491,7 +554,8 @@ func pageSizeFor(autoLimit, maxRows int) int {
 // pedir las siguientes. El historial y la invalidación de esquema los hace el llamador con el resultado devuelto.
 func (s *QueryService) firstPage(res driver.RunResult, cols []model.ColumnMeta, buf *results.Buffer, st *pageState, out StatementResult,
 	started time.Time) (StatementResult, error) {
-	rows, probe, err := readPage(res, cols, st.plan.PageSize, paging.First)
+	n, _ := st.plan.Window(0)
+	rows, probe, err := readPage(res, cols, n, paging.First)
 	if err != nil {
 		buf.Finish(false)
 		return out, err
@@ -574,4 +638,21 @@ func startApprox(buf *results.Buffer, cur *pageState, offer *approxOffer, column
 		return nil, invalid("statement", "Esta sentencia no se puede paginar: "+reason)
 	}
 	return &pageState{approx: &paging.Approx{Inner: inner, Column: name, PageSize: size}, candidates: candidates, base: base}, nil
+}
+
+// countCapped cuenta las filas de un resultado con LIMIT propio (como mucho el tope), para saber dónde empieza su última página.
+func (s *QueryService) countCapped(ctx context.Context, ar *activeRun, sess *session.Session, tabID string, plan paging.Plan) (int64, error) {
+	rows, _, _, err := s.fetchPage(ctx, ar, sess, tabID, plan.CountSQL(), 1, paging.First)
+	if err != nil {
+		return 0, err
+	}
+	if len(rows) == 0 || len(rows[0]) == 0 {
+		return 0, apperr.New(apperr.Internal, "No se pudo contar las filas del resultado")
+	}
+	lit, ok := cellLiteral(rows[0][0])
+	n, perr := strconv.ParseInt(lit, 10, 64)
+	if !ok || perr != nil {
+		return 0, apperr.New(apperr.Internal, "El recuento de filas no es un número")
+	}
+	return n, nil
 }

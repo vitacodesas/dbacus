@@ -25,13 +25,20 @@ Con el LIMIT automático (por defecto 1000) un resultado grande se corta y **no 
 
 ## 4. Modo `keyset` (exacto)
 **Condiciones** (todas):
-1. Una sola sentencia `SELECT` de **una tabla** (`sqlsplit.SplitSelect`): sin alias de tabla, JOIN, UNION, GROUP BY, HAVING, DISTINCT, INTO, FOR UPDATE/LOCK ni LIMIT/OFFSET propios; no vistas. *(Implementación: la lista puede llevar expresiones o alias —se reescribe tal cual—, siempre que las columnas del cursor aparezcan **sueltas y sin alias** o con `*`; es más amplio que `SimpleSelectTable`, pensado para la edición.)*
+1. Una sola sentencia `SELECT` de **una tabla** (`sqlsplit.SplitSelect`): sin alias de tabla, JOIN, UNION, GROUP BY, HAVING, DISTINCT, INTO, FOR UPDATE/LOCK ni OFFSET propio; no vistas. Un `LIMIT n` final (sin OFFSET ni `LIMIT a, b`) **no impide paginar: es el tope** del recorrido (ver «LIMIT propio» abajo). *(Implementación: la lista puede llevar expresiones o alias —se reescribe tal cual—, siempre que las columnas del cursor aparezcan **sueltas y sin alias** o con `*`; es más amplio que `SimpleSelectTable`, pensado para la edición.)*
 2. La tabla tiene **clave única**: la clave primaria o, si no, un índice único sin prefijo con todas sus columnas `NOT NULL` (misma regla que `edit.chooseKey`, que se reutiliza).
 3. Las columnas de la clave **y** las del `ORDER BY` son **numéricas exactas**: `TINYINT…BIGINT` (con o sin `UNSIGNED`) y `DECIMAL`; todas `NOT NULL`. (`FLOAT`/`DOUBLE` quedan fuera: no son exactas.)
 4. Esas columnas están **en el resultado**: se leen sus valores en la primera y la última fila para construir el cursor. Si faltan: motivo `key_not_selected`.
 5. El `ORDER BY`, si existe, es una lista de columnas desnudas (se admite `tabla.col` y comillas invertidas) con `ASC`/`DESC`; no posiciones (`ORDER BY 2`), expresiones, funciones ni `COLLATE`.
 
 **Orden efectivo** = el `ORDER BY` del usuario + las columnas de la clave que falten como desempate, para que el orden sea **total y único**. Sin `ORDER BY`: la clave, ascendente. Se admiten direcciones mixtas en el `ORDER BY` del usuario. **Las columnas añadidas van en la misma dirección que la última columna del usuario**: la dirección del desempate no cambia el resultado pero sí el rendimiento, porque un índice solo sirve un `ORDER BY` cuyas columnas van todas en la misma dirección (con `v DESC, id ASC` la primera página costaba ~530 ms con 5 M de filas; con `v DESC, id DESC`, ~1,8 ms; ver docs/benchmarks.md).
+
+**LIMIT propio como tope.** `SELECT … LIMIT 100` con páginas de 20 se recorre en 5 páginas y se acaba ahí, aunque la tabla tenga más filas. `SplitSelect` guarda `Limit` y quita el `LIMIT` del texto base; el plan lleva `Cap`.
+- **Ventanas por posición**: cada página sabe su posición (`start`, múltiplo del tamaño). `Plan.Window(start)` da cuántas filas pedir: `min(N, Cap-start)`, y **sin fila de sondeo** cuando la página llega al tope (no hay nada más que ofrecer, aunque la tabla siga). `HasNext` es falso al llegar al tope.
+- **Siguiente / anterior** siguen siendo por cursor (coste constante); **el número de página siempre se conoce** (es posicional) y `HasPrev` es `start > 0`.
+- **Última**: no se puede leer hacia atrás desde el final de la tabla (el tope manda), así que se cuenta el resultado acotado —`SELECT COUNT(*) FROM (SELECT 1 FROM … WHERE … LIMIT Cap) _c`— y se lee la última página por `OFFSET` (`LastStart`). Coste: proporcional al tope (lo mismo que costaba la consulta original); sin tope sigue siendo una consulta de coste constante.
+- Sin estimación de filas (`Estimated` = 0): la de la tabla no corresponde al resultado acotado.
+- Con `ORDER BY` del usuario y tope, «las primeras N filas» son las del orden efectivo (usuario + desempate por clave): determinista, y coincide con lo que MySQL devuelve salvo en el orden de los empates, que en `LIMIT` es indefinido. En modo aproximado (JOIN…) un `LIMIT` propio sigue sin soportarse (`user_limit`).
 
 **Consulta de una página** (sin parámetros; los literales son números ya validados que vienen de las celdas, **nunca texto del usuario**):
 ```sql
@@ -72,7 +79,7 @@ Es una elección explícita del usuario y **tiene costes que la interfaz debe mo
 |---|---|---|
 | `not_select` | no es un `SELECT` (SHOW, EXPLAIN, CALL, WITH…) | — |
 | `not_simple` | `SELECT` con modificadores (`SQL_CALC_FOUND_ROWS`…), sin `FROM`, con alias de tabla o con una forma que el analizador no reconoce | simplifica la consulta |
-| `user_limit` | la consulta ya trae `LIMIT`/`OFFSET` | quítalo para paginar |
+| `user_limit` | `LIMIT` con `OFFSET`, `LIMIT a, b`, `LIMIT 0` o un `LIMIT` que no es el último tramo | usa solo `LIMIT n` para paginar |
 | `multi_table` | JOIN o subconsulta en `FROM` | usa «Paginación aproximada» si hay columna numérica |
 | `grouped` | GROUP BY / HAVING / DISTINCT / agregados | — |
 | `compound` | UNION / INTERSECT / EXCEPT | — |
@@ -151,7 +158,8 @@ Cada página es una lectura independiente: **no hay instantánea**. Con `keyset`
 - [x] «Última» muestra las últimas N filas y `<` retrocede sin saltos, con el mismo oráculo.
 - [x] Con `ORDER BY precio DESC` (columna numérica no nula) la paginación respeta ese orden y la clave desempata (valores repetidos incluidos).
 - [x] Una página profunda con keyset tarda ≤ 3× la primera en la tabla de 5 M filas (§9); OFFSET profundo es mucho peor y queda registrado.
-- [x] Un resultado con `LIMIT` propio, JOIN, GROUP BY, UNION o sin PK no usa `keyset` y muestra el motivo correcto de §6.
+- [x] Un resultado con `LIMIT … OFFSET`, JOIN, GROUP BY, UNION o sin PK no usa `keyset` y muestra el motivo correcto de §6.
+- [x] Un `LIMIT n` propio es el tope: con páginas de 20 y `LIMIT 100` se recorren exactamente 100 filas en 5 páginas (siguiente, anterior, primera y «Última»), también cuando la tabla es más corta que el tope.
 - [x] Modo aproximado: un JOIN con columna numérica pagina; con valores repetidos en el borde se bloquea «siguiente» con aviso y **ninguna fila se omite en silencio**.
 - [x] Las páginas no aparecen en el historial; cambiar de página con ediciones pendientes pide confirmación; editar una celda de la página sigue funcionando.
 - [x] «Exportar» tras paginar exporta la tabla completa (rerun), no solo la página.
