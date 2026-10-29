@@ -1,0 +1,37 @@
+name: changes
+description: Qué áreas cambiaron (go, frontend) para saltar los jobs que no hacen falta. Requiere checkout con fetch-depth 0.
+
+outputs:
+  go:
+    description: Cambió Go, build/ o la configuración de empaquetado
+    value: ${{ steps.areas.outputs.go }}
+  frontend:
+    description: Cambió frontend/
+    value: ${{ steps.areas.outputs.frontend }}
+  any:
+    description: Cambió algo que afecta a la app
+    value: ${{ steps.areas.outputs.any }}
+
+runs:
+  using: composite
+  steps:
+    - id: areas
+      shell: bash
+      env:
+        EVENT: ${{ github.event_name }}
+        SHA: ${{ github.sha }}
+        BEFORE: ${{ github.event.before }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+      run: |
+        base=""
+        case "$EVENT" in
+          pull_request) base="$PR_BASE" ;;
+          # En un push nuevo o con force-push, "before" no existe o no es alcanzable: se ejecuta todo.
+          push) if [ -n "$BEFORE" ] && [ "${BEFORE//0/}" != "" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then base="$BEFORE"; fi ;;
+        esac
+        if [ -z "$base" ]; then
+          echo "Sin base comparable ($EVENT): se ejecuta todo."
+          printf 'go=true\nfrontend=true\nany=true\n' | tee -a "$GITHUB_OUTPUT"
+        else
+          git diff --name-only --no-renames "$base" "$SHA" | tee /dev/stderr | bash .github/scripts/changed-areas.sh | tee -a "$GITHUB_OUTPUT"
+        fi

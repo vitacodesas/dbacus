@@ -16,7 +16,22 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      any: ${{ steps.c.outputs.any }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0 }
+      - id: c
+        uses: ./.github/actions/changes
+
+  # La ejecución semanal y la manual siempre auditan (sin base comparable, `changes` lo da todo por cambiado):
+  # aparecen avisos nuevos aunque el código no cambie.
   audit:
+    needs: changes
+    if: needs.changes.outputs.any == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
