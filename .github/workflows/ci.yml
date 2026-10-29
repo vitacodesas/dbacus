@@ -76,7 +76,11 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: ./.github/actions/setup
+      # La prueba de rendimiento de la paginación (1 M de filas × 3 imágenes, ~3 min) solo corre en main: en los PR la
+      # corrección de la paginación ya la cubren los tests de recorrido, que sí corren siempre.
       - run: go test -tags=integration -count=1 ./...
+        env:
+          DBACUS_PERF: ${{ github.ref == 'refs/heads/main' && '1' || '' }}
 
   # Solo tras pasar los checks y nunca en PR: macOS y Windows son los runners caros.
   # Si integration se salta (cambio solo de frontend), `needs` lo daría por fallido: hay que admitir "skipped".

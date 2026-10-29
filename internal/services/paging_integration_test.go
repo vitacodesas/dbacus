@@ -239,6 +239,10 @@ func (e *liveEnv) scalar(t *testing.T, sqlText string) []string {
 // TestKeysetPagingPerfIntegration mide el criterio de rendimiento del spec 18 §9: una página profunda con cursor cuesta
 // casi lo mismo que la primera, y un OFFSET equivalente no. Las cifras se registran con -v para docs/benchmarks.md.
 func TestKeysetPagingPerfIntegration(t *testing.T) {
+	// En CI solo corre donde se pide (DBACUS_PERF=1, ver ci.yml): crear la tabla y medir cuesta ~3 min por imagen.
+	if os.Getenv("CI") != "" && os.Getenv("DBACUS_PERF") == "" && os.Getenv("DBACUS_PERF_ROWS") == "" {
+		t.Skip("prueba de rendimiento: solo en main (DBACUS_PERF=1)")
+	}
 	rows := pagingPerfRows(t)
 	const pageSize = 1000
 	for _, image := range mysqlbox.Images() {
