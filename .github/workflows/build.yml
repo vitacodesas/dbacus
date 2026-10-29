@@ -1,0 +1,43 @@
+name: build
+
+# Reutilizable: lo llaman ci.yml (push a main) y release.yml (etiquetas v*).
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # wails3 build/package ya ejecuta el build del frontend.
+      - uses: ./.github/actions/setup
+        with: { wails: "true", frontend: install }
+      - name: Compilar y empaquetar
+        shell: bash
+        run: |
+          mkdir -p dist-artifacts
+          case "$RUNNER_OS" in
+            macOS)
+              wails3 package
+              ditto -c -k --keepParent bin/dbacus.app dist-artifacts/dbacus-macos.zip ;;
+            Windows)
+              wails3 build
+              cp bin/dbacus.exe dist-artifacts/dbacus-windows.exe ;;
+            Linux)
+              wails3 build
+              tar czf dist-artifacts/dbacus-linux.tar.gz -C bin dbacus ;;
+          esac
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dbacus-${{ runner.os }}
+          path: dist-artifacts/*
+          if-no-files-found: error
+          retention-days: 14

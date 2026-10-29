@@ -1,83 +1,61 @@
 name: ci
-on: [push, pull_request]
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un PR nuevo cancela el anterior; en main no se cancela para no perder el build de un commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version-file: go.mod }
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: npm, cache-dependency-path: frontend/package-lock.json }
-      - uses: arduino/setup-task@v2
-      - name: Linux deps
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
-      - name: Instalar wails3 (versión de go.mod)
-        shell: bash
-        run: |
-          V=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)
-          go install github.com/wailsapp/wails/v3/cmd/wails3@$V
-      - run: cd frontend && npm ci && npm run typecheck && npm run lint && npm test
-      # main.go embebe frontend/dist (ignorado por git): debe existir antes de vet/test/build de Go.
-      - run: cd frontend && npm run build
-      - name: E2E (Playwright, backend simulado)
-        if: runner.os == 'Linux'
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium && npm run test:e2e
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ./.github/actions/setup
+        with: { wails: "true" }
       - run: go vet ./...
       - run: go test -race ./...
-      - name: Compilar y empaquetar
-        shell: bash
-        run: |
-          mkdir -p dist-artifacts
-          case "$RUNNER_OS" in
-            macOS)
-              wails3 package
-              ditto -c -k --keepParent bin/dbacus.app dist-artifacts/dbacus-macos.zip ;;
-            Windows)
-              wails3 build
-              cp bin/dbacus.exe dist-artifacts/dbacus-windows.exe ;;
-            Linux)
-              wails3 build
-              tar czf dist-artifacts/dbacus-linux.tar.gz -C bin dbacus ;;
-          esac
-      - uses: actions/upload-artifact@v4
+      - name: Frontend (typecheck, lint, tests)
+        working-directory: frontend
+        run: npm run typecheck && npm run lint && npm test
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          name: dbacus-${{ runner.os }}
-          path: dist-artifacts/*
-          if-no-files-found: error
-          retention-days: 14
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+      - name: E2E (Playwright, backend simulado)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium && npm run test:e2e
+      - name: Bindings sin cambios
+        run: |
+          wails3 generate bindings -clean=true -ts -i
+          if [ -n "$(git status --porcelain -- frontend/bindings)" ]; then
+            echo "::error::Los bindings generados difieren de los commiteados. Ejecuta 'wails3 generate bindings -clean=true -ts -i' y commitea."
+            git status --short -- frontend/bindings
+            exit 1
+          fi
 
   # Contra MySQL 8.0/8.4 y MariaDB 10.11 reales (testcontainers; Docker viene en ubuntu-latest).
   integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version-file: go.mod }
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: npm, cache-dependency-path: frontend/package-lock.json }
-      - name: Linux deps
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
-      - run: cd frontend && npm ci && npm run build
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ./.github/actions/setup
       - run: go test -tags=integration -count=1 ./...
 
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version-file: go.mod }
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: npm, cache-dependency-path: frontend/package-lock.json }
-      - name: Linux deps
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
-      - run: cd frontend && npm ci && npm run build
-      - run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
-      - run: cd frontend && npm audit --audit-level=high
+  # Solo tras pasar los checks y nunca en PR: macOS y Windows son los runners caros.
+  build:
+    if: github.event_name != 'pull_request'
+    needs: [check, integration]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build.yml

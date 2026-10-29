@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      go-minor-patch: { update-types: [minor, patch] }
+    ignore:
+      # Versión exacta fijada por ADR-001; se sube a mano tras probar la app.
+      - dependency-name: github.com/wailsapp/wails/v3
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly }
+    groups:
+      npm-minor-patch: { update-types: [minor, patch] }
+    ignore:
+      # Monaco 0.56/0.57 arrastran un dompurify vulnerable y se fuerza con "overrides" (AGENTS.md).
+      - dependency-name: monaco-editor
+      - dependency-name: dompurify
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
