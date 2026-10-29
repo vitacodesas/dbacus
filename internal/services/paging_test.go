@@ -241,7 +241,7 @@ func TestUserOrderByWithTiesIsRespectedAndKeyBreaksTies(t *testing.T) {
 		got = append(got, pe.ids(t, qid, 0)...)
 	}
 	var want []int64
-	rs, err := pe.db.Query("SELECT id FROM app.items WHERE qty >= 1 ORDER BY price DESC, id")
+	rs, err := pe.db.Query("SELECT id FROM app.items WHERE qty >= 1 ORDER BY price DESC, id DESC")
 	require.NoError(t, err)
 	for rs.Next() {
 		var id int64

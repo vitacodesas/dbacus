@@ -15,6 +15,7 @@ import (
 
 	"github.com/vitacodesas/dbacus/internal/paging"
 	"github.com/vitacodesas/dbacus/internal/results"
+	"github.com/vitacodesas/dbacus/internal/sqlsplit"
 	"github.com/vitacodesas/dbacus/internal/testutil/mysqlbox"
 )
 
@@ -119,8 +120,8 @@ func TestKeysetPagingIntegration(t *testing.T) {
 
 			cases := []struct{ name, sql, oracle string }{
 				{"sin ORDER BY", "SELECT * FROM pg", "SELECT id FROM pg ORDER BY id"},
-				{"ORDER BY de un decimal con empates", "SELECT * FROM pg ORDER BY price DESC", "SELECT id FROM pg ORDER BY price DESC, id"},
-				{"WHERE y varias columnas con direcciones mixtas", "SELECT * FROM pg WHERE qty >= 1 ORDER BY qty, price DESC", "SELECT id FROM pg WHERE qty >= 1 ORDER BY qty, price DESC, id"},
+				{"ORDER BY de un decimal con empates", "SELECT * FROM pg ORDER BY price DESC", "SELECT id FROM pg ORDER BY price DESC, id DESC"},
+				{"WHERE y varias columnas con direcciones mixtas", "SELECT * FROM pg WHERE qty >= 1 ORDER BY qty, price DESC", "SELECT id FROM pg WHERE qty >= 1 ORDER BY qty, price DESC, id DESC"},
 				{"lista parcial de columnas", "SELECT id, price, qty FROM pg ORDER BY price", "SELECT id FROM pg ORDER BY price, id"},
 				{"clave descendente", "SELECT * FROM pg ORDER BY id DESC", "SELECT id FROM pg ORDER BY id DESC"},
 			}
@@ -253,7 +254,9 @@ func TestKeysetPagingPerfIntegration(t *testing.T) {
 
 			q := func(n string) string { return "`" + n + "`" }
 			byID := paging.Plan{List: "*", From: "`" + mysqlbox.Database + "`.`big`", PageSize: pageSize, Order: []paging.Col{{Name: "id"}}}
-			byV := paging.Plan{List: "*", From: "`" + mysqlbox.Database + "`.`big`", PageSize: pageSize, Order: []paging.Col{{Name: "v", Desc: true}, {Name: "id"}}}
+			// El orden efectivo lo calcula el mismo código que el servicio: `ORDER BY v DESC` del usuario + desempate por la clave.
+			byV := paging.Plan{List: "*", From: "`" + mysqlbox.Database + "`.`big`", PageSize: pageSize,
+				Order: paging.EffectiveOrder([]sqlsplit.OrderItem{{Column: "v", Desc: true}}, []string{"id"})}
 			build := func(p paging.Plan, d paging.Dir, edge []string) string {
 				s, err := p.Build(d, edge, q)
 				require.NoError(t, err)
@@ -271,12 +274,12 @@ func TestKeysetPagingPerfIntegration(t *testing.T) {
 			var worstKeyID, worstKeyV time.Duration
 			for _, d := range []depth{{"50 %", rows / 2}, {"99 %", rows * 99 / 100}} {
 				edgeID := e.scalar(t, fmt.Sprintf("SELECT id FROM big ORDER BY id LIMIT 1 OFFSET %d", d.at-1))
-				edgeV := e.scalar(t, fmt.Sprintf("SELECT v, id FROM big ORDER BY v DESC, id LIMIT 1 OFFSET %d", d.at-1))
+				edgeV := e.scalar(t, fmt.Sprintf("SELECT v, id FROM big ORDER BY v DESC, id DESC LIMIT 1 OFFSET %d", d.at-1))
 
 				deepID := e.timeSQL(t, build(byID, paging.Next, edgeID), runs)
 				deepV := e.timeSQL(t, build(byV, paging.Next, edgeV), runs)
 				offID := e.timeSQL(t, fmt.Sprintf("SELECT * FROM big ORDER BY id LIMIT %d OFFSET %d", pageSize, d.at), runs)
-				offV := e.timeSQL(t, fmt.Sprintf("SELECT * FROM big ORDER BY v DESC, id LIMIT %d OFFSET %d", pageSize, d.at), runs)
+				offV := e.timeSQL(t, fmt.Sprintf("SELECT * FROM big ORDER BY v DESC, id DESC LIMIT %d OFFSET %d", pageSize, d.at), runs)
 				t.Logf("profundidad %s · por id: cursor %s, OFFSET %s (×%.0f) · por v desc: cursor %s, OFFSET %s (×%.0f)",
 					d.name, deepID.Round(time.Microsecond), offID.Round(time.Microsecond), float64(offID)/float64(deepID),
 					deepV.Round(time.Microsecond), offV.Round(time.Microsecond), float64(offV)/float64(deepV))

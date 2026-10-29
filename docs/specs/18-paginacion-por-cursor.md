@@ -31,7 +31,7 @@ Con el LIMIT automático (por defecto 1000) un resultado grande se corta y **no 
 4. Esas columnas están **en el resultado**: se leen sus valores en la primera y la última fila para construir el cursor. Si faltan: motivo `key_not_selected`.
 5. El `ORDER BY`, si existe, es una lista de columnas desnudas (se admite `tabla.col` y comillas invertidas) con `ASC`/`DESC`; no posiciones (`ORDER BY 2`), expresiones, funciones ni `COLLATE`.
 
-**Orden efectivo** = el `ORDER BY` del usuario + las columnas de la clave que falten (ascendentes) como desempate, para que el orden sea **total y único**. Sin `ORDER BY`: la clave. Se admiten direcciones mixtas.
+**Orden efectivo** = el `ORDER BY` del usuario + las columnas de la clave que falten como desempate, para que el orden sea **total y único**. Sin `ORDER BY`: la clave, ascendente. Se admiten direcciones mixtas en el `ORDER BY` del usuario. **Las columnas añadidas van en la misma dirección que la última columna del usuario**: la dirección del desempate no cambia el resultado pero sí el rendimiento, porque un índice solo sirve un `ORDER BY` cuyas columnas van todas en la misma dirección (con `v DESC, id ASC` la primera página costaba ~530 ms con 5 M de filas; con `v DESC, id DESC`, ~1,8 ms; ver docs/benchmarks.md).
 
 **Consulta de una página** (sin parámetros; los literales son números ya validados que vienen de las celdas, **nunca texto del usuario**):
 ```sql
@@ -117,8 +117,8 @@ Método nuevo: `QueryService.Page(req)` → `StatementResult`.
 - i18n es/en con las mismas claves (exige `i18n.test.ts`).
 
 ## 9. Rendimiento (criterio central)
-- **Prueba de integración nueva** `TestKeysetPagingPerfIntegration` (MySQL 8.0, 8.4 y MariaDB 10.11) con una tabla de **5 M filas** (PK `BIGINT` autoincremental y una columna numérica con índice): mide la página 1, una al 50 %, una en el último 1 % y «Última» con keyset, y las compara con `LIMIT N OFFSET k` en la misma tabla.
-- **Criterio**: el tiempo de una página profunda con keyset ≤ **3×** el de la primera (coste casi constante); OFFSET profundo debe resultar claramente peor (es la prueba de que el diseño importa). No se prometen milisegundos concretos: se miden en la primera implementación y se registran en `docs/benchmarks.md`.
+- **Prueba de integración** `TestKeysetPagingPerfIntegration` (MySQL 8.0, 8.4 y MariaDB 10.11) con una tabla de **5 M filas** (PK `BIGINT` autoincremental y una columna numérica con índice; 1 M en CI): mide la página 1, una al 50 %, una al 99 % y «Última» con keyset, y las compara con `LIMIT N OFFSET k` en la misma tabla. **Implementada y cumplida** (cifras en docs/benchmarks.md).
+- **Criterio**: el tiempo de una página profunda con keyset ≤ **3×** el de la primera (coste casi constante); OFFSET profundo debe resultar claramente peor (es la prueba de que el diseño importa). **Medido (5 M de filas, páginas de 1000)**: cursor 0,7–1,0 ms por clave primaria y 1,2–4,7 ms por una columna indexada, a cualquier profundidad; OFFSET 150–480 ms por clave primaria y 1,1–1,6 s por la columna indexada (×205 a ×970 más lento). «Última»: ~1 ms. Alcance y límites de la medición en docs/benchmarks.md.
 - Línea base actual (docs/benchmarks.md, mysql:8.0): primera ventana de 200 filas 33 ms; 1 M filas completas 376 ms con 124 MiB de buffer. Con paginación la memoria queda acotada a la página (≤ 1000 filas).
 - **Sin índice**: si el orden efectivo no está cubierto por un índice, cada página ordena y es tan lenta como OFFSET. Se detecta con `EXPLAIN` sobre la primera página (`Using filesort`) → `Warning: no_index` (informativo, no bloquea; en MariaDB el texto de `Extra` es el mismo). [Mejor esfuerzo: si `EXPLAIN` falla, no hay aviso.]
 - La reescritura y los tests de generación de SQL son lógica pura de Go y se miden con micro-benchmarks (como `sqlsplit`).

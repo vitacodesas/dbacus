@@ -44,8 +44,8 @@ func TestDecideKeysetOrders(t *testing.T) {
 	}{
 		{"sin ORDER BY usa la clave", "SELECT * FROM t", []Col{{Name: "id"}}},
 		{"ORDER BY por la clave se respeta", "SELECT * FROM t ORDER BY id DESC", []Col{{Name: "id", Desc: true}}},
-		{"ORDER BY del usuario más la clave de desempate", "SELECT * FROM t ORDER BY price DESC", []Col{{Name: "price", Desc: true}, {Name: "id"}}},
-		{"varias columnas con direcciones mixtas", "SELECT * FROM t ORDER BY qty, price DESC", []Col{{Name: "qty"}, {Name: "price", Desc: true}, {Name: "id"}}},
+		{"ORDER BY del usuario más la clave de desempate", "SELECT * FROM t ORDER BY price DESC", []Col{{Name: "price", Desc: true}, {Name: "id", Desc: true}}},
+		{"varias columnas con direcciones mixtas", "SELECT * FROM t ORDER BY qty, price DESC", []Col{{Name: "qty"}, {Name: "price", Desc: true}, {Name: "id", Desc: true}}},
 		{"los nombres se toman de la tabla, no de lo escrito", "SELECT * FROM t ORDER BY PRICE", []Col{{Name: "price"}, {Name: "id"}}},
 		{"lista de columnas con la clave", "SELECT id, note FROM t", []Col{{Name: "id"}}},
 		{"lista de columnas en otro orden y mayúsculas", "SELECT NOTE, ID FROM t", []Col{{Name: "id"}}},
@@ -76,7 +76,7 @@ func TestDecideCompositeAndAlternativeKeys(t *testing.T) {
 	got := decide(t, "SELECT * FROM t", composite)
 	require.Equal(t, []Col{{Name: "qty"}, {Name: "id"}}, got.Plan.Order, "clave compuesta en el orden de la clave")
 	got = decide(t, "SELECT * FROM t ORDER BY id DESC", composite)
-	require.Equal(t, []Col{{Name: "id", Desc: true}, {Name: "qty"}}, got.Plan.Order, "solo se añade lo que falta")
+	require.Equal(t, []Col{{Name: "id", Desc: true}, {Name: "qty", Desc: true}}, got.Plan.Order, "solo se añade lo que falta")
 
 	// Sin PRIMARY: un índice único completo sobre columnas NOT NULL.
 	uniq := detail(model.Index{Name: "uq_ref", Columns: []string{"ref"}, Unique: true})

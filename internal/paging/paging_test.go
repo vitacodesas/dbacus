@@ -285,11 +285,15 @@ func TestBuildRejectsAnythingThatIsNotANumber(t *testing.T) {
 
 func TestEffectiveOrderAddsTheKeyAsATieBreaker(t *testing.T) {
 	require.Equal(t, []Col{{Name: "id"}}, EffectiveOrder(nil, []string{"id"}))
-	require.Equal(t, []Col{{Name: "price", Desc: true}, {Name: "id"}}, EffectiveOrder([]sqlsplit.OrderItem{{Column: "price", Desc: true}}, []string{"id"}))
+	// El desempate sigue la dirección de la última columna del usuario (para que un índice pueda servir el orden).
+	require.Equal(t, []Col{{Name: "price", Desc: true}, {Name: "id", Desc: true}}, EffectiveOrder([]sqlsplit.OrderItem{{Column: "price", Desc: true}}, []string{"id"}))
+	require.Equal(t, []Col{{Name: "price"}, {Name: "id"}}, EffectiveOrder([]sqlsplit.OrderItem{{Column: "price"}}, []string{"id"}))
+	require.Equal(t, []Col{{Name: "qty"}, {Name: "price", Desc: true}, {Name: "id", Desc: true}}, EffectiveOrder([]sqlsplit.OrderItem{{Column: "qty"}, {Column: "price", Desc: true}}, []string{"id"}), "con direcciones mixtas manda la última")
 	// La clave ya está en el orden del usuario (sin distinguir mayúsculas): no se repite ni se cambia su dirección.
 	require.Equal(t, []Col{{Name: "ID", Desc: true}}, EffectiveOrder([]sqlsplit.OrderItem{{Column: "ID", Desc: true}}, []string{"id"}))
 	// Clave compuesta: solo se añade lo que falta, en el orden de la clave.
 	require.Equal(t, []Col{{Name: "b"}, {Name: "a"}, {Name: "c"}}, EffectiveOrder([]sqlsplit.OrderItem{{Column: "b"}}, []string{"a", "b", "c"}))
+	require.Equal(t, []Col{{Name: "b", Desc: true}, {Name: "a", Desc: true}, {Name: "c", Desc: true}}, EffectiveOrder([]sqlsplit.OrderItem{{Column: "b", Desc: true}}, []string{"a", "b", "c"}))
 }
 
 func TestPageAndReverse(t *testing.T) {
