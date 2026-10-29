@@ -21,6 +21,8 @@ type selTok struct {
 	kind byte // 'w' palabra (text en mayúsculas), 'i' identificador entre backticks, 's' cadena, 'n' número, 'p' puntuación
 	text string
 	raw  string // para 'w': tal como se escribió
+	// start y end son la posición del token en la sentencia (bytes); permiten recuperar el texto original de un tramo.
+	start, end int
 }
 
 // tokenize parte una sentencia en tokens ignorando comentarios. No valida SQL: solo lo necesario para SimpleSelectTable.
@@ -38,7 +40,7 @@ func tokenize(src string) []selTok {
 			i = skipBlockComment(src, i)
 		case c == '\'' || c == '"':
 			j := skipQuoted(src, i, c, true)
-			out = append(out, selTok{kind: 's', text: src[i:j]})
+			out = append(out, selTok{kind: 's', text: src[i:j], start: i, end: j})
 			i = j
 		case c == '`':
 			j := skipQuoted(src, i, c, false)
@@ -46,24 +48,24 @@ func tokenize(src string) []selTok {
 			if strings.HasSuffix(name, "`") {
 				name = name[:len(name)-1]
 			}
-			out = append(out, selTok{kind: 'i', text: strings.ReplaceAll(name, "``", "`")})
+			out = append(out, selTok{kind: 'i', text: strings.ReplaceAll(name, "``", "`"), start: i, end: j})
 			i = j
 		case isWordStart(c):
 			j := i
 			for j < len(src) && isWordChar(src[j]) {
 				j++
 			}
-			out = append(out, selTok{kind: 'w', text: upper(src[i:j]), raw: src[i:j]})
+			out = append(out, selTok{kind: 'w', text: upper(src[i:j]), raw: src[i:j], start: i, end: j})
 			i = j
 		case c >= '0' && c <= '9':
 			j := i
 			for j < len(src) && (isWordChar(src[j]) || src[j] == '.') {
 				j++
 			}
-			out = append(out, selTok{kind: 'n', text: src[i:j]})
+			out = append(out, selTok{kind: 'n', text: src[i:j], start: i, end: j})
 			i = j
 		default:
-			out = append(out, selTok{kind: 'p', text: string(c)})
+			out = append(out, selTok{kind: 'p', text: string(c), start: i, end: i + 1})
 			i++
 		}
 	}
