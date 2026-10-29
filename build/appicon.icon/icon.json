@@ -1,51 +1,33 @@
 {
   "fill" : {
-    "automatic-gradient" : "extended-gray:1.00000,1.00000"
+    "linear-gradient" : [
+      "srgb:0.10588,0.13725,0.32157,1.00000",
+      "srgb:0.03529,0.05098,0.14118,1.00000"
+    ],
+    "orientation" : {
+      "start" : { "x" : 0.3, "y" : 0.0 },
+      "stop" : { "x" : 0.7, "y" : 1.0 }
+    }
   },
   "groups" : [
     {
       "layers" : [
         {
-          "fill-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : {
-                "solid" : "srgb:0.92143,0.92145,0.92144,1.00000"
-              }
-            },
-            {
-              "appearance" : "tinted",
-              "value" : {
-                "solid" : "srgb:0.83742,0.83744,0.83743,1.00000"
-              }
-            }
-          ],
-          "image-name" : "wails_icon_vector.svg",
-          "name" : "wails_icon_vector",
+          "image-name" : "dbacus_layer.svg",
+          "name" : "dbacus_layer",
           "position" : {
-            "scale" : 0.85,
-            "translation-in-points" : [
-              0.0,
-              0.0
-            ]
+            "scale" : 1.1,
+            "translation-in-points" : [ 0.0, 0.0 ]
           }
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
+      "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
       "specular" : true,
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
+      "translucency" : { "enabled" : false, "value" : 0.5 }
     }
   ],
   "supported-platforms" : {
-    "circles" : [
-      "watchOS"
-    ],
+    "circles" : [ "watchOS" ],
     "squares" : "shared"
   }
 }

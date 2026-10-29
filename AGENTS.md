@@ -50,6 +50,7 @@ docs/specs/                  # specs y ADRs
 - Bindings TS (tras cambiar servicios Go o eventos): `wails3 generate bindings -clean=true -ts -i`.
 - Go: `go vet ./... && go test -race ./...` · integración (Docker): `colima start`, luego `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock go test -tags=integration ./...`. Imágenes por defecto: mysql:8.0, mysql:8.4, mariadb:10.11 (`DBACUS_IT_IMAGES` las cambia).
 - Front (`cd frontend`): `npm run typecheck && npm run lint && npm test`.
+- Iconos: edita `build/appicon.svg` y ejecuta `scripts/gen-icon.sh` (regenera png, icns, ico y, en macOS, `Assets.car`).
 - Todo junto: `scripts/smoke.sh`. En macOS, `go vet`/`go test` sueltos imprimen avisos `ld: warning … built for newer 'macOS'`: son inocuos; `export MACOSX_DEPLOYMENT_TARGET=12.0 CGO_CFLAGS=-mmacosx-version-min=12.0 CGO_LDFLAGS=-mmacosx-version-min=12.0` los quita (smoke.sh ya lo hace; `wails3 build` también).
 - E2E de UI (backend simulado): `cd frontend && PW_CHANNEL=chrome npm run test:e2e` (usa el Chrome instalado; sin `PW_CHANNEL`, `npx playwright install chromium` primero). Rendimiento: `scripts/bench.sh [--integration]`; smoke manual en app real: `docs/smoke-manual.md`.
 - Pruebas de UI sin ventana nativa: `wails3 task build:server DEV=true && ./bin/dbacus-server` y abrir `http://localhost:8080` (no soporta diálogos nativos).

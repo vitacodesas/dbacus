@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Dbacus: un ábaco (DB + abacus). Los rieles son filas de una tabla; la cuenta coral es la celda en edición.
+       Fuente editable: build/appicon.svg. appicon.png, icons.icns e icon.ico se generan con scripts/gen-icon.sh. -->
+  <defs>
+    <linearGradient id="bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#1B2352"/>
+      <stop offset="1" stop-color="#090D24"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bead" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#22B8E8"/>
+    </linearGradient>
+    <linearGradient id="hot" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF8A9B"/>
+      <stop offset="1" stop-color="#FF4F73"/>
+    </linearGradient>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <filter id="glow" x="-40%" y="-60%" width="180%" height="220%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+  </defs>
+
+  <!-- Forma estilo macOS: 824 px con 100 px de margen transparente -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#drop)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#sheen)"/>
+
+  <!-- Marco (lo que distingue un ábaco de unos sliders) y rieles -->
+  <g stroke="#4B5A94" stroke-width="20" stroke-linecap="round">
+    <line x1="236" y1="296" x2="236" y2="728"/>
+    <line x1="788" y1="296" x2="788" y2="728"/>
+    <line x1="262" y1="372" x2="762" y2="372"/>
+    <line x1="262" y1="512" x2="762" y2="512"/>
+    <line x1="262" y1="652" x2="762" y2="652"/>
+  </g>
+
+  <!-- Resplandor de la cuenta activa -->
+  <rect x="450" y="466" width="124" height="92" rx="46" fill="#FF4F73" opacity="0.55" filter="url(#glow)"/>
+
+  <!-- Cuentas: fila 1 (izquierda), fila 2 (derecha, la primera es la activa), fila 3 (extremos) -->
+  <g>
+    <rect x="262" y="326" width="124" height="92" rx="46" fill="url(#bead)"/>
+    <rect x="398" y="326" width="124" height="92" rx="46" fill="url(#bead)"/>
+
+    <rect x="450" y="466" width="124" height="92" rx="46" fill="url(#hot)"/>
+    <rect x="586" y="466" width="124" height="92" rx="46" fill="url(#bead)"/>
+
+    <rect x="262" y="606" width="124" height="92" rx="46" fill="url(#bead)"/>
+    <rect x="638" y="606" width="124" height="92" rx="46" fill="url(#bead)"/>
+  </g>
+
+  <!-- Brillo superior de cada cuenta -->
+  <g fill="#FFFFFF" opacity="0.28">
+    <ellipse cx="324" cy="350" rx="38" ry="9"/>
+    <ellipse cx="460" cy="350" rx="38" ry="9"/>
+    <ellipse cx="512" cy="490" rx="38" ry="9"/>
+    <ellipse cx="648" cy="490" rx="38" ry="9"/>
+    <ellipse cx="324" cy="630" rx="38" ry="9"/>
+    <ellipse cx="700" cy="630" rx="38" ry="9"/>
+  </g>
+</svg>
