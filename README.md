@@ -18,7 +18,7 @@ Descarga el archivo de tu sistema desde [Releases](../../releases) y comprueba s
 
 | Sistema | Archivo | Primera apertura |
 |---|---|---|
-| macOS | `.zip` con `dbacus.app` | Clic derecho → Abrir, o `xattr -dr com.apple.quarantine dbacus.app` |
+| macOS | `.zip` con `dbacus.app` | macOS 15 o posterior: abrir una vez (saldrá el aviso) y luego *Ajustes del Sistema → Privacidad y seguridad → «Abrir igualmente»*. Alternativa: `xattr -dr com.apple.quarantine dbacus.app`. En macOS 14 o anterior basta clic derecho → Abrir |
 | Windows | `.exe` | SmartScreen: «Más información» → «Ejecutar de todas formas» |
 | Linux | `.tar.gz` | Requiere GTK 4 y WebKitGTK 6.0 |
 
