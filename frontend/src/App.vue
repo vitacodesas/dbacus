@@ -9,6 +9,7 @@ import { useTheme } from "./composables/useTheme";
 import { startEventDispatch } from "./events";
 import { useConnectionsStore } from "./stores/connections";
 import { useQueryTabsStore } from "./stores/queryTabs";
+import { useQueryFilesStore } from "./stores/queryFiles";
 import { useSessionsStore } from "./stores/sessions";
 import { useUiStore } from "./stores/ui";
 
@@ -25,9 +26,21 @@ onMounted(() => {
   void useUiStore().load();
   void useConnectionsStore().load();
   void useSessionsStore().refresh();
-  void queryTabs.restore();
+  void queryTabs.restore().then(() => queryFiles.syncTabs());
+  window.addEventListener("focus", onFocus);
 });
-onUnmounted(() => stopEvents?.());
+onUnmounted(() => {
+  stopEvents?.();
+  window.removeEventListener("focus", onFocus);
+});
+
+// Sin vigilante de disco (spec 20 ⚑D10): al volver a la ventana se relee la carpeta de consultas.
+const queryFiles = useQueryFilesStore();
+function onFocus() {
+  const ui = useUiStore();
+  if (ui.sidebarView === "queries" && !ui.sidebarCollapsed) void queryFiles.load().then(() => queryFiles.syncTabs());
+  else void queryFiles.syncTabs();
+}
 
 // Galería de componentes solo en dev: http://localhost:9245/#/dev/components
 const DevComponentsView = import.meta.env.DEV ? defineAsyncComponent(() => import("./views/DevComponentsView.vue")) : null;

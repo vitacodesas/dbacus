@@ -119,7 +119,7 @@ Métodos:
 - `RowsAsInsert(queryID, stmtIndex, offset, limit, table)` → `INSERT` con las filas indicadas (máx. 1000) y literales/identificadores escapados por el driver (`QuoteIdent`/`QuoteString`); el front nunca arma SQL.
 - `StatementAt(sql, offset)` → `{Text, Start, End}` (sentencia bajo el cursor, vía `sqlsplit`).
 - `FormatSQL(sql)` → `string`.
-- `SaveTabs(sessionID?, []TabState)` / `LoadTabs()` → `[]TabState{ID, SessionProfileID, Title, SQL, Database, Order}` (persistencia en `ui_state`).
+- `SaveTabs(sessionID?, []TabState)` / `LoadTabs()` → `[]TabState{ID, SessionProfileID, Title, SQL, Database, Order, FilePath, BaseSQL, FileVersion}` (`FilePath`/`BaseSQL`/`FileVersion`: vínculo con una consulta guardada, spec 20) (persistencia en `ui_state`).
 - `Explain(...)`: fuera de etapa 1.
 
 ## SettingsService
@@ -156,6 +156,9 @@ Tipos en `internal/edit`: `Info{Editable, Reason, Database, Table, KeyColumns, C
 Métodos (todos por `(queryId, stmtIndex)`): `GetEditInfo`, `Stage(row, col, Value) → Info`, `Unstage(row, col) → Info`, `Discard → Info`, `Preview → []Preview`, `Apply → ApplyResult`. Errores: `VALIDATION` con `Detail` = motivo de columna/resultado o `cell` (valor inválido); `QUERY_FAILED/readonly` en perfiles de solo lectura; `QUERY_FAILED/busy` si ya se está aplicando; `RESULT_EXPIRED`/`NOT_FOUND` como el resto. `GetRows` devuelve las celdas con cambio pendiente con `Cell.Edited = true`.
 Spec 14: `AddRow() → {rows, info}`, `DuplicateRows(rows[]) → {rows, info}`, `MarkDelete(rows[]) → Info`, `UnmarkDelete(rows[]) → Info`; `Stage`/`Unstage` aceptan el índice de una fila nueva. `Info` añade `pendingInserts`, `pendingDeletes`, `canInsert`, `insertReason`, `insertMissing`, `deleteAffects`; `Column` añade `insertable` y `required`; `ApplyResult` añade `inserted` y `deleted`; `Preview` añade `kind` (`update|insert|delete`). `RowWindow` añade `deleted []int` (índices absolutos) y `newFrom int`; `Cell.t = "default"` marca una celda de fila nueva sin valor. `TableDetail.incomingFks`.
 Evento `edit:applied` `{queryId, stmtIndex, rows}`.
+
+## QueryFilesService (etapa 2, spec 20)
+Consultas guardadas como archivos `.sql` bajo una carpeta raíz. `Root`, `List() → QueryTree{Root, Nodes[], Truncated}`, `Open(path) → QueryFile`, `Save(SaveQueryRequest) → QueryRef{Path, Name, Version}`, `CreateFolder`, `Move(from, to) → []PathChange`, `Delete` (a `.papelera`), `Search(QuerySearchRequest) → []QueryHit`, `PickRoot`, `ResetRoot`, `Reveal`. Rutas **relativas a la raíz** con `/`; el front nunca envía rutas absolutas. Sin eventos nuevos. Errores: `VALIDATION` con `Detail` `name|path|exists|changed_on_disk|too_large|not_utf8|depth|profileId|root`, `NOT_FOUND`, `UNSUPPORTED`, `INTERNAL`. `TabState` gana `FilePath`, `BaseSQL` y `FileVersion`. Detalle y DTOs completos en el spec 20.
 
 ## AlterService (etapa 2, spec 19)
 `GetModel(sessionID, database, table) → AlterModel`, `Preview(sessionID, ChangeSet) → AlterPreview{Statements, SQLHash, Warnings, Destructive, NoRollback, EstimatedRows}`, `Apply(sessionID, ChangeSet, SQLHash) → AlterResult{Applied, Failed *AlterFailure, Model *AlterModel}` (un fallo de la base llega en `Failed`, no como error). `ChangeSet{Database, Table, Fingerprint, Ops[]AlterOp}`. Vue envía operaciones tipadas y nunca arma SQL. Errores: `QUERY_FAILED` con `Detail` `readonly` o `busy`; `VALIDATION` con `Detail` = campo, `stale_preview` o `stale_model`; `UNSUPPORTED`; `QUERY_CANCELED`. Reutiliza `schema:invalidated`. Detalle en el spec 19.

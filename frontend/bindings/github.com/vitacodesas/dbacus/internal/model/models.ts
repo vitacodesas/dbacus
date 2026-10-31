@@ -322,6 +322,78 @@ export interface IndexSpec {
     "columns": IndexColumn[] | null;
 }
 
+export interface PathChange {
+    "from": string;
+    "to": string;
+}
+
+export interface QueryFile {
+    "path": string;
+    "name": string;
+    "sql": string;
+    "version": string;
+    "profileId": string;
+    "profileName": string;
+    "database": string;
+    "profileMissing": boolean;
+}
+
+export interface QueryHit {
+    "path": string;
+    "name": string;
+
+    /**
+     * 0 si la coincidencia es solo por nombre
+     */
+    "line": number;
+    "snippet": string;
+}
+
+export interface QueryNode {
+    "path": string;
+
+    /**
+     * sin ".sql"
+     */
+    "name": string;
+    "kind": string;
+    "size": number;
+    "modifiedAt": string;
+
+    /**
+     * solo archivos
+     */
+    "version": string;
+    "profileId": string;
+    "profileName": string;
+    "database": string;
+}
+
+export interface QueryRef {
+    "path": string;
+    "name": string;
+    "version": string;
+}
+
+export interface QueryRoot {
+    "path": string;
+    "isDefault": boolean;
+    "exists": boolean;
+    "writable": boolean;
+}
+
+export interface QuerySearchRequest {
+    "text": string;
+    "content": boolean;
+    "limit": number;
+}
+
+export interface QueryTree {
+    "root": QueryRoot;
+    "nodes": QueryNode[] | null;
+    "truncated": boolean;
+}
+
 /**
  * SSHConfig no lleva secretos: password/passphrase viajan en ConnectionSecrets y viven en el llavero.
  */
@@ -336,6 +408,24 @@ export interface SSHConfig {
      */
     "authMethod": string;
     "keyPath": string;
+}
+
+export interface SaveQueryRequest {
+    "path": string;
+    "sql": string;
+    "profileId": string;
+    "database": string;
+    "rememberConnection": boolean;
+
+    /**
+     * ExpectedVersion vacío = archivo nuevo (falla si existe); con valor, actualiza y compara con el disco.
+     */
+    "expectedVersion": string;
+
+    /**
+     * Overwrite ignora tanto la existencia como la versión.
+     */
+    "overwrite": boolean;
 }
 
 export interface Settings {
@@ -379,6 +469,14 @@ export interface TabState {
     "sql": string;
     "database": string;
     "order": number;
+
+    /**
+     * FilePath y BaseSQL vinculan la pestaña con una consulta guardada (spec 20): ruta relativa y texto del último guardado/apertura.
+     * FileVersion es la versión del archivo cuando se guardó/abrió: al restaurar permite saber si cambió en el disco.
+     */
+    "filePath": string;
+    "baseSql": string;
+    "fileVersion": string;
 }
 
 export interface Table {

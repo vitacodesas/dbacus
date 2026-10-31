@@ -7,7 +7,7 @@ import type { AppError, Settings } from "../types";
 import { NO_GROUP } from "../composables/connectionGroups";
 
 export type Theme = "light" | "dark" | "system";
-export type SidebarView = "connections" | "schema" | "history";
+export type SidebarView = "connections" | "schema" | "queries" | "history";
 export interface Toast {
   id: number;
   kind: "info" | "success" | "error";

@@ -11,6 +11,7 @@ import { useUiStore } from "../../stores/ui";
 import BaseButton from "../ui/BaseButton.vue";
 import BaseEmptyState from "../ui/BaseEmptyState.vue";
 import BaseSplitter from "../ui/BaseSplitter.vue";
+import FileBanner from "../queries/FileBanner.vue";
 import QueryTabsBar from "./QueryTabsBar.vue";
 import QueryToolbar from "./QueryToolbar.vue";
 import ResultPane from "./ResultPane.vue";
@@ -69,6 +70,7 @@ const stop = () => active.value && runner.cancel(active.value.id);
     <QueryTabsBar @new="newQuery" />
 
     <template v-if="active">
+      <FileBanner :tab="active" />
       <QueryToolbar :tab="active" @run="runAll" @run-selection="runSelection" @stop="stop" @format="format" />
       <div ref="split" class="flex min-h-0 flex-1 flex-col">
         <div class="min-h-12 overflow-hidden" :style="{ flexBasis: `${ui.splitRatio * 100}%`, flexGrow: 0, flexShrink: 0 }">

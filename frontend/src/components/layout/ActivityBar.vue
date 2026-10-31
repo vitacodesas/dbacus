@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Database, FolderTree, History, Settings } from "lucide-vue-next";
+import { Database, FileCode, FolderTree, History, Settings } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { useUiStore, type SidebarView } from "../../stores/ui";
 import BaseTooltip from "../ui/BaseTooltip.vue";
@@ -9,6 +9,7 @@ const { t } = useI18n();
 const items: { view: SidebarView; icon: typeof Database; label: string }[] = [
   { view: "connections", icon: Database, label: "activity.connections" },
   { view: "schema", icon: FolderTree, label: "activity.schema" },
+  { view: "queries", icon: FileCode, label: "activity.queries" },
   { view: "history", icon: History, label: "activity.history" },
 ];
 </script>

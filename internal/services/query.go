@@ -714,7 +714,7 @@ func (s *QueryService) SaveTabs(ctx context.Context, tabs []model.TabState) erro
 		return invalid("tabs", "Hay demasiadas pestañas")
 	}
 	for i := range tabs {
-		if len(tabs[i].SQL) > maxTabSQLBytes {
+		if len(tabs[i].SQL) > maxTabSQLBytes || len(tabs[i].BaseSQL) > maxTabSQLBytes {
 			return invalid("tabs", "El SQL de una pestaña es demasiado grande para guardarlo")
 		}
 	}

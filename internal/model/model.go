@@ -105,4 +105,9 @@ type TabState struct {
 	SQL              string `json:"sql"`
 	Database         string `json:"database"`
 	Order            int    `json:"order"`
+	// FilePath y BaseSQL vinculan la pestaña con una consulta guardada (spec 20): ruta relativa y texto del último guardado/apertura.
+	// FileVersion es la versión del archivo cuando se guardó/abrió: al restaurar permite saber si cambió en el disco.
+	FilePath    string `json:"filePath"`
+	BaseSQL     string `json:"baseSql"`
+	FileVersion string `json:"fileVersion"`
 }

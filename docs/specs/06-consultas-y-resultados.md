@@ -6,6 +6,7 @@ Escribir SQL, ejecutarlo sin bloquear la UI, ver resultados grandes con fluidez 
 ## Pestañas de consulta
 - Barra de pestañas: nueva (`⌘/Ctrl+T`), cerrar (`⌘/Ctrl+W`), renombrar (doble clic), reordenar (drag), indicador de "ejecutando" y de cambios sin guardar. Cada pestaña pertenece a **una sesión** y tiene su conexión dedicada (ADR-004).
 - Estado persistido (Go, `ui_state`): contenido SQL, nombre, BD seleccionada; al reabrir la app se restauran las pestañas (sin re-ejecutar).
+- **Vínculo con archivo (spec 20)**: una pestaña puede estar vinculada a una consulta guardada (`.sql`); el título es el nombre del archivo, el punto ● marca «sin guardar» (`sql !== baseSql`), `⌘/Ctrl+S` guarda y cerrar con cambios pregunta. Abrir o restaurar nunca ejecuta.
 - Selector de BD por pestaña (ejecuta `USE` en su conexión).
 
 ## Editor (Monaco)

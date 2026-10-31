@@ -22,6 +22,8 @@ const EnvHome = "DBACUS_HOME"
 type Paths struct {
 	Config string // app.db, known_hosts
 	Logs   string
+	// Queries es la carpeta de consultas guardadas por defecto (spec 20); se crea al primer uso, no aquí.
+	Queries string
 
 	// MigratedFrom no está vacío si en este arranque se copió el estado de la carpeta antigua.
 	MigratedFrom string
@@ -33,7 +35,7 @@ type Paths struct {
 func Resolve() (Paths, error) {
 	var p Paths
 	if home := os.Getenv(EnvHome); home != "" {
-		p = Paths{Config: filepath.Join(home, "config"), Logs: filepath.Join(home, "logs")}
+		p = Paths{Config: filepath.Join(home, "config"), Logs: filepath.Join(home, "logs"), Queries: filepath.Join(home, "queries")}
 	} else {
 		cfg, err := os.UserConfigDir()
 		if err != nil {
@@ -43,7 +45,7 @@ func Resolve() (Paths, error) {
 		if err != nil {
 			return Paths{}, fmt.Errorf("cache dir: %w", err)
 		}
-		p = Paths{Config: filepath.Join(cfg, appDir), Logs: filepath.Join(cache, appDir, "logs")}
+		p = Paths{Config: filepath.Join(cfg, appDir), Logs: filepath.Join(cache, appDir, "logs"), Queries: defaultQueries()}
 	}
 	for _, d := range []string{p.Config, p.Logs} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
@@ -109,3 +111,17 @@ func copyIfExists(src, dst string) error {
 func (p Paths) DB() string         { return filepath.Join(p.Config, "app.db") }
 func (p Paths) KnownHosts() string { return filepath.Join(p.Config, "known_hosts") }
 func (p Paths) LogFile() string    { return filepath.Join(p.Logs, "app.log") }
+
+// defaultQueries es Documentos/Dbacus/Consultas. Sigue XDG_DOCUMENTS_DIR si está definida; no se consulta
+// la carpeta Documentos redirigida de Windows (OneDrive): [no verificado] en ese caso.
+func defaultQueries() string {
+	docs := os.Getenv("XDG_DOCUMENTS_DIR")
+	if docs == "" || !filepath.IsAbs(docs) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		docs = filepath.Join(home, "Documents")
+	}
+	return filepath.Join(docs, appDir, "Consultas")
+}

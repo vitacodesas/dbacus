@@ -28,6 +28,15 @@ export type {
   TabState,
   HistoryEntry,
   Settings,
+  QueryRoot,
+  QueryNode,
+  QueryTree,
+  QueryFile,
+  SaveQueryRequest,
+  QueryRef,
+  PathChange,
+  QuerySearchRequest,
+  QueryHit,
 } from "../../bindings/github.com/vitacodesas/dbacus/internal/model";
 export type {
   ConnectionSecrets,

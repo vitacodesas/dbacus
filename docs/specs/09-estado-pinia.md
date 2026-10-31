@@ -9,8 +9,9 @@ Go es la fuente de verdad de datos; Pinia guarda **proyecciones** para pintar y 
 | `connections` | `profiles[]`, `groups[]`, `loading`, `formDraft` | `load`, `save`, `clone`, `remove`, `test`, `saveGroup`, `removeGroup`; getter `colorOf(profile)` (color propio, si no el del grupo) | `ConnectionService` |
 | `sessions` | `byId`, `activeSessionId` | `connect`, `disconnect`, `onClosed` | `ConnectionService` + evento `session:closed` |
 | `schema` | árbol cacheado `[sessionId][db]`, `expanded`, `filter` | `loadDatabases`, `loadTables`, `loadDetail`, `refresh` | `SchemaService` + `schema:invalidated` |
-| `queryTabs` | `tabs[]` (`id, sessionId, title, sql, database, dirty`), `activeTabId` | `open`, `close`, `rename`, `setSql` (debounce → persistir en Go), `execute`, `cancel` | `QueryService` |
+| `queryTabs` | `tabs[]` (`id, sessionId, title, sql, database, dirty`; con archivo: `filePath`, `baseSql`, `diskState`), `activeTabId` | `open`, `close`, `rename`, `setSql` (debounce → persistir en Go), `execute`, `cancel` | `QueryService` |
 | `results` | por `tabId`: `status`, `statements[]` (con `paging`), `error`, `rowCounts`, `pageSeq` y `paging` (páginas en curso), `windows` (LRU; cambiar de página vacía la caché y `pageSeq` descarta las ventanas pedidas antes del cambio) | `onStarted/onStatement/onProgress/onDone/onError`, `fetchWindow`, `page(tabId, stmt, direction, column?)` | eventos `query:*` + `GetRows` |
+| `queryFiles` | `tree`, `root`, `search`, `unsaved` (derivado de `queryTabs`), `lastFolder` | `load`, `open`, `save`, `saveAs`, `move`, `remove`, `pickRoot`; aplica `PathChange` a `queryTabs` | `QueryFilesService` (spec 20) |
 | `history` | `entries[]`, `cursor`, `search` | `load`, `delete`, `clear` | `HistoryService` |
 | `ui` | `theme`, `sidebarWidth`, `splitRatio`, `sidebarView`, `locale`, `collapsedGroups[]`, `toasts[]` | setters; persistencia en Go (`ui_state`) | local + `SettingsService` |
 

@@ -12,6 +12,8 @@ interface Seed {
    * resultados dejan de cargarse enteros y los E2E anteriores a T12.6 dan por hecho el LIMIT automático.
    */
   paging?: boolean;
+  /** Consultas guardadas ya existentes en la carpeta de consultas (spec 20). */
+  queries?: { path: string; sql: string; profileId?: string; profileName?: string; database?: string }[];
   /** Milisegundos de latencia simulada en cada llamada (por defecto 20). */
   latencyMs?: number;
 }
@@ -733,6 +735,140 @@ export const ExportService = {
   CancelExport: () => cp(() => undefined),
 };
 
+// ---- consultas guardadas (spec 20) ---------------------------------------------------------------------------------------
+// Imita QueryFilesService en memoria: mismas reglas de nombre, de unicidad sin distinguir mayúsculas y de versión.
+interface QFile { sql: string; ver: number; mtime: string; profileId: string; profileName: string; database: string }
+const qFiles = new Map<string, QFile>();
+const qFolders = new Set<string>();
+let qVer = 0;
+const qRoot: Any = { path: "/Users/demo/Documentos/Dbacus/Consultas", isDefault: true, exists: true, writable: true };
+const qVersion = (f: QFile) => `${f.ver}:${f.sql.length}`;
+const qNow = () => new Date().toISOString();
+const qFile = (sql: string, m: Partial<QFile> = {}): QFile => ({ sql, ver: ++qVer, mtime: qNow(), profileId: "", profileName: "", database: "", ...m });
+for (const q of seed.queries ?? []) {
+  const path = /\.sql$/i.test(q.path) ? q.path : `${q.path}.sql`;
+  qFiles.set(path, qFile(q.sql, { profileId: q.profileId ?? "", profileName: q.profileName ?? "", database: q.database ?? "" }));
+  const parts = path.split("/").slice(0, -1);
+  parts.forEach((_, i) => qFolders.add(parts.slice(0, i + 1).join("/")));
+}
+const qExt = (p: string) => (/\.sql$/i.test(p) ? p : `${p}.sql`);
+const qBad = (m: string, d: string) => fail("VALIDATION", m, d);
+const qCheckName = (seg: string) => {
+  if (!seg.trim() || seg.startsWith(".") || /[\\:*?"<>|\x00-\x1f]/.test(seg) || /[. ]$/.test(seg)) throw qBad("Nombre no válido", "name");
+  if (seg.length > 120) throw qBad("El nombre es demasiado largo", "name");
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i.test(seg)) throw qBad("Ese nombre está reservado por el sistema", "name");
+};
+const qCheckPath = (rel: string) => {
+  if (!rel || rel.startsWith("/") || rel.includes("\\") || rel.split("/").some((x) => x === "" || x === "." || x === "..")) throw qBad("Ruta no válida", "path");
+  if (rel.split("/").length > 8) throw qBad("Demasiados niveles de carpetas", "depth");
+  rel.split("/").forEach(qCheckName);
+};
+const qTaken = (path: string, except = "") => {
+  const low = path.toLowerCase();
+  return [...qFiles.keys(), ...qFolders].some((k) => k !== except && k.toLowerCase() === low);
+};
+const qName = (p: string) => p.slice(p.lastIndexOf("/") + 1).replace(/\.sql$/i, "");
+const qHeaderless = (sql: string) => sql;
+
+export const QueryFilesService = {
+  Root: () => cp(() => ({ ...qRoot })),
+  List: () =>
+    cp(() => {
+      const nodes = [
+        ...[...qFolders].map((p) => ({ path: p, name: p.slice(p.lastIndexOf("/") + 1), kind: "folder", size: 0, modifiedAt: qNow(), version: "", profileId: "", profileName: "", database: "" })),
+        ...[...qFiles].map(([p, f]) => ({ path: p, name: qName(p), kind: "file", size: f.sql.length, modifiedAt: f.mtime, version: qVersion(f), profileId: f.profileId, profileName: f.profileName, database: f.database })),
+      ].sort((a, b) => a.path.toLowerCase().localeCompare(b.path.toLowerCase()));
+      return { root: { ...qRoot }, nodes, truncated: false };
+    }),
+  Open: (path: string) =>
+    cp(() => {
+      const key = qExt(path);
+      const f = qFiles.get(key);
+      if (!f) throw fail("NOT_FOUND", "El archivo ya no existe");
+      return { path: key, name: qName(key), sql: qHeaderless(f.sql), version: qVersion(f), profileId: f.profileId, profileName: f.profileName, database: f.database, profileMissing: !!f.profileId && !profileOf(f.profileId) };
+    }),
+  Save: (req: Any) =>
+    cp(() => {
+      let path = qExt(req.path);
+      qCheckPath(path);
+      // Sobrescribir «X» cuando existe «x» escribe en el archivo existente (como Go).
+      if (req.overwrite) path = [...qFiles.keys()].find((k) => k.toLowerCase() === path.toLowerCase()) ?? path;
+      const cur = qFiles.get(path);
+      if (!req.overwrite) {
+        if (cur && !req.expectedVersion) throw qBad("Ya existe una consulta con ese nombre", "exists");
+        if (cur && req.expectedVersion !== qVersion(cur)) throw qBad("El archivo cambió en el disco desde que lo abriste", "changed_on_disk");
+        if (!cur && req.expectedVersion) throw fail("NOT_FOUND", "El archivo ya no existe");
+      }
+      if (!cur && qTaken(path)) throw qBad("Ya existe una consulta con ese nombre", "exists");
+      let name = "";
+      if (req.rememberConnection && req.profileId) {
+        const p = profileOf(req.profileId);
+        if (!p) throw qBad("La conexión no existe", "profileId");
+        name = p.name;
+      }
+      const f = qFile(req.sql, req.rememberConnection ? { profileId: req.profileId, profileName: name, database: req.database } : {});
+      qFiles.set(path, f);
+      const parts = path.split("/").slice(0, -1);
+      parts.forEach((_, i) => qFolders.add(parts.slice(0, i + 1).join("/")));
+      return { path, name: qName(path), version: qVersion(f) };
+    }),
+  CreateFolder: (path: string) =>
+    cp(() => {
+      qCheckPath(path);
+      if (qTaken(path)) throw qBad("Ya existe algo con ese nombre", "exists");
+      path.split("/").forEach((_, i, a) => qFolders.add(a.slice(0, i + 1).join("/")));
+    }),
+  Move: (from: string, to: string) =>
+    cp(() => {
+      const isDir = qFolders.has(from);
+      const src = isDir ? from : qExt(from);
+      if (!isDir && !qFiles.has(src)) throw fail("NOT_FOUND", "El archivo o la carpeta ya no existe");
+      const dst = isDir ? to : qExt(to);
+      qCheckPath(dst);
+      if (dst === src) return [];
+      if (isDir && (dst + "/").startsWith(src + "/")) throw qBad("No se puede mover una carpeta dentro de sí misma", "path");
+      if (qTaken(dst, src)) throw qBad("Ya existe algo con ese nombre", "exists");
+      const changes: Any[] = [];
+      if (isDir) {
+        for (const k of [...qFolders]) if (k === src || k.startsWith(`${src}/`)) { qFolders.delete(k); qFolders.add(dst + k.slice(src.length)); }
+        for (const [k, f] of [...qFiles]) if (k.startsWith(`${src}/`)) { qFiles.delete(k); qFiles.set(dst + k.slice(src.length), f); changes.push({ from: k, to: dst + k.slice(src.length) }); }
+      } else {
+        qFiles.set(dst, qFiles.get(src)!);
+        qFiles.delete(src);
+        changes.push({ from: src, to: dst });
+      }
+      const parts = dst.split("/").slice(0, -1);
+      parts.forEach((_, i) => qFolders.add(parts.slice(0, i + 1).join("/")));
+      return changes;
+    }),
+  Delete: (path: string) =>
+    cp(() => {
+      if (qFolders.has(path)) {
+        for (const k of [...qFolders]) if (k === path || k.startsWith(`${path}/`)) qFolders.delete(k);
+        for (const k of [...qFiles.keys()]) if (k.startsWith(`${path}/`)) qFiles.delete(k);
+      } else if (!qFiles.delete(qExt(path))) throw fail("NOT_FOUND", "El archivo o la carpeta ya no existe");
+    }),
+  Search: (req: Any) =>
+    cp(() => {
+      const fold = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const needle = fold(String(req.text).trim());
+      const hits: Any[] = [];
+      if (!needle) return hits;
+      for (const [p, f] of qFiles) {
+        const lines = f.sql.split("\n");
+        const i = req.content ? lines.findIndex((l) => fold(l).includes(needle)) : -1;
+        if (i >= 0) hits.push({ path: p, name: qName(p), line: i + 1, snippet: lines[i].trim() });
+        else if (fold(qName(p)).includes(needle)) hits.push({ path: p, name: qName(p), line: 0, snippet: "" });
+        if (hits.length >= (req.limit || 50)) break;
+      }
+      return hits;
+    }),
+  PickRoot: () => cp(() => { qRoot.path = "/Users/demo/Otra carpeta"; qRoot.isDefault = false; return { ...qRoot }; }),
+  ResetRoot: () => cp(() => { qRoot.path = "/Users/demo/Documentos/Dbacus/Consultas"; qRoot.isDefault = true; return { ...qRoot }; }),
+  Reveal: (path: string) => cp(() => void ((window as Any).__mock.revealed as string[]).push(path)),
+  PurgeTrash: () => cp(() => undefined),
+};
+
 export const SettingsService = {
   Get: () => cp(() => ({ ...settings })),
   Set: (s: Any) =>
@@ -746,4 +882,11 @@ export const SettingsService = {
 export const PingService = { Hello: (name: string) => cp(() => `Hola, ${name}`), PickFile: () => cp(() => "") };
 
 /** Para que las pruebas lean el estado interno si lo necesitan. */
-(window as Any).__mock = { profiles, sessions, history, exports: [] as Any[], forceConflict: "" as string, get settings() { return settings; } };
+(window as Any).__mock = {
+  profiles, sessions, history, exports: [] as Any[], revealed: [] as string[],
+  /** Simula una edición hecha fuera de la app (otro editor, git…) o un borrado externo. */
+  queryFiles: {
+    files: qFiles,
+    touch(path: string, sql: string) { const f = qFiles.get(path); if (f) { f.sql = sql; f.ver = ++qVer; f.mtime = qNow(); } else qFiles.set(path, qFile(sql)); },
+    remove(path: string) { qFiles.delete(path); },
+  }, forceConflict: "" as string, get settings() { return settings; } };

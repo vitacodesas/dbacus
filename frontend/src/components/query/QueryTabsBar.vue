@@ -2,15 +2,20 @@
 import { nextTick, ref } from "vue";
 import { Plus, X } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
+import { asAppError } from "../../api/errors";
 import { useQueryTabsStore } from "../../stores/queryTabs";
+import { useQueryFilesStore } from "../../stores/queryFiles";
 import { useResultsStore } from "../../stores/results";
 import BaseSpinner from "../ui/BaseSpinner.vue";
+import { useUiStore } from "../../stores/ui";
 import { modKey } from "../../composables/useShortcuts";
 
 const emit = defineEmits<{ new: [] }>();
 const { t } = useI18n();
 const tabs = useQueryTabsStore();
 const results = useResultsStore();
+const files = useQueryFilesStore();
+const ui = useUiStore();
 
 const editing = ref<string | null>(null);
 const draft = ref("");
@@ -24,9 +29,24 @@ async function startRename(id: string, title: string) {
   el?.focus();
   el?.select();
 }
-function commit() {
-  if (editing.value) tabs.rename(editing.value, draft.value);
+async function commit() {
+  const id = editing.value;
   editing.value = null;
+  if (!id) return;
+  const tab = tabs.byId(id);
+  const name = draft.value.trim();
+  // Renombrar una pestaña vinculada renombra su archivo (spec 20); si Go lo rechaza se avisa y el título no cambia.
+  if (tab?.filePath && name && name !== tab.title) {
+    const dir = tab.filePath.includes("/") ? tab.filePath.slice(0, tab.filePath.lastIndexOf("/") + 1) : "";
+    try {
+      await files.moveEntry(tab.filePath, `${dir}${name}`);
+      void files.load();
+    } catch (e) {
+      ui.toast("error", asAppError(e).message);
+    }
+    return;
+  }
+  tabs.rename(id, draft.value);
 }
 
 // Reordenar arrastrando
@@ -74,7 +94,15 @@ const onDrop = (i: number) => {
           @blur="commit"
           @click.stop
         >
-        <span v-else class="truncate">{{ tab.title }}</span>
+        <span v-else class="truncate" :title="tab.filePath || undefined">{{ tab.title }}</span>
+        <span
+          v-if="editing !== tab.id && tabs.isDirty(tab) && (tab.filePath || tab.sql.trim())"
+          class="shrink-0 text-accent"
+          :title="t('queries.unsavedDot')"
+          role="img"
+          :aria-label="t('queries.unsavedDot')"
+          data-testid="tab-dirty"
+        >●</span>
         <button
           type="button"
           class="grid size-4 shrink-0 place-items-center rounded text-muted opacity-0 group-hover:opacity-100 hover:bg-border hover:text-fg focus-visible:opacity-100"

@@ -8,6 +8,7 @@ vi.mock("../../api/history", () => api);
 vi.mock("../../api/queries", () => api);
 
 import { useConnectionsStore } from "../../stores/connections";
+import { useQueryFilesStore } from "../../stores/queryFiles";
 import { useQueryTabsStore } from "../../stores/queryTabs";
 import { useSessionsStore } from "../../stores/sessions";
 import { useUiStore } from "../../stores/ui";
@@ -62,6 +63,15 @@ describe("HistoryPanel", () => {
     const tabs = useQueryTabsStore();
     expect(tabs.tabs).toHaveLength(1);
     expect(tabs.active).toMatchObject({ profileId: "p1", sql: "SELECT a\n  FROM t", database: "app" });
+  });
+
+  it("«Guardar como consulta» abre el diálogo con el SQL y la base de la entrada, sin abrir pestaña", async () => {
+    boot();
+    const w = mountPanel();
+    await flushPromises();
+    await w.findAll('[data-testid="history-item"]')[0].find('button[aria-label="Guardar como consulta"]').trigger("click");
+    expect(useQueryFilesStore().saveDialog).toMatchObject({ tabId: null, sql: "SELECT a\n  FROM t", profileId: "p1", database: "app" });
+    expect(useQueryTabsStore().tabs).toHaveLength(0);
   });
 
   it("insertar añade al final de la pestaña activa; sin texto previo lo reemplaza", async () => {

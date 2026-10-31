@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { Check, CornerDownLeft, Copy, History as HistoryIcon, Search, SquareTerminal, Trash2, X } from "lucide-vue-next";
+import { BookmarkPlus, Check, CornerDownLeft, Copy, History as HistoryIcon, Search, SquareTerminal, Trash2, X } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { asAppError } from "../../api/errors";
 import { useConnectionsStore } from "../../stores/connections";
 import { useHistoryStore, type HistoryStatus } from "../../stores/history";
+import { useQueryFilesStore } from "../../stores/queryFiles";
 import { useQueryTabsStore } from "../../stores/queryTabs";
 import { useSessionsStore } from "../../stores/sessions";
 import { useUiStore } from "../../stores/ui";
@@ -21,6 +22,7 @@ const sessions = useSessionsStore();
 const tabs = useQueryTabsStore();
 const connections = useConnectionsStore();
 const ui = useUiStore();
+const queryFiles = useQueryFilesStore();
 
 // El historial es de una conexión: la de la sesión activa o, si no hay, la de la pestaña abierta.
 const profileId = computed(() => sessions.active?.profileId ?? tabs.active?.profileId ?? null);
@@ -53,6 +55,11 @@ function insert(e: HistoryEntry) {
   const tab = tabs.active;
   if (!tab || tab.profileId !== profileId.value) return openInTab(e);
   tabs.setSql(tab.id, tab.sql.trim() ? `${tab.sql.replace(/\s+$/, "")}\n\n${e.sql}` : e.sql);
+}
+/** «Guardar como consulta» (spec 20): abre el diálogo con el SQL y la conexión de la entrada; no abre pestaña. */
+function saveAsQuery(e: HistoryEntry) {
+  if (!profileId.value) return;
+  queryFiles.openSaveDialog({ tabId: null, sql: e.sql, profileId: profileId.value, database: e.database });
 }
 async function copy(e: HistoryEntry) {
   try {
@@ -136,6 +143,7 @@ const summary = (e: HistoryEntry) => {
           <div class="absolute top-1 right-1 hidden gap-0.5 rounded-md border border-border bg-panel p-0.5 group-focus-within:flex group-hover:flex">
             <button class="rounded p-1 hover:bg-hover" :title="t('history.openTab')" :aria-label="t('history.openTab')" @click="openInTab(e)"><SquareTerminal class="size-3.5" /></button>
             <button class="rounded p-1 hover:bg-hover" :title="t('history.insert')" :aria-label="t('history.insert')" @click="insert(e)"><CornerDownLeft class="size-3.5" /></button>
+            <button class="rounded p-1 hover:bg-hover" :title="t('history.saveAsQuery')" :aria-label="t('history.saveAsQuery')" data-testid="history-save-query" @click="saveAsQuery(e)"><BookmarkPlus class="size-3.5" /></button>
             <button class="rounded p-1 hover:bg-hover" :title="t('history.copy')" :aria-label="t('history.copy')" @click="copy(e)"><Copy class="size-3.5" /></button>
             <button class="rounded p-1 text-danger hover:bg-hover" :title="t('history.delete')" :aria-label="t('history.delete')" @click="remove(e)"><Trash2 class="size-3.5" /></button>
           </div>

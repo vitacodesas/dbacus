@@ -99,3 +99,19 @@ func (s *Store) setKV(ctx context.Context, table, key, value string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO `+table+` (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
 }
+
+const queriesDirKey = "queries_dir"
+
+// GetQueriesDir devuelve la carpeta de consultas elegida por el usuario (spec 20); ok=false si usa la de por defecto.
+func (s *Store) GetQueriesDir(ctx context.Context) (string, bool, error) {
+	return s.getKV(ctx, "settings", queriesDirKey)
+}
+
+func (s *Store) SetQueriesDir(ctx context.Context, dir string) error {
+	return s.setKV(ctx, "settings", queriesDirKey, dir)
+}
+
+func (s *Store) ClearQueriesDir(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, queriesDirKey)
+	return err
+}

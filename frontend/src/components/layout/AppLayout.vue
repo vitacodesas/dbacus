@@ -4,6 +4,9 @@ import BaseSplitter from "../ui/BaseSplitter.vue";
 import BaseToast from "../ui/BaseToast.vue";
 import EditDiscardDialog from "../query/EditDiscardDialog.vue";
 import EditReviewDialog from "../query/EditReviewDialog.vue";
+import QueryEntryDialog from "../queries/QueryEntryDialog.vue";
+import SaveQueryDialog from "../queries/SaveQueryDialog.vue";
+import TabCloseDialog from "../queries/TabCloseDialog.vue";
 import SettingsDialog from "../settings/SettingsDialog.vue";
 import ConnectDialogs from "../connections/ConnectDialogs.vue";
 import ConnectionFormDialog from "../connections/ConnectionFormDialog.vue";
@@ -39,6 +42,9 @@ const ui = useUiStore();
     <SettingsDialog />
     <EditReviewDialog />
     <EditDiscardDialog />
+    <SaveQueryDialog />
+    <QueryEntryDialog />
+    <TabCloseDialog />
     <BaseToast />
   </div>
 </template>

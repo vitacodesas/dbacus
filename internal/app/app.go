@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -91,6 +92,16 @@ func Run(assets fs.FS) error {
 	})
 	lc.OnShutdown("exports", exports.ServiceShutdown)
 
+	home, _ := os.UserHomeDir()
+	queryFiles := services.NewQueryFilesService(services.QueryFilesDeps{
+		Store: st, DefaultRoot: p.Queries, Home: home,
+		PickDir: func(title string) (string, error) {
+			return application.Get().Dialog.OpenFile().SetTitle(title).CanChooseFiles(false).CanChooseDirectories(true).CanCreateDirectories(true).PromptForSingleSelection()
+		},
+		Reveal: revealPath,
+	})
+	queryFiles.PurgeTrash(lc.Context())
+
 	svcs := []application.Service{
 		application.NewService(&services.PingService{}),
 		application.NewService(services.NewConnectionService(services.ConnectionDeps{
@@ -105,6 +116,7 @@ func Run(assets fs.FS) error {
 		application.NewService(exports),
 		application.NewService(services.NewAlterService(services.AlterDeps{Sessions: sessions, Schema: schemaSvc, Store: st, History: history})),
 		application.NewService(services.NewEditService(services.EditDeps{Sessions: sessions, Results: resultMgr, Schema: schemaSvc, Store: st, History: history, Emit: emit})),
+		application.NewService(queryFiles),
 		application.NewService(services.NewSettingsService(st)),
 	}
 

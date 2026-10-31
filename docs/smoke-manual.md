@@ -72,6 +72,20 @@ Hacerlo contra una tabla de pruebas con una clave foránea, un índice, una colu
 - [ ] Alterar la tabla desde otra sesión con el editor abierto: «Aplicar» dice que la tabla cambió.
 - [ ] Conexión de solo lectura: el ítem sale deshabilitado; marcar un perfil abierto como solo lectura y pulsar «Aplicar» lo rechaza.
 
+## Consultas guardadas (spec 20)
+Hacerlo con la app nativa y una carpeta de consultas nueva (borra o renombra la anterior antes de empezar).
+- [ ] Al abrir el panel «Consultas» por primera vez se crea `Documentos/Dbacus/Consultas`; en macOS, comprobar si pide permiso para acceder a Documentos y qué pasa si se deniega (el panel debe mostrar el error y «Elegir otra carpeta»).
+- [ ] `⌘/Ctrl+S` en una pestaña nueva: el diálogo enseña la ruta final; el archivo aparece en el explorador del SO con el SQL tal cual (abrirlo con otro editor).
+- [ ] El pie del panel muestra la ruta y un clic la abre en Finder/Explorer/gestor de archivos (los tres sistemas). «Mostrar en el explorador» de un archivo lo selecciona.
+- [ ] Editar el `.sql` desde otro editor con la pestaña abierta y volver a la app: sin cambios locales se recarga sola; con cambios locales sale el aviso (recargar / mantener / sobrescribir).
+- [ ] Borrar el archivo desde fuera: la pestaña conserva el texto y ofrece «Guardar de nuevo».
+- [ ] Cerrar y reabrir la app con una pestaña con cambios sin guardar: vuelve con el punto ● y el texto; si el archivo cambió entre medias, aparece el aviso.
+- [ ] Nombres con tildes, ñ, emojis y espacios; en Windows, probar `CON`, `a:b` y un nombre con punto final (se rechazan).
+- [ ] Con una conexión de solo lectura: guardar un `DROP` funciona y ejecutarlo se rechaza.
+- [ ] Carpeta dentro de iCloud Drive/OneDrive/Dropbox: guardar, editar en dos equipos y mirar si aparecen copias en conflicto del sincronizador (**sin verificar**).
+- [ ] Cambiar la carpeta desde Ajustes: la anterior sigue intacta y el panel muestra la nueva; «Restablecer» vuelve a la de por defecto.
+- [ ] Eliminar un archivo y una carpeta: se mueven a `.papelera` dentro de la carpeta de consultas y no salen en el panel.
+
 ## Ajustes e interfaz
 - [ ] Cambiar tema/idioma en Ajustes (`⌘/Ctrl+,`) y reabrir: se conserva. Ancho del panel y del divisor también.
 - [ ] Un límite de filas bajo (p. ej. 1 000) aplica a la siguiente consulta; uno fuera de rango se rechaza en el campo.

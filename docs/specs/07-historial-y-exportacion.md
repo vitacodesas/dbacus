@@ -3,7 +3,7 @@
 ## Historial
 - Cada ejecución terminada (ok/error/cancelada) escribe una `HistoryEntry` en SQLite (en goroutine aparte, sin bloquear el run). Se guarda el SQL tal cual se envió + metadatos; **sin** resultados.
 - Retención: 5 000 entradas por perfil (las más antiguas se purgan) y SQL truncado a 100 KiB. Ajustable en settings.
-- UI: panel "Historial" por conexión: búsqueda (FTS5 o `LIKE`), filtro ok/error, fecha relativa, duración, filas. Acciones: abrir en nueva pestaña, insertar en pestaña activa, copiar, eliminar, limpiar todo (confirmar).
+- UI: panel "Historial" por conexión: búsqueda (FTS5 o `LIKE`), filtro ok/error, fecha relativa, duración, filas. Acciones: abrir en nueva pestaña, insertar en pestaña activa, copiar, **guardar como consulta** (abre el diálogo del spec 20 con el SQL y la conexión de la entrada), eliminar, limpiar todo (confirmar).
 - Privacidad: opción "No guardar historial" por perfil; el SQL con credenciales literales no se redacta (aviso en settings).
 
 ## Exportación (CSV / JSON)

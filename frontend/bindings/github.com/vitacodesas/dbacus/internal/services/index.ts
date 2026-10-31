@@ -7,6 +7,7 @@ import * as EditService from "./editservice.js";
 import * as ExportService from "./exportservice.js";
 import * as HistoryService from "./historyservice.js";
 import * as PingService from "./pingservice.js";
+import * as QueryFilesService from "./queryfilesservice.js";
 import * as QueryService from "./queryservice.js";
 import * as SchemaService from "./schemaservice.js";
 import * as SettingsService from "./settingsservice.js";
@@ -17,6 +18,7 @@ export {
     ExportService,
     HistoryService,
     PingService,
+    QueryFilesService,
     QueryService,
     SchemaService,
     SettingsService

@@ -6,6 +6,8 @@ export interface MockSeed {
   latencyMs?: number;
   /** Activa la paginación por cursor simulada (spec 18). */
   paging?: boolean;
+  /** Consultas guardadas ya existentes (spec 20). */
+  queries?: { path: string; sql: string; profileId?: string; profileName?: string; database?: string }[];
 }
 
 /** Conexión de ejemplo ya guardada (el backend simulado empieza vacío en cada carga). */
