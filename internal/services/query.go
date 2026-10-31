@@ -176,6 +176,9 @@ type activeRun struct {
 	cancel                    context.CancelFunc
 	canceled                  atomic.Bool
 	done                      chan struct{}
+	// release libera la pestaña (y marca el resultado terminado) y es idempotente. Debe llamarse ANTES de emitir el evento
+	// final: quien reacciona a query:done pidiendo otra página o ejecución no puede encontrarse la pestaña «ocupada».
+	release func()
 
 	mu   sync.Mutex
 	conn driver.Conn
@@ -253,18 +256,21 @@ func (s *QueryService) Execute(ctx context.Context, req ExecuteRequest) (Execute
 	run.SessionID = req.SessionID
 
 	s.wg.Add(1)
+	ar.release = sync.OnceFunc(func() {
+		run.MarkDone()
+		s.mu.Lock()
+		delete(s.byQuery, ar.queryID)
+		if s.byTab[req.TabID] == ar {
+			delete(s.byTab, req.TabID)
+		}
+		s.mu.Unlock()
+	})
 	go func() {
 		defer s.wg.Done()
 		defer func() {
 			stopAfter()
-			run.MarkDone()
+			ar.release()
 			cancel()
-			s.mu.Lock()
-			delete(s.byQuery, ar.queryID)
-			if s.byTab[req.TabID] == ar {
-				delete(s.byTab, req.TabID)
-			}
-			s.mu.Unlock()
 			close(ar.done)
 		}()
 		s.execute(runCtx, ar, sess, run, req, stmts, maxRows)
@@ -285,12 +291,14 @@ func (s *QueryService) execute(ctx context.Context, ar *activeRun, sess *session
 		if st != nil {
 			ev.Start, ev.End = st.Start, st.End
 		}
-		s.emit("query:error", ev)
 		// Si el contexto se canceló a la fuerza (el servidor no respondió al KILL), el driver cierra la conexión: se descarta
-		// para que la siguiente ejecución de la pestaña abra una nueva en vez de reutilizar una muerta.
+		// para que la siguiente ejecución de la pestaña abra una nueva en vez de reutilizar una muerta. Va antes de liberar
+		// la pestaña: después, otra ejecución podría adquirir esa conexión y la cerraríamos bajo sus pies.
 		if ctx.Err() != nil {
 			_ = sess.CloseTab(ar.tabID)
 		}
+		ar.release()
+		s.emit("query:error", ev)
 	}
 
 	// prepare adquiere la conexión de la pestaña y deja puesta la base elegida. Si la conexión cacheada murió (p. ej. tras
@@ -365,6 +373,7 @@ func (s *QueryService) execute(ctx context.Context, ar *activeRun, sess *session
 			return
 		}
 	}
+	ar.release()
 	s.emit("query:done", QueryDone{QueryID: ar.queryID, Results: all, ElapsedMs: time.Since(started).Milliseconds(), Database: curDB})
 }
 
