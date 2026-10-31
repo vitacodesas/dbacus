@@ -223,6 +223,38 @@ func ensureFree(abs, allow string) error {
 	return nil
 }
 
+// canonParents reescribe las carpetas de rel con las mayúsculas que ya existen en disco. Sin esto, en un sistema que
+// distingue mayúsculas «informes/x» crearía una segunda carpeta junto a «Informes» (en macOS/Windows ya son la misma).
+func (d *Dir) canonParents(rel string) string {
+	segs := strings.Split(rel, "/")
+	cur := d.root
+	for i := 0; i < len(segs)-1; i++ {
+		entries, err := os.ReadDir(cur)
+		if err != nil {
+			break
+		}
+		match := ""
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			if e.Name() == segs[i] {
+				match = e.Name()
+				break
+			}
+			if match == "" && strings.EqualFold(e.Name(), segs[i]) {
+				match = e.Name()
+			}
+		}
+		if match == "" {
+			break // el resto de la ruta aún no existe
+		}
+		segs[i] = match
+		cur = filepath.Join(cur, match)
+	}
+	return strings.Join(segs, "/")
+}
+
 // findFold devuelve la entrada de la carpeta de abs cuyo nombre coincide sin distinguir mayúsculas.
 func findFold(abs string) (string, bool) {
 	dir, name := filepath.Dir(abs), filepath.Base(abs)

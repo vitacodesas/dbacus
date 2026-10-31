@@ -73,6 +73,7 @@ func (d *Dir) Write(req model.SaveQueryRequest, profileName string) (model.Query
 	if _, err := splitRel(rel); err != nil {
 		return model.QueryRef{}, err
 	}
+	rel = d.canonParents(rel)
 	if len(req.SQL) > MaxFileSize {
 		return model.QueryRef{}, apperr.New(apperr.Validation, "La consulta supera los 2 MiB").WithDetail("too_large")
 	}
@@ -203,6 +204,7 @@ func (d *Dir) Mkdir(rel string) error {
 	if len(segs) == 0 {
 		return badPath("Falta el nombre de la carpeta")
 	}
+	rel = d.canonParents(rel)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	abs, err := d.abs(rel)
@@ -258,6 +260,7 @@ func (d *Dir) Move(from, to string) ([]model.PathChange, error) {
 	if len(segs) == 0 {
 		return nil, badPath("Falta el destino")
 	}
+	to = d.canonParents(to)
 	dstAbs, err := d.abs(to)
 	if err != nil {
 		return nil, err

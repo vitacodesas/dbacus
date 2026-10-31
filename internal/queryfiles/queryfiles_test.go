@@ -107,6 +107,18 @@ func TestUnicodeNamesAndCaseInsensitiveUniqueness(t *testing.T) {
 	_, err = d.Write(model.SaveQueryRequest{Path: "informes/Ventas 2026.SQL", SQL: "otra"}, "")
 	require.Equal(t, "exists", detail(t, err))
 	require.Equal(t, "exists", detail(t, d.Mkdir("INFORMES")))
+	// Una carpeta con otras mayúsculas no crea un duplicado: se usa la que ya existe.
+	ref0 := save(t, d, "INFORMES/otro", "x")
+	require.Equal(t, "Informes/otro.sql", ref0.Path)
+	require.NoError(t, d.Mkdir("informes/Sub"))
+	require.DirExists(t, filepath.Join(d.Root(), "Informes", "Sub"))
+	entries, _ := os.ReadDir(d.Root())
+	for _, e := range entries {
+		require.NotEqual(t, "informes", e.Name())
+		require.NotEqual(t, "INFORMES", e.Name())
+	}
+	require.NoError(t, os.Remove(filepath.Join(d.Root(), "Informes", "otro.sql")))
+	require.NoError(t, os.Remove(filepath.Join(d.Root(), "Informes", "Sub")))
 	// Sobrescribir con otras mayúsculas escribe en el archivo existente y devuelve su nombre real.
 	ref, err := d.Write(model.SaveQueryRequest{Path: "REPORTE ÑANDÚ", SQL: "nuevo", Overwrite: true}, "")
 	require.NoError(t, err)
