@@ -96,3 +96,15 @@ type SchemaReader interface {
 type Validator interface {
 	Validate(cfg ConnConfig) error
 }
+
+// ServerInfo describe el servidor para generar DDL (las sintaxis difieren entre versiones y motores).
+type ServerInfo struct {
+	Version string // tal como la entrega el servidor
+	MariaDB bool
+}
+
+// DDLGenerator es opcional (spec 19): traduce un ChangeSet validado a sentencias ALTER. No ejecuta nada; ejecuta
+// AlterService por una conexión del pool, así el modo solo lectura se aplica igual. m es la lectura fresca de la tabla.
+type DDLGenerator interface {
+	GenerateDDL(cs model.ChangeSet, m model.AlterModel, info ServerInfo) ([]string, error)
+}

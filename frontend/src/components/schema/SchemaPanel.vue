@@ -12,6 +12,9 @@ import { useUiStore } from "../../stores/ui";
 import BaseButton from "../ui/BaseButton.vue";
 import BaseEmptyState from "../ui/BaseEmptyState.vue";
 import BaseModal from "../ui/BaseModal.vue";
+import { useAlterStore } from "../../stores/alter";
+import AlterModal from "./AlterModal.vue";
+import AlterReviewDialog from "./AlterReviewDialog.vue";
 import SchemaTree from "./SchemaTree.vue";
 
 const { t } = useI18n();
@@ -19,6 +22,7 @@ const schema = useSchemaStore();
 const sessions = useSessionsStore();
 const ui = useUiStore();
 const { openTable } = useQueryActions();
+const alter = useAlterStore();
 
 // Cada conexión que se abre aparece desplegada y con sus bases cargadas; las que se cierran se olvidan.
 watch(
@@ -94,8 +98,11 @@ async function copyCreate() {
           class="h-8 w-full rounded-md border border-border bg-bg px-2.5 text-sm placeholder:text-muted/70"
         >
       </div>
-      <SchemaTree class="min-h-0 flex-1" @open-table="openTable" @view-create="viewCreate" @refresh="refresh" @disconnect="disconnect" />
+      <SchemaTree class="min-h-0 flex-1" @open-table="openTable" @view-create="viewCreate" @edit-structure="(sessionId, db, table) => alter.open({ sessionId, db, table })" @refresh="refresh" @disconnect="disconnect" />
     </template>
+
+    <AlterModal />
+    <AlterReviewDialog />
 
     <BaseModal v-model:open="createOpen" :title="t('schema.createTitle', { name: createTarget?.table ?? '' })" size="lg">
       <pre class="font-data max-h-[60vh] overflow-auto rounded-md border border-border bg-bg p-3 text-xs whitespace-pre-wrap">{{ createSql || t("schema.loading") }}</pre>

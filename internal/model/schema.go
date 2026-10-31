@@ -26,6 +26,12 @@ type Column struct {
 	IsGenerated  bool    `json:"isGenerated"` // columna generada (VIRTUAL/STORED): no se puede escribir
 	Comment      string  `json:"comment"`
 	Ordinal      int     `json:"ordinal"`
+	// Propiedades que el editor de estructura (spec 19) no edita pero debe conservar al regenerar la columna.
+	DefaultExpr    bool   `json:"defaultExpr"`    // Default es una expresión (CURRENT_TIMESTAMP, uuid()…), no un literal
+	Charset        string `json:"charset"`        // "" en columnas que no son de texto
+	Collation      string `json:"collation"`      // "" en columnas que no son de texto
+	OnUpdate       string `json:"onUpdate"`       // p. ej. CURRENT_TIMESTAMP; "" si no hay
+	GenerationExpr string `json:"generationExpr"` // expresión de una columna generada; "" si no lo es
 }
 
 type Index struct {
@@ -35,6 +41,11 @@ type Index struct {
 	Type    string   `json:"type"`
 	// Prefix: alguna columna se indexa solo por un prefijo (col(10)), así que el índice único no lo es sobre el valor completo.
 	Prefix bool `json:"prefix"`
+	// PrefixLens y Desc van alineados con Columns (spec 19): longitud del prefijo (0 = columna entera) y orden descendente.
+	PrefixLens []int  `json:"prefixLens"`
+	Desc       []bool `json:"desc"`
+	// Functional: alguna parte es una expresión (MySQL 8), que el editor no sabe reproducir.
+	Functional bool `json:"functional"`
 }
 
 type ForeignKey struct {
@@ -56,6 +67,8 @@ type TableDetail struct {
 	// la tabla que referencia). Sirven para avisar de lo que un DELETE puede arrastrar con CASCADE (spec 14).
 	IncomingFKs []ForeignKey `json:"incomingFks"`
 	CreateSQL   string       `json:"createSql"`
+	// Collation es la collation por defecto de la tabla (spec 19): una columna que la tiene igual no la escribe en el DDL.
+	Collation string `json:"collation"`
 }
 
 // CompletionCatalog alimenta el autocompletado de Monaco (spec 05).

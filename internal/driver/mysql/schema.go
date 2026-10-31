@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -43,6 +44,30 @@ func mariaDefault(d string) string {
 		return strings.ReplaceAll(d[1:len(d)-1], "''", "'")
 	}
 	return d
+}
+
+var onUpdateRe = regexp.MustCompile(`(?i)on update (\S+)`)
+
+// onUpdateOf extrae «ON UPDATE CURRENT_TIMESTAMP(6)» del EXTRA de la columna.
+func onUpdateOf(extra string) string {
+	if m := onUpdateRe.FindStringSubmatch(extra); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+var exprRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*\(.*\)$`)
+
+// isDefaultExpr dice si el DEFAULT leído es una expresión. MySQL lo marca con DEFAULT_GENERATED en EXTRA; MariaDB entrega
+// los literales de texto entre comillas y las expresiones (current_timestamp(), uuid()…) sin ellas.
+func isDefaultExpr(raw, extra string, maria bool) bool {
+	if strings.Contains(strings.ToUpper(extra), "DEFAULT_GENERATED") {
+		return true
+	}
+	if maria && !(len(raw) >= 2 && raw[0] == '\'') {
+		return exprRe.MatchString(raw) || strings.EqualFold(raw, "CURRENT_TIMESTAMP")
+	}
+	return false
 }
 
 func (r *schemaReader) Databases(ctx context.Context) ([]model.Database, error) {
@@ -111,9 +136,11 @@ func (r *schemaReader) Describe(ctx context.Context, db, table string) (model.Ta
 	// Metadatos de la tabla (también confirma que existe).
 	var typ string
 	var estimate sql.NullInt64
+	var tableColl sql.NullString
 	err := r.db.QueryRowContext(ctx, `
-		SELECT TABLE_TYPE, TABLE_ROWS, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`, db, table).
-		Scan(&typ, &estimate, &detail.Comment)
+		SELECT TABLE_TYPE, TABLE_ROWS, TABLE_COMMENT, TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`, db, table).
+		Scan(&typ, &estimate, &detail.Comment, &tableColl)
+	detail.Collation = tableColl.String
 	if errors.Is(err, sql.ErrNoRows) {
 		return detail, apperr.Newf(apperr.NotFound, "La tabla «%s.%s» no existe", db, table)
 	}
@@ -146,7 +173,8 @@ func (r *schemaReader) Describe(ctx context.Context, db, table string) (model.Ta
 
 func (r *schemaReader) columns(ctx context.Context, db, table string) ([]model.Column, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA, COLUMN_COMMENT, ORDINAL_POSITION, GENERATION_EXPRESSION
+		SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA, COLUMN_COMMENT, ORDINAL_POSITION, GENERATION_EXPRESSION,
+		       CHARACTER_SET_NAME, COLLATION_NAME
 		FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION`, db, table)
 	if err != nil {
 		return nil, mapError(err)
@@ -160,8 +188,9 @@ func (r *schemaReader) columns(ctx context.Context, db, table string) ([]model.C
 			nullable, key string
 			extra         string
 			def, genExpr  sql.NullString
+			charset, coll sql.NullString
 		)
-		if err := rows.Scan(&c.Name, &c.DataType, &c.ColumnType, &nullable, &def, &key, &extra, &c.Comment, &c.Ordinal, &genExpr); err != nil {
+		if err := rows.Scan(&c.Name, &c.DataType, &c.ColumnType, &nullable, &def, &key, &extra, &c.Comment, &c.Ordinal, &genExpr, &charset, &coll); err != nil {
 			return nil, mapError(err)
 		}
 		c.Nullable = strings.EqualFold(nullable, "YES")
@@ -169,10 +198,16 @@ func (r *schemaReader) columns(ctx context.Context, db, table string) ([]model.C
 		c.IsAutoInc = strings.Contains(strings.ToLower(extra), "auto_increment")
 		// EXTRA = DEFAULT_GENERATED es un valor por defecto con expresión, no una columna generada: se mira la expresión.
 		c.IsGenerated = genExpr.Valid && genExpr.String != ""
+		if c.IsGenerated {
+			c.GenerationExpr = genExpr.String
+		}
+		c.Charset, c.Collation = charset.String, coll.String
+		c.OnUpdate = onUpdateOf(extra)
 		if def.Valid {
 			d := def.String
 			// MariaDB devuelve la cadena "NULL" para "sin valor por defecto" en columnas nulables.
 			if !(c.Nullable && d == "NULL") {
+				c.DefaultExpr = isDefaultExpr(d, extra, maria)
 				if maria {
 					d = mariaDefault(d)
 				}
@@ -186,7 +221,7 @@ func (r *schemaReader) columns(ctx context.Context, db, table string) ([]model.C
 
 func (r *schemaReader) indexes(ctx context.Context, db, table string) ([]model.Index, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, INDEX_TYPE, SUB_PART
+		SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, INDEX_TYPE, SUB_PART, COLLATION
 		FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY INDEX_NAME, SEQ_IN_INDEX`, db, table)
 	if err != nil {
 		return nil, mapError(err)
@@ -200,15 +235,16 @@ func (r *schemaReader) indexes(ctx context.Context, db, table string) ([]model.I
 			nonUnique int
 			col       sql.NullString // NULL en índices funcionales de MySQL 8
 			subPart   sql.NullInt64  // longitud del prefijo indexado; NULL si se indexa la columna entera
+			collation sql.NullString // 'D' = descendente
 		)
-		if err := rows.Scan(&name, &nonUnique, &col, &typ, &subPart); err != nil {
+		if err := rows.Scan(&name, &nonUnique, &col, &typ, &subPart, &collation); err != nil {
 			return nil, mapError(err)
 		}
 		i, ok := pos[name]
 		if !ok {
 			i = len(out)
 			pos[name] = i
-			out = append(out, model.Index{Name: name, Unique: nonUnique == 0, Type: typ, Columns: []string{}})
+			out = append(out, model.Index{Name: name, Unique: nonUnique == 0, Type: typ, Columns: []string{}, PrefixLens: []int{}, Desc: []bool{}})
 		}
 		if subPart.Valid {
 			out[i].Prefix = true
@@ -217,7 +253,10 @@ func (r *schemaReader) indexes(ctx context.Context, db, table string) ([]model.I
 			out[i].Columns = append(out[i].Columns, col.String)
 		} else {
 			out[i].Columns = append(out[i].Columns, "(expresión)")
+			out[i].Functional = true
 		}
+		out[i].PrefixLens = append(out[i].PrefixLens, int(subPart.Int64))
+		out[i].Desc = append(out[i].Desc, collation.Valid && collation.String == "D")
 	}
 	return out, mapError(rows.Err())
 }

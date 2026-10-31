@@ -7,7 +7,7 @@
 - **Varias conexiones**: cada sesión abierta es una **raíz** del árbol (nombre, versión del servidor, color del perfil) con sus bases debajo; se despliega sola al conectar y se olvida al desconectar. Tocar cualquier nodo de una conexión la convierte en la **activa** (la que usan el editor y la barra de estado); un clic en una conexión abierta de la lista de conexiones también la activa. Menú de la raíz: Refrescar, Desconectar. El filtro muestra solo las conexiones con coincidencias (o cuyo nombre coincide).
 - Al conectar: `ListDatabases`. Bases de sistema agrupadas/atenuadas (toggle "mostrar sistema", off por defecto).
 - Expandir BD → `ListTables(db)` (tablas y vistas separadas, contador). Expandir tabla → `DescribeTable` (columnas con tipo, PK/FK/NOT NULL, índices, FKs).
-- Doble clic en tabla: abre pestaña de consulta con `SELECT * FROM \`db\`.\`tabla\` LIMIT 100` y la ejecuta. Menú contextual: "Copiar nombre", "Copiar SELECT", "Ver CREATE TABLE" (modal de solo lectura con Monaco), "Refrescar".
+- Doble clic en tabla: abre pestaña de consulta con `SELECT * FROM \`db\`.\`tabla\` LIMIT 100` y la ejecuta. Menú contextual: "Copiar nombre", "Copiar SELECT", "Ver CREATE TABLE" (modal de solo lectura con Monaco), "Editar estructura" (solo tablas; deshabilitado en perfiles de solo lectura; spec 19), "Refrescar". **El clic derecho solo abre el menú: no despliega ni activa el reintento** (tampoco el Ctrl+clic de macOS, que WebKit entrega como `click`).
 - Filtro de texto sobre el árbol (filtra nombres ya cargados; búsqueda en servidor no incluida).
 - Base activa de la sesión: marcada; el editor puede cambiarla con selector (`USE`).
 
@@ -25,7 +25,7 @@
 
 ## Criterios de aceptación
 - [ ] Expandir una BD con 2 000 tablas no congela la UI (>50 fps al hacer scroll).
-- [ ] Tras `ALTER TABLE` ejecutado en la app, el árbol de esa tabla se refresca sin acción manual.
+- [x] Tras `ALTER TABLE` ejecutado en la app, el árbol de esa tabla se refresca sin acción manual (`QueryService`: `afterStatement`; `AlterService`: `TestAlterApply` + evento `schema:invalidated`).
 - [ ] Con dos conexiones abiertas se ven ambas a la vez y el clic cambia la activa (verificado en vivo).
 - [ ] Desconectar mientras carga cancela las consultas de esquema (verificado con test).
 - [ ] Doble clic abre y ejecuta el SELECT con identificadores correctamente escapados (nombres con backticks/espacios).

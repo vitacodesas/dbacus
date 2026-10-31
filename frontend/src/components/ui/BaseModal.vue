@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from "reka-ui";
 
-withDefaults(defineProps<{ title: string; description?: string; size?: "sm" | "md" | "lg" }>(), { size: "md" });
+withDefaults(defineProps<{ title: string; description?: string; size?: "sm" | "md" | "lg" | "xl" }>(), { size: "md" });
 const open = defineModel<boolean>("open", { default: false });
 
-const widths = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-3xl" } as const;
+const widths = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-3xl", xl: "max-w-5xl" } as const;
 </script>
 
 <template>

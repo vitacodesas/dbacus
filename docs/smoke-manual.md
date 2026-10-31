@@ -61,6 +61,17 @@ Hacerlo contra una tabla de pruebas (idealmente con un `AUTO_INCREMENT`, un índ
 - [ ] Borrar una fila con hijos `ON DELETE CASCADE`: el diálogo avisa de las tablas afectadas; con `RESTRICT` el servidor rechaza y se revierte todo.
 - [ ] Lote mixto (editar + borrar + insertar): se ve en ese orden y es atómico.
 
+## Editar estructura de tabla (spec 19)
+Hacerlo contra una tabla de pruebas con una clave foránea, un índice, una columna con `ON UPDATE CURRENT_TIMESTAMP` y otra con collation propia.
+- [ ] Clic derecho en una tabla: aparece «Editar estructura» y **no se despliegan sus columnas**; en una vista no aparece.
+- [ ] Cambiar el tipo de una columna: el panel muestra el `MODIFY COLUMN` en vivo; «Aplicar…» abre la revisión con el mismo SQL y el aviso de que no hay vuelta atrás.
+- [ ] Tras ejecutar, `SHOW CREATE TABLE` conserva `ON UPDATE`, la collation y el comentario de las columnas tocadas.
+- [ ] Borrar una columna, un índice y una clave foránea: avisos en rojo en la revisión; con una FK y su índice se ejecutan dos sentencias.
+- [ ] Renombrar una columna y añadir otra `AFTER` la renombrada.
+- [ ] Una tabla grande (millones de filas): aviso de tabla grande; cancelar un `ALTER` en curso lo corta en el servidor (**sin verificar contra un servidor real**).
+- [ ] Alterar la tabla desde otra sesión con el editor abierto: «Aplicar» dice que la tabla cambió.
+- [ ] Conexión de solo lectura: el ítem sale deshabilitado; marcar un perfil abierto como solo lectura y pulsar «Aplicar» lo rechaza.
+
 ## Ajustes e interfaz
 - [ ] Cambiar tema/idioma en Ajustes (`⌘/Ctrl+,`) y reabrir: se conserva. Ancho del panel y del divisor también.
 - [ ] Un límite de filas bajo (p. ej. 1 000) aplica a la siguiente consulta; uno fuera de rango se rechaza en el campo.

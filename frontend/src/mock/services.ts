@@ -282,6 +282,100 @@ export const SchemaService = {
   SelectStatement: (_s: string, db: string, table: string, limit: number) => cp(() => `SELECT * FROM \`${db}\`.\`${table}\` LIMIT ${limit}`),
 };
 
+// ---- Editor de estructura (spec 19) -----------------------------------------------------------------------------------------
+// Imita AlterService: lee/aplica sobre una copia en memoria de la tabla, rechaza en solo lectura y genera un SQL sencillo.
+// Una columna llamada «boom» hace fallar la ejecución (para probar el fallo a mitad).
+interface AlterState { columns: Any[]; indexes: Any[]; foreignKeys: Any[]; version: number }
+const alterStates = new Map<string, AlterState>();
+function alterState(db: string, table: string): AlterState {
+  const t = TABLES[table];
+  if (!t) throw fail("NOT_FOUND", "Tabla no encontrada");
+  const key = `${db}.${table}`;
+  if (!alterStates.has(key)) {
+    const pk = t.cols.find((c: Any) => c.isPrimaryKey);
+    alterStates.set(key, {
+      version: 1,
+      columns: t.cols.map((c: Any, i: number) => ({ ...c, columnType: c.dataType === "varchar" ? "varchar(45)" : c.dataType, ordinal: i + 1, defaultExpr: false, charset: "", collation: "", onUpdate: "", generationExpr: "" })),
+      indexes: pk ? [{ name: "PRIMARY", columns: [pk.name], unique: true, type: "BTREE", prefix: false, prefixLens: [0], desc: [false], functional: false }] : [],
+      foreignKeys: [],
+    });
+  }
+  return alterStates.get(key) as AlterState;
+}
+const alterModel = (db: string, table: string) => {
+  const st = alterState(db, table);
+  return { database: db, table, columns: st.columns.map((c, i) => ({ ...c, ordinal: i + 1 })), indexes: st.indexes, foreignKeys: st.foreignKeys, incomingFks: [], createSql: "", tableCollation: "", fingerprint: `v${st.version}`, rowEstimate: TABLES[table].rows };
+};
+function alterGuard(sessionId: string) {
+  const sess = sessions.find((x) => x.sessionId === sessionId);
+  if (profileOf(sess?.profileId)?.readOnly) throw fail("QUERY_FAILED", "Esta conexión es de solo lectura: no se puede modificar la estructura de las tablas", "readonly");
+}
+const q = (n: string) => `\`${n}\``;
+function alterStatements(cs: Any): string[] {
+  const out: string[] = [];
+  const def = (n: string, c: Any) => `${q(n)} ${c.type} ${c.nullable ? "NULL" : "NOT NULL"}${c.default != null ? ` DEFAULT '${c.default}'` : ""}`;
+  for (const o of cs.ops ?? []) {
+    if (!o.name?.trim()) throw fail("VALIDATION", "Falta un nombre", "ops[0].name");
+    if (o.kind === "addColumn") out.push(`ADD COLUMN ${def(o.name, o.column)}${o.first ? " FIRST" : o.after ? ` AFTER ${q(o.after)}` : ""}`);
+    else if (o.kind === "modifyColumn") out.push(`${o.newName ? `CHANGE COLUMN ${q(o.name)} ${def(o.newName, o.column ?? { type: "int", nullable: false })}` : `MODIFY COLUMN ${def(o.name, o.column ?? { type: "int", nullable: false })}`}${o.first ? " FIRST" : o.after ? ` AFTER ${q(o.after)}` : ""}`);
+    else if (o.kind === "dropColumn") out.push(`DROP COLUMN ${q(o.name)}`);
+    else if (o.kind === "addIndex") out.push(`ADD ${o.index.kind === "unique" ? "UNIQUE " : o.index.kind === "fulltext" ? "FULLTEXT " : ""}INDEX ${q(o.name)} (${o.index.columns.map((c: Any) => q(c.name)).join(", ")})`);
+    else if (o.kind === "dropIndex") out.push(`DROP INDEX ${q(o.name)}`);
+    else if (o.kind === "renameIndex") out.push(`RENAME INDEX ${q(o.name)} TO ${q(o.newName)}`);
+    else if (o.kind === "addFK") out.push(`ADD CONSTRAINT ${q(o.name)} FOREIGN KEY (${o.fk.columns.map(q).join(", ")}) REFERENCES ${q(o.fk.refTable)} (${o.fk.refColumns.map(q).join(", ")})`);
+    else if (o.kind === "dropFK") out.push(`DROP FOREIGN KEY ${q(o.name)}`);
+  }
+  return out.length ? [`ALTER TABLE ${q(cs.database)}.${q(cs.table)}\n  ${out.join(",\n  ")}`] : [];
+}
+const hashOf = (stmts: string[]) => stmts.join("\u0000").split("").reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7).toString(16);
+function alterPlan(sessionId: string, cs: Any) {
+  alterGuard(sessionId);
+  const st = alterState(cs.database, cs.table);
+  if (cs.fingerprint && cs.fingerprint !== `v${st.version}`) throw fail("VALIDATION", "La tabla cambió desde que se abrió el editor: vuelve a abrirlo", "stale_model");
+  const statements = alterStatements(cs);
+  const warnings: Any[] = [];
+  for (const o of cs.ops ?? []) {
+    if (o.kind === "dropColumn") warnings.push({ code: "drop_column", severity: "danger", message: `Se borrará la columna «${o.name}» con todos sus datos.` });
+    if (o.kind === "dropIndex") warnings.push({ code: "drop_index", severity: "danger", message: `Se borrará el índice «${o.name}»: las consultas que lo usan pueden volverse lentas.` });
+    if (o.kind === "dropFK") warnings.push({ code: "drop_fk", severity: "danger", message: `Se borrará la clave foránea «${o.name}»: dejará de garantizarse la integridad referencial.` });
+  }
+  return { statements, sqlHash: hashOf(statements), warnings, destructive: warnings.length > 0, noRollback: statements.length > 0, estimatedRows: null };
+}
+export const AlterService = {
+  GetModel: (sessionId: string, db: string, table: string) => cp(() => (alterGuard(sessionId), alterModel(db, table))),
+  Preview: (sessionId: string, cs: Any) => cp(() => alterPlan(sessionId, cs)),
+  Apply: (sessionId: string, cs: Any, sqlHash: string) =>
+    cp(() => {
+      const plan = alterPlan(sessionId, cs);
+      if (!plan.statements.length) throw fail("VALIDATION", "No hay cambios que aplicar", "empty");
+      if (plan.sqlHash !== sqlHash) throw fail("VALIDATION", "El SQL cambió desde la revisión: vuelve a revisarlo", "stale_preview");
+      const st = alterState(cs.database, cs.table);
+      if ((cs.ops ?? []).some((o: Any) => o.name === "boom" || o.newName === "boom")) return { applied: [], failed: { index: 0, message: "Duplicate column name 'boom'" }, model: alterModel(cs.database, cs.table) };
+      for (const o of cs.ops ?? []) {
+        if (o.kind === "addColumn") {
+          const c = { name: o.name, dataType: o.column.type.split("(")[0], columnType: o.column.type, nullable: o.column.nullable, default: o.column.default, isPrimaryKey: false, isAutoInc: o.column.autoInc, isGenerated: false, comment: o.column.comment, ordinal: 0, defaultExpr: o.column.defaultExpr, charset: "", collation: "", onUpdate: "", generationExpr: "" };
+          const at = o.first ? 0 : o.after ? st.columns.findIndex((x) => x.name === o.after) + 1 : st.columns.length;
+          st.columns.splice(at, 0, c);
+        } else if (o.kind === "modifyColumn") {
+          const i = st.columns.findIndex((x) => x.name === o.name);
+          const [c] = st.columns.splice(i, 1);
+          if (o.column) Object.assign(c, { columnType: o.column.type, dataType: o.column.type.split("(")[0], nullable: o.column.nullable, default: o.column.default, defaultExpr: o.column.defaultExpr, isAutoInc: o.column.autoInc, comment: o.column.comment });
+          if (o.newName) c.name = o.newName;
+          const at = o.first ? 0 : o.after ? st.columns.findIndex((x) => x.name === o.after) + 1 : i;
+          st.columns.splice(at, 0, c);
+        } else if (o.kind === "dropColumn") st.columns = st.columns.filter((x) => x.name !== o.name);
+        else if (o.kind === "addIndex") st.indexes.push({ name: o.name, columns: o.index.columns.map((c: Any) => c.name), unique: o.index.kind === "unique", type: o.index.kind === "fulltext" ? "FULLTEXT" : "BTREE", prefix: false, prefixLens: o.index.columns.map(() => 0), desc: o.index.columns.map(() => false), functional: false });
+        else if (o.kind === "dropIndex") st.indexes = st.indexes.filter((x) => x.name !== o.name);
+        else if (o.kind === "renameIndex") st.indexes.forEach((x) => x.name === o.name && (x.name = o.newName));
+        else if (o.kind === "addFK") st.foreignKeys.push({ name: o.name, columns: o.fk.columns, refSchema: cs.database, refTable: o.fk.refTable, refColumns: o.fk.refColumns, onUpdate: o.fk.onUpdate, onDelete: o.fk.onDelete });
+        else if (o.kind === "dropFK") st.foreignKeys = st.foreignKeys.filter((x) => x.name !== o.name);
+      }
+      st.version++;
+      Events.Emit("schema:invalidated", { sessionId, database: cs.database });
+      return { applied: plan.statements, failed: null, model: alterModel(cs.database, cs.table) };
+    }),
+};
+
 const toCell = (c: Any) => ({ v: c.v, t: c.t ?? "", trunc: false });
 /** Valores ya aplicados con EditService.Apply: "tabla:fila:col" → valor. El servidor simulado «recuerda» lo editado. */
 const applied = new Map<string, Any>();

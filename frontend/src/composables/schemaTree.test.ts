@@ -13,12 +13,12 @@ const tables: Record<string, Table[]> = {
   shop: [],
 };
 const detail: TableDetail = {
-  name: "users", schema: "app", type: "table", rowEstimate: null, comment: "", createSql: "", incomingFks: [],
+  name: "users", schema: "app", type: "table", rowEstimate: null, comment: "", createSql: "", collation: "", incomingFks: [],
   columns: [
-    { name: "id", dataType: "int", columnType: "int unsigned", nullable: false, default: null, isPrimaryKey: true, isAutoInc: true, isGenerated: false, comment: "", ordinal: 1 },
-    { name: "email", dataType: "varchar", columnType: "varchar(190)", nullable: true, default: null, isPrimaryKey: false, isAutoInc: false, isGenerated: false, comment: "correo", ordinal: 2 },
+    { name: "id", dataType: "int", columnType: "int unsigned", nullable: false, default: null, isPrimaryKey: true, isAutoInc: true, isGenerated: false, comment: "", ordinal: 1, defaultExpr: false, charset: "", collation: "", onUpdate: "", generationExpr: "" },
+    { name: "email", dataType: "varchar", columnType: "varchar(190)", nullable: true, default: null, isPrimaryKey: false, isAutoInc: false, isGenerated: false, comment: "correo", ordinal: 2, defaultExpr: false, charset: "", collation: "", onUpdate: "", generationExpr: "" },
   ],
-  indexes: [{ name: "uq_email", columns: ["email"], unique: true, type: "BTREE", prefix: false }],
+  indexes: [{ name: "uq_email", columns: ["email"], unique: true, type: "BTREE", prefix: false, prefixLens: [0], desc: [false], functional: false }],
   foreignKeys: [{ name: "fk_org", columns: ["org_id"], refSchema: "app", refTable: "orgs", refColumns: ["id"], onUpdate: "RESTRICT", onDelete: "CASCADE" }],
 };
 

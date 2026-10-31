@@ -88,11 +88,7 @@ func (s *EditService) load(ctx context.Context, queryID string, stmtIndex int) (
 	if err != nil {
 		return target{}, toAppErr(err)
 	}
-	// El modo solo lectura se lee del perfil guardado (como en QueryService.Execute): cambiarlo con la sesión abierta aplica ya.
-	readOnly := sess.ReadOnly
-	if p, err := s.d.Store.GetProfile(ctx, sess.ProfileID); err == nil && p.ReadOnly {
-		readOnly = true
-	}
+	readOnly := sessionReadOnly(ctx, s.d.Store, sess)
 	sql, db := buf.Source()
 	plan := edit.Analyze(edit.Input{
 		SQL: sql, DefaultDB: db, Cols: buf.Columns(), ReadOnly: readOnly,

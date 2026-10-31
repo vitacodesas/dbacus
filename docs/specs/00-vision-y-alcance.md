@@ -21,7 +21,7 @@ Cliente SQL de escritorio, rápido y ligero, funcionalmente equivalente a Tabula
 Otros drivers, edición inline de filas, constructor visual de queries, diagramas ER, notebooks, asistente IA, servidor MCP, plugins, sincronización en la nube. Diseñar sin cerrarles la puerta.
 
 ## Etapas futuras (orientativo)
-2: edición de datos + DDL básico (edición de celdas: spec 13, hecho; insertar y borrar filas: spec 14, borrador) · 3: PostgreSQL/SQLite · 4: notebooks, ER, IA/MCP.
+2: edición de datos + DDL básico (edición de celdas: spec 13, hecho; insertar y borrar filas: spec 14, borrador; editar estructura de tablas: spec 19, borrador) · 3: PostgreSQL/SQLite · 4: notebooks, ER, IA/MCP.
 
 ## Glosario
 - **Perfil**: configuración guardada de una conexión (sin secretos).

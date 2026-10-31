@@ -54,6 +54,23 @@ describe("SchemaTree", () => {
     expect(labels(w)).toEqual(["Conn 1", "app", expect.stringContaining("Tablas (1)")]);
   });
 
+  it("un clic derecho (o Ctrl+clic) solo pide el menú: no despliega la fila", async () => {
+    const { schema } = setup();
+    await schema.loadDatabases("s1");
+    const w = mountTree();
+    const row = w.get('[data-row-id="s1/db:app"]');
+
+    await row.trigger("click", { button: 2 });
+    await row.trigger("click", { button: 0, ctrlKey: true });
+    await flushPromises();
+    expect(schema.isExpanded("s1", "db:app")).toBe(false);
+    expect(api.listTables).not.toHaveBeenCalled();
+
+    await row.trigger("click"); // el clic normal sigue desplegando
+    await flushPromises();
+    expect(schema.isExpanded("s1", "db:app")).toBe(true);
+  });
+
   it("navegación por teclado: → expande, ↓ baja, ← pliega", async () => {
     const { schema } = setup();
     await schema.loadDatabases("s1");

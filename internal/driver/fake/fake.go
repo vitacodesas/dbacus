@@ -31,6 +31,9 @@ type Driver struct {
 	AcquireFn func(ctx context.Context) error // se llama antes de entregar una conexión
 	ParseFn   func(dsn string) (driver.ConnConfig, error)
 
+	// OnDDL genera el SQL de un ChangeSet (driver.DDLGenerator); si es nil devuelve un único «ALTER TABLE fake».
+	OnDDL func(cs model.ChangeSet, m model.AlterModel, info driver.ServerInfo) ([]string, error)
+
 	SchemaReader driver.SchemaReader // si es nil se usa un *Schema vacío
 	OnKill       func(connID string) // se llama en cada Conn.Kill
 }
@@ -43,6 +46,15 @@ func (d *Driver) DefaultPort() int           { return 1 }
 func (d *Driver) QuoteIdent(n string) string { return "`" + strings.ReplaceAll(n, "`", "``") + "`" }
 func (d *Driver) QuoteString(s string) string {
 	return "'" + strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), "'", `\'`) + "'"
+}
+func (d *Driver) GenerateDDL(cs model.ChangeSet, m model.AlterModel, info driver.ServerInfo) ([]string, error) {
+	if d.OnDDL != nil {
+		return d.OnDDL(cs, m, info)
+	}
+	if len(cs.Ops) == 0 {
+		return nil, nil
+	}
+	return []string{"ALTER TABLE fake"}, nil
 }
 func (d *Driver) Capabilities() driver.Capabilities { return driver.Capabilities{KillQuery: true} }
 func (d *Driver) ParseDSN(dsn string) (driver.ConnConfig, error) {

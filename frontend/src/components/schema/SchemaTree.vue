@@ -13,7 +13,7 @@ import BaseContextMenu, { type MenuItem } from "../ui/BaseContextMenu.vue";
 import BaseSpinner from "../ui/BaseSpinner.vue";
 import VirtualList from "../ui/VirtualList.vue";
 
-const emit = defineEmits<{ openTable: [sessionId: string, db: string, table: string]; viewCreate: [sessionId: string, db: string, table: string]; refresh: [sessionId: string, db: string]; disconnect: [sessionId: string] }>();
+const emit = defineEmits<{ openTable: [sessionId: string, db: string, table: string]; viewCreate: [sessionId: string, db: string, table: string]; editStructure: [sessionId: string, db: string, table: string]; refresh: [sessionId: string, db: string]; disconnect: [sessionId: string] }>();
 
 const { t } = useI18n();
 const schema = useSchemaStore();
@@ -96,8 +96,11 @@ async function retry(row: FlatRow) {
   else await schema.loadDetail(row.sessionId, r.db, r.table);
 }
 
-async function click(row: FlatRow) {
+async function click(row: FlatRow, e?: MouseEvent) {
   activate(row);
+  // Un clic derecho solo pide el menú contextual: no despliega ni reintenta. En macOS (WebKit) el Ctrl+clic, que es el clic
+  // derecho del trackpad, también emite `click`.
+  if (e && (e.button !== 0 || e.ctrlKey)) return;
   if (row.kind === "error") await retry(row);
   else await toggle(row);
 }
@@ -143,9 +146,12 @@ function menuFor(row: FlatRow): MenuItem[] {
     ];
   }
   const isTable = row.kind === "table" || row.kind === "view";
+  // «Editar estructura» solo en tablas; en perfiles de solo lectura sale deshabilitado (Go también lo rechaza, spec 19).
+  const readOnly = !!connections.byId.get(sessions.byId[row.sessionId]?.profileId ?? "")?.readOnly;
   return [
     { id: "copyName", label: t("schema.menu.copyName") },
     ...(isTable ? [{ id: "copySelect", label: t("schema.menu.copySelect") }, { id: "viewCreate", label: t("schema.menu.viewCreate") }] : []),
+    ...(row.kind === "table" ? [{ id: "editStructure", label: readOnly ? t("schema.menu.editStructureReadOnly") : t("schema.menu.editStructure"), disabled: readOnly }] : []),
     { id: "refresh", label: t("schema.menu.refresh"), separatorBefore: true },
   ];
 }
@@ -168,6 +174,7 @@ async function onMenu(row: FlatRow, id: string) {
     else if (id === "copyName") await copy(row.table ?? row.db);
     else if (id === "copySelect" && row.table) await copy(await selectStatement(row.sessionId, row.db, row.table));
     else if (id === "viewCreate" && row.table) emit("viewCreate", row.sessionId, row.db, row.table);
+    else if (id === "editStructure" && row.table) emit("editStructure", row.sessionId, row.db, row.table);
   } catch (e) {
     ui.toast("error", asAppError(e).message);
   }
@@ -191,7 +198,7 @@ const hasMenu = (row: FlatRow) => ["session", "database", "table", "view"].inclu
           class="flex cursor-default items-center gap-1 pr-2 text-sm select-none hover:bg-hover focus-visible:bg-hover"
           :class="[row.flags.system && 'text-muted', row.key === focusedKey && 'bg-hover', row.kind === 'session' && 'border-t border-border font-medium']"
           :style="{ height: `${ROW}px`, paddingLeft: `${row.depth * INDENT + 6}px` }"
-          @click="click(row)"
+          @click="click(row, $event)"
           @dblclick="(row.kind === 'table' || row.kind === 'view') && row.db && row.table && emit('openTable', row.sessionId, row.db, row.table)"
           @keydown="onKey($event, row)"
           @focus="focusedKey = row.key"
