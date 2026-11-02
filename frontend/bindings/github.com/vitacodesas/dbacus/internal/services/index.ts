@@ -9,6 +9,7 @@ import * as HistoryService from "./historyservice.js";
 import * as PingService from "./pingservice.js";
 import * as QueryFilesService from "./queryfilesservice.js";
 import * as QueryService from "./queryservice.js";
+import * as RoutineService from "./routineservice.js";
 import * as SchemaService from "./schemaservice.js";
 import * as SettingsService from "./settingsservice.js";
 export {
@@ -20,6 +21,7 @@ export {
     PingService,
     QueryFilesService,
     QueryService,
+    RoutineService,
     SchemaService,
     SettingsService
 };

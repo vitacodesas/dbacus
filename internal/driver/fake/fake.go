@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/vitacodesas/dbacus/internal/apperr"
 	"github.com/vitacodesas/dbacus/internal/driver"
 	"github.com/vitacodesas/dbacus/internal/model"
 )
@@ -233,10 +234,14 @@ type Schema struct {
 	DBs      []model.Database
 	TablesBy map[string][]model.Table
 	Details  map[string]model.TableDetail // clave "db.tabla"
-	Cat      map[string]model.CompletionCatalog
-	Delay    func(ctx context.Context) error // se ejecuta antes de cada lectura
-	Err      error
-	Calls    atomic.Int64
+	// Rutinas por base y detalle por "db.kind.nombre" (spec 21); RoutineErr hace fallar solo estas lecturas.
+	RoutinesBy  map[string][]model.Routine
+	RoutineDets map[string]model.RoutineDetail
+	RoutineErr  error
+	Cat         map[string]model.CompletionCatalog
+	Delay       func(ctx context.Context) error // se ejecuta antes de cada lectura
+	Err         error
+	Calls       atomic.Int64
 }
 
 func (s *Schema) enter(ctx context.Context) error {
@@ -269,4 +274,32 @@ func Rows(cols []string, rows ...[]any) *Result {
 		meta[i] = model.ColumnMeta{Name: c, DataType: "VARCHAR"}
 	}
 	return &Result{Cols: meta, Rows: rows}
+}
+
+func (s *Schema) Routines(ctx context.Context, db string) ([]model.Routine, error) {
+	if err := s.enter(ctx); err != nil {
+		return nil, err
+	}
+	if s.RoutineErr != nil {
+		return nil, s.RoutineErr
+	}
+	out := s.RoutinesBy[db]
+	if out == nil {
+		out = []model.Routine{}
+	}
+	return out, nil
+}
+
+func (s *Schema) DescribeRoutine(ctx context.Context, db, kind, name string) (model.RoutineDetail, error) {
+	if err := s.enter(ctx); err != nil {
+		return model.RoutineDetail{}, err
+	}
+	if s.RoutineErr != nil {
+		return model.RoutineDetail{}, s.RoutineErr
+	}
+	d, ok := s.RoutineDets[db+"."+kind+"."+name]
+	if !ok {
+		return model.RoutineDetail{}, apperr.New(apperr.NotFound, "La rutina ya no existe")
+	}
+	return d, nil
 }

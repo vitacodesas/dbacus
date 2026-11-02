@@ -16,7 +16,8 @@ import (
 // SchemaInvalidated avisa a Vue de que debe volver a leer el esquema (spec 02).
 type SchemaInvalidated struct {
 	SessionID string `json:"sessionId"`
-	Database  string `json:"database"` // "" = toda la sesión
+	Database  string `json:"database"`        // "" = toda la sesión
+	Scope     string `json:"scope,omitempty"` // "routines": solo la lista de rutinas (spec 21); "" = todo lo de esa base
 }
 
 func init() { application.RegisterEvent[SchemaInvalidated]("schema:invalidated") }
@@ -37,6 +38,7 @@ const keyDatabases = "dbs"
 func keyTables(db string) string       { return "db:" + db + ":tables" }
 func keyTable(db, table string) string { return "db:" + db + ":table:" + table }
 func keyCatalog(db string) string      { return "db:" + db + ":catalog" }
+func keyRoutines(db string) string     { return "db:" + db + ":routines" }
 
 func (s *SchemaService) ListDatabases(ctx context.Context, sessionID string) ([]model.Database, error) {
 	sess, err := s.sessions.Get(sessionID)
@@ -130,6 +132,23 @@ func (s *SchemaService) invalidate(sessionID, db string) error {
 	}
 	if s.emit != nil {
 		s.emit("schema:invalidated", SchemaInvalidated{SessionID: sessionID, Database: db})
+	}
+	return nil
+}
+
+// invalidateRoutines refresca solo las rutinas (las tablas cargadas no se tocan). db == "" = las de todas las bases.
+func (s *SchemaService) invalidateRoutines(sessionID, db string) error {
+	sess, err := s.sessions.Get(sessionID)
+	if err != nil {
+		return toAppErr(err)
+	}
+	if db == "" {
+		sess.Schema.InvalidateIf(func(k string) bool { return strings.HasPrefix(k, "db:") && strings.HasSuffix(k, ":routines") })
+	} else {
+		sess.Schema.InvalidateIf(func(k string) bool { return k == keyRoutines(db) })
+	}
+	if s.emit != nil {
+		s.emit("schema:invalidated", SchemaInvalidated{SessionID: sessionID, Database: db, Scope: "routines"})
 	}
 	return nil
 }

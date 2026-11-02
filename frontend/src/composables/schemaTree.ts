@@ -1,7 +1,11 @@
 // Construcción pura de las filas del árbol de esquema (sin Vue): fácil de probar y de virtualizar (spec 05).
-import type { AppError, Database, Table, TableDetail } from "../types";
+import type { AppError, Database, Routine, Table, TableDetail } from "../types";
 
-export type RowKind = "session" | "database" | "group" | "table" | "view" | "section" | "column" | "index" | "fk" | "loading" | "error" | "empty";
+export type RowKind =
+  | "session" | "database" | "group" | "routineGroup" | "table" | "view" | "procedure" | "function" | "section" | "column" | "index" | "fk" | "loading" | "error" | "empty";
+
+/** Tipos de rutina (spec 21) y el id de su grupo en el árbol. */
+export type RoutineKind = "procedure" | "function";
 
 export interface TreeRow {
   id: string;
@@ -15,18 +19,23 @@ export interface TreeRow {
   expanded: boolean;
   db?: string;
   table?: string;
+  /** Nombre de la rutina (filas `procedure`/`function`); en un `routineGroup`, a qué tipo pertenece el grupo. */
+  routine?: string;
+  routineKind?: RoutineKind;
   flags: { pk?: boolean; notNull?: boolean; unique?: boolean; system?: boolean; active?: boolean };
   /** Para filas de error: qué carga reintentar. */
-  retry?: { level: "dbs" } | { level: "tables"; db: string } | { level: "detail"; db: string; table: string };
+  retry?: { level: "dbs" } | { level: "tables"; db: string } | { level: "detail"; db: string; table: string } | { level: "routines"; db: string };
 }
 
 export interface TreeCtx {
   databases: Database[] | undefined;
   tablesOf: (db: string) => Table[] | undefined;
   detailOf: (db: string, table: string) => TableDetail | undefined;
+  /** Rutinas de una base (spec 21); undefined = aún sin cargar. Una sola lista sirve a los dos grupos. */
+  routinesOf: (db: string) => Routine[] | undefined;
   isExpanded: (nodeId: string) => boolean;
-  isLoading: { dbs: boolean; tables: (db: string) => boolean; detail: (db: string, table: string) => boolean };
-  errorOf: { dbs?: AppError; tables: (db: string) => AppError | undefined; detail: (db: string, table: string) => AppError | undefined };
+  isLoading: { dbs: boolean; tables: (db: string) => boolean; detail: (db: string, table: string) => boolean; routines: (db: string) => boolean };
+  errorOf: { dbs?: AppError; tables: (db: string) => AppError | undefined; detail: (db: string, table: string) => AppError | undefined; routines: (db: string) => AppError | undefined };
   filter: string;
   showSystem: boolean;
   activeDb: string;
@@ -36,6 +45,18 @@ export interface TreeCtx {
 
 export const dbId = (db: string) => `db:${db}`;
 export const tableId = (db: string, table: string) => `db:${db}/t:${table}`;
+export const routineGroupId = (db: string, kind: RoutineKind) => `db:${db}/${kind === "procedure" ? "procedures" : "functions"}`;
+
+/** Interpreta el id de un nodo expandido del store: qué carga le corresponde. Los grupos de tablas/vistas no cargan nada. */
+export function parseNodeId(id: string): { level: "db"; db: string } | { level: "table"; db: string; table: string } | { level: "routines"; db: string } | null {
+  let m = /^db:(.*)\/(procedures|functions)$/.exec(id);
+  if (m) return { level: "routines", db: m[1] };
+  if (/^db:.*\/(tables|views)$/.test(id)) return null;
+  m = /^db:(.*?)\/t:(.*)$/.exec(id);
+  if (m) return { level: "table", db: m[1], table: m[2] };
+  m = /^db:(.*)$/.exec(id);
+  return m ? { level: "db", db: m[1] } : null;
+}
 
 interface Node {
   id: string;
@@ -45,6 +66,8 @@ interface Node {
   title?: string;
   db?: string;
   table?: string;
+  routine?: string;
+  routineKind?: RoutineKind;
   flags: TreeRow["flags"];
   /** undefined = hoja; null = hijos aún sin cargar; array = hijos cargados. */
   children?: Node[] | null;
@@ -61,7 +84,7 @@ function buildNodes(ctx: TreeCtx): Node[] {
       return {
         id: dbId(d.name), kind: "database", label: d.name, db: d.name,
         flags: { system: d.isSystem, active: d.name === ctx.activeDb },
-        children: tables ? groupsOf(ctx, d.name, tables) : null,
+        children: tables ? [...groupsOf(ctx, d.name, tables), ...routineGroupsOf(ctx, d.name, d.isSystem)] : null,
         loading: ctx.isLoading.tables(d.name), error: ctx.errorOf.tables(d.name), retry: { level: "tables", db: d.name },
       };
     });
@@ -78,6 +101,26 @@ function groupsOf(ctx: TreeCtx, db: string, tables: Table[]): Node[] {
     });
   }
   return out;
+}
+
+/**
+ * Grupos Procedimientos y Funciones (spec 21). No se cargan al expandir la base sino al expandir un grupo: con cientos de
+ * rutinas, abrir la base no debe pagar su lectura. El contador `(n)` aparece cuando la lista ya se cargó.
+ */
+function routineGroupsOf(ctx: TreeCtx, db: string, system: boolean): Node[] {
+  const list = ctx.routinesOf(db);
+  const loading = ctx.isLoading.routines(db);
+  const error = ctx.errorOf.routines(db);
+  return (["procedure", "function"] as const).map((kind): Node => {
+    const key = kind === "procedure" ? "procedures" : "functions";
+    const items = list?.filter((r) => r.kind === kind);
+    return {
+      id: routineGroupId(db, kind), kind: "routineGroup", db, routineKind: kind, flags: { system },
+      label: items ? ctx.t(`schema.${key}`, { n: items.length }) : ctx.t(`schema.${key}Unloaded`),
+      children: items ? items.map((r): Node => ({ id: `${routineGroupId(db, kind)}/${r.name}`, kind, label: r.name, db, routine: r.name, routineKind: kind, title: r.comment || undefined, flags: { system } })) : null,
+      loading, error, retry: { level: "routines", db },
+    };
+  });
 }
 
 function tableNode(ctx: TreeCtx, db: string, t: Table): Node {
@@ -157,7 +200,7 @@ export function buildRows(ctx: TreeCtx): TreeRow[] {
       const showKids = filtered ? kidMatched || (own && open) : open;
       rows.push({
         id: n.id, kind: n.kind, depth, label: n.label, hint: n.hint, title: n.title, parentId: parent,
-        expandable: n.children !== undefined, expanded: showKids, db: n.db, table: n.table, flags: n.flags,
+        expandable: n.children !== undefined, expanded: showKids, db: n.db, table: n.table, routine: n.routine, routineKind: n.routineKind, flags: n.flags,
       });
       if (!showKids) continue;
       if (n.children === null) {

@@ -538,9 +538,14 @@ func (s *QueryService) runStatement(ctx context.Context, ar *activeRun, conn dri
 
 // afterStatement invalida la caché de esquema tras DDL (spec 05).
 func (s *QueryService) afterStatement(sess *session.Session, text string) {
-	if s.d.Schema != nil && sqlsplit.IsDDL(sqlsplit.FirstKeyword(text)) {
-		_ = s.d.Schema.invalidate(sess.ID, "")
+	if s.d.Schema == nil || !sqlsplit.IsDDL(sqlsplit.FirstKeyword(text)) {
+		return
 	}
+	if sqlsplit.IsRoutineDDL(text) { // spec 21: crear/borrar una rutina no tira el árbol de tablas
+		_ = s.d.Schema.invalidateRoutines(sess.ID, "")
+		return
+	}
+	_ = s.d.Schema.invalidate(sess.ID, "")
 }
 
 func isUse(text string) bool { return sqlsplit.FirstKeyword(text) == "USE" }

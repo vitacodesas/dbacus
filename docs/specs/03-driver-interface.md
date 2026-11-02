@@ -88,7 +88,7 @@ func List() []Driver
 ## Generación de DDL (spec 19, implementado en T13.2)
 Interfaz **opcional** `DDLGenerator` (patrón de `Validator`): `Generate(ChangeSet, Model, ServerInfo) → []string, []Warning`. `ServerInfo` expone la versión y si es MariaDB. Identificadores con `QuoteIdent`, literales con `QuoteString`. El driver no ejecuta: ejecuta `AlterService` por una conexión de `Pool.AcquireEdit` (efímera; igual que `AcquireConn` ejecuta `SET SESSION TRANSACTION READ ONLY` en perfiles de solo lectura), así el modo solo lectura se aplica igual.
 
-## Rutinas almacenadas (spec 21, propuesto)
+## Rutinas almacenadas (spec 21)
 Interfaz **opcional** `RoutineReader` (patrón de `DDLGenerator`): `Routines(ctx, db) → []Routine` (sin cuerpos) y `DescribeRoutine(ctx, db, kind, name) → RoutineDetail`. Un driver que no la implemente no ofrece rutinas (`UNSUPPORTED`). La escritura (pre-validación, `DROP`, `CREATE`, restauración) la ejecuta `RoutineService` por `AcquireEdit`, una sentencia por llamada.
 
 ## Escritura parametrizada (T7.2, spec 13)

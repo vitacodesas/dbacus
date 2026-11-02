@@ -13,8 +13,12 @@ import BaseButton from "../ui/BaseButton.vue";
 import BaseEmptyState from "../ui/BaseEmptyState.vue";
 import BaseModal from "../ui/BaseModal.vue";
 import { useAlterStore } from "../../stores/alter";
+import { useRoutinesStore } from "../../stores/routines";
 import AlterModal from "./AlterModal.vue";
 import AlterReviewDialog from "./AlterReviewDialog.vue";
+import CodeEditor from "../ui/CodeEditor.vue";
+import RoutineModal from "./RoutineModal.vue";
+import RoutineReviewDialog from "./RoutineReviewDialog.vue";
 import SchemaTree from "./SchemaTree.vue";
 
 const { t } = useI18n();
@@ -23,6 +27,12 @@ const sessions = useSessionsStore();
 const ui = useUiStore();
 const { openTable } = useQueryActions();
 const alter = useAlterStore();
+const routines = useRoutinesStore();
+
+async function openRoutine(sessionId: string, db: string, kind: "procedure" | "function", name: string, edit: boolean) {
+  await routines.open({ sessionId, db, kind, name });
+  if (edit) routines.startEdit();
+}
 
 // Cada conexión que se abre aparece desplegada y con sus bases cargadas; las que se cierran se olvidan.
 watch(
@@ -98,14 +108,17 @@ async function copyCreate() {
           class="h-8 w-full rounded-md border border-border bg-bg px-2.5 text-sm placeholder:text-muted/70"
         >
       </div>
-      <SchemaTree class="min-h-0 flex-1" @open-table="openTable" @view-create="viewCreate" @edit-structure="(sessionId, db, table) => alter.open({ sessionId, db, table })" @refresh="refresh" @disconnect="disconnect" />
+      <SchemaTree class="min-h-0 flex-1" @open-table="openTable" @view-create="viewCreate" @edit-structure="(sessionId, db, table) => alter.open({ sessionId, db, table })" @view-routine="openRoutine" @new-routine="(sessionId, db, kind) => routines.open({ sessionId, db, kind, name: null })" @delete-routine="(sessionId, db, kind, name) => routines.requestDelete({ sessionId, db, kind, name })" @refresh="refresh" @disconnect="disconnect" />
     </template>
 
     <AlterModal />
     <AlterReviewDialog />
+    <RoutineModal />
+    <RoutineReviewDialog />
 
     <BaseModal v-model:open="createOpen" :title="t('schema.createTitle', { name: createTarget?.table ?? '' })" size="lg">
-      <pre class="font-data max-h-[60vh] overflow-auto rounded-md border border-border bg-bg p-3 text-xs whitespace-pre-wrap">{{ createSql || t("schema.loading") }}</pre>
+      <div v-if="createSql" class="h-[60vh]" data-testid="create-sql"><CodeEditor :model-value="createSql" read-only :label="t('schema.createTitle', { name: createTarget?.table ?? '' })" /></div>
+      <p v-else class="text-sm text-muted">{{ t("schema.loading") }}</p>
       <template #footer>
         <BaseButton :disabled="!createSql" @click="copyCreate">{{ t("schema.copy") }}</BaseButton>
         <BaseButton variant="primary" @click="createOpen = false">{{ t("common.close") }}</BaseButton>

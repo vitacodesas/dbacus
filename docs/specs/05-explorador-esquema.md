@@ -11,7 +11,7 @@
 - Filtro de texto sobre el árbol (filtra nombres ya cargados; búsqueda en servidor no incluida).
 - Base activa de la sesión: marcada; el editor puede cambiarla con selector (`USE`).
 
-- **Rutinas** (spec 21, propuesto): bajo cada base, grupos **Procedimientos** y **Funciones**, cargados solo al expandir el grupo (expandir la base no los consulta). «Ver CREATE» pasará de `<pre>` a Monaco de solo lectura (T15.5).
+- **Rutinas** (spec 21): bajo cada base, grupos **Procedimientos** y **Funciones**, cargados solo al expandir el grupo (expandir la base no los consulta; el contador `(n)` aparece al cargar). Doble clic o «Ver código» abre el código en Monaco; menú: Editar, Nuevo…, Eliminar, Copiar CALL (los tres primeros, deshabilitados en solo lectura y en bases de sistema). «Ver CREATE» de tablas usa ahora Monaco de solo lectura (`CodeEditor`).
 
 ## Caché (Go)
 - Caché por `sessionId → db → tablas → detalle` con TTL 5 min y invalidación manual (`Refresh`).

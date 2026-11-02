@@ -49,6 +49,18 @@ func (c *Cache) Invalidate(prefix string) {
 	}
 }
 
+// InvalidateIf borra las entradas cuya clave cumple pred (p. ej. solo las listas de rutinas de todas las bases).
+func (c *Cache) InvalidateIf(pred func(key string) bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.gen++
+	for k := range c.entries {
+		if pred(k) {
+			delete(c.entries, k)
+		}
+	}
+}
+
 func (c *Cache) get(key string) (any, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

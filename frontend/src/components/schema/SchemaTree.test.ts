@@ -7,6 +7,8 @@ const api = vi.hoisted(() => ({
   listDatabases: vi.fn(), listTables: vi.fn(), describeTable: vi.fn(), getCompletionCatalog: vi.fn(), selectStatement: vi.fn(), refreshSchema: vi.fn(),
 }));
 vi.mock("../../api/schema", () => api);
+const routinesApi = vi.hoisted(() => ({ listRoutines: vi.fn(), routineCallStatement: vi.fn() }));
+vi.mock("../../api/routines", () => routinesApi);
 
 import { useConnectionsStore } from "../../stores/connections";
 import { useSchemaStore } from "../../stores/schema";
@@ -37,6 +39,8 @@ describe("SchemaTree", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     Object.values(api).forEach((f) => f.mockReset());
+    Object.values(routinesApi).forEach((f) => f.mockReset());
+    routinesApi.listRoutines.mockResolvedValue([{ name: "sp_a", kind: "procedure", comment: "" }, { name: "fn_b", kind: "function", comment: "" }]);
     api.listDatabases.mockResolvedValue([{ name: "app", isSystem: false }, { name: "mysql", isSystem: true }]);
     api.listTables.mockResolvedValue([{ name: "users", type: "table", comment: "" }]);
     api.describeTable.mockResolvedValue({ name: "users", columns: [{ name: "id", columnType: "int", isPrimaryKey: true, nullable: false }], indexes: [], foreignKeys: [] });
@@ -51,7 +55,7 @@ describe("SchemaTree", () => {
     await w.get('[data-row-id="s1/db:app"]').trigger("click");
     await flushPromises();
     expect(api.listTables).toHaveBeenCalledWith("s1", "app");
-    expect(labels(w)).toEqual(["Conn 1", "app", expect.stringContaining("Tablas (1)")]);
+    expect(labels(w)).toEqual(["Conn 1", "app", expect.stringContaining("Tablas (1)"), "Procedimientos", "Funciones"]);
   });
 
   it("un clic derecho (o Ctrl+clic) solo pide el menú: no despliega la fila", async () => {
@@ -79,7 +83,7 @@ describe("SchemaTree", () => {
     await w.get('[data-row-id="s1/db:app"]').trigger("keydown", { key: "ArrowRight" });
     await flushPromises();
     expect(schema.isExpanded("s1", "db:app")).toBe(true);
-    expect(w.findAll("[data-row-id]")).toHaveLength(3);
+    expect(w.findAll("[data-row-id]")).toHaveLength(5);
 
     await w.get('[data-row-id="s1/db:app"]').trigger("keydown", { key: "ArrowLeft" });
     await flushPromises();
@@ -161,5 +165,69 @@ describe("SchemaTree", () => {
     await flushPromises();
     expect(labels(w)).toEqual(["Conn 1", "Conn 2", "app"]);
   });
-});
 
+  // ---- Rutinas (spec 21) ----------------------------------------------------------------------------------------------
+  it("expandir la base NO lee rutinas; solo expandir un grupo lo hace, una sola vez para los dos", async () => {
+    const { schema } = setup();
+    await schema.loadDatabases("s1");
+    const w = mountTree();
+    await w.get('[data-row-id="s1/db:app"]').trigger("click");
+    await flushPromises();
+    expect(routinesApi.listRoutines).not.toHaveBeenCalled();
+
+    await w.get('[data-row-id="s1/db:app/procedures"]').trigger("click");
+    await flushPromises();
+    expect(routinesApi.listRoutines).toHaveBeenCalledWith("s1", "app");
+    expect(labels(w)).toContain("sp_a");
+    expect(labels(w)).toContain("Procedimientos (1)");
+    expect(labels(w)).toContain("Funciones (1)");
+
+    await w.get('[data-row-id="s1/db:app/functions"]').trigger("click");
+    await flushPromises();
+    expect(routinesApi.listRoutines).toHaveBeenCalledTimes(1);
+    expect(labels(w)).toContain("fn_b");
+  });
+
+  it("doble clic en una rutina pide verla (sin editar)", async () => {
+    const { schema } = setup();
+    await schema.loadDatabases("s1");
+    schema.setExpanded("s1", "db:app", true);
+    schema.setExpanded("s1", "db:app/procedures", true);
+    await schema.loadTables("s1", "app");
+    await schema.loadRoutines("s1", "app");
+    const w = mountTree();
+    await w.get('[data-row-id="s1/db:app/procedures/sp_a"]').trigger("dblclick");
+    expect(w.emitted("viewRoutine")).toEqual([["s1", "app", "procedure", "sp_a", false]]);
+  });
+
+  it("500 rutinas: solo se montan unas decenas de filas", async () => {
+    routinesApi.listRoutines.mockResolvedValue(Array.from({ length: 500 }, (_, i) => ({ name: `r${i}`, kind: "procedure", comment: "" })));
+    const { schema } = setup();
+    await schema.loadDatabases("s1");
+    schema.setExpanded("s1", "db:app", true);
+    schema.setExpanded("s1", "db:app/procedures", true);
+    await schema.loadTables("s1", "app");
+    await schema.loadRoutines("s1", "app");
+    const w = mountTree();
+    await flushPromises();
+    const mounted = w.findAll("[data-row-id]").length;
+    expect(mounted).toBeGreaterThan(5);
+    expect(mounted).toBeLessThan(80);
+  });
+
+  it("un error al leer rutinas muestra «Reintentar» y reintenta solo las rutinas", async () => {
+    routinesApi.listRoutines.mockRejectedValueOnce({ cause: { code: "UNSUPPORTED", message: "sin rutinas" } });
+    const { schema } = setup();
+    await schema.loadDatabases("s1");
+    schema.setExpanded("s1", "db:app", true);
+    await schema.loadTables("s1", "app");
+    const w = mountTree();
+    await w.get('[data-row-id="s1/db:app/functions"]').trigger("click");
+    await flushPromises();
+    expect(w.text()).toContain("sin rutinas");
+    await w.get('[data-kind="error"] button').trigger("click");
+    await flushPromises();
+    expect(routinesApi.listRoutines).toHaveBeenCalledTimes(2);
+    expect(api.listTables).toHaveBeenCalledTimes(1);
+  });
+});

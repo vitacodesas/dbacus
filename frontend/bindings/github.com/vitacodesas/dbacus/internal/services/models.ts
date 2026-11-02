@@ -301,6 +301,11 @@ export interface SchemaInvalidated {
      * "" = toda la sesión
      */
     "database": string;
+
+    /**
+     * "routines": solo la lista de rutinas (spec 21); "" = todo lo de esa base
+     */
+    "scope"?: string;
 }
 
 export interface SessionClosed {

@@ -86,6 +86,22 @@ Hacerlo con la app nativa y una carpeta de consultas nueva (borra o renombra la 
 - [ ] Cambiar la carpeta desde Ajustes: la anterior sigue intacta y el panel muestra la nueva; «Restablecer» vuelve a la de por defecto.
 - [ ] Eliminar un archivo y una carpeta: se mueven a `.papelera` dentro de la carpeta de consultas y no salen en el panel.
 
+## Procedimientos y funciones (spec 21)
+Hacerlo con la app nativa y una base de pruebas con rutinas (la verdad contra un servidor real solo se probó desde Go, no a través de los bindings de Wails).
+- [ ] El árbol muestra «Procedimientos» y «Funciones» bajo la base; expandir la base **no** las carga, expandir un grupo sí (y el contador aparece).
+- [ ] Base con unas 500 rutinas: expandir el grupo es instantáneo, el scroll fluye y el filtro del árbol encuentra una por nombre.
+- [ ] Doble clic abre el código en Monaco (workers locales, sin pantalla en blanco) tanto en el build como en `wails3 dev`; pestaña «Parámetros» correcta.
+- [ ] Editar el cuerpo: la revisión muestra `SET`, la rutina temporal, los dos `DROP` y el `CREATE`; tras ejecutar, el código nuevo está en el servidor y no queda ninguna `__dbacus_tmp_*`.
+- [ ] Editar con un error de sintaxis: falla en la comprobación previa y la rutina original sigue intacta y ejecutable.
+- [ ] Rutina con `DEFINER` de otro usuario (sin `SET_USER_ID`/`SUPER`): aparece el aviso y «Recrear con mi usuario» funciona (**sin verificar contra un servidor real**).
+- [ ] Rutina con permisos `GRANT` concedidos a otro usuario: tras editar se pierden (el aviso lo anuncia).
+- [ ] Cancelar un `Apply` justo entre el `DROP` y el `CREATE`: la original se restaura (**sin verificar contra un servidor real**).
+- [ ] Un usuario sin privilegio para ver el cuerpo: «No tienes privilegio…», sin editor (**sin verificar**).
+- [ ] Crear (plantilla de Go), borrar (la revisión enseña el código y permite copiarlo) y «Copiar CALL».
+- [ ] Conexión de solo lectura: se ve el código; Editar, Nuevo… y Eliminar salen deshabilitados; marcar el perfil como solo lectura con la sesión abierta bloquea el siguiente `Apply`.
+- [ ] Un `CREATE PROCEDURE` ejecutado desde una pestaña de consulta refresca el grupo de rutinas sin recargar las tablas.
+- [ ] «Ver CREATE» de una tabla se ve en Monaco de solo lectura y se puede copiar.
+
 ## Ajustes e interfaz
 - [ ] Cambiar tema/idioma en Ajustes (`⌘/Ctrl+,`) y reabrir: se conserva. Ancho del panel y del divisor también.
 - [ ] Un límite de filas bajo (p. ej. 1 000) aplica a la siguiente consulta; uno fuera de rango se rechaza en el campo.

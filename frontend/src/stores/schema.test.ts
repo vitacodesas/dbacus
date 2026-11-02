@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from "pinia";
 
 const api = vi.hoisted(() => ({ listDatabases: vi.fn(), listTables: vi.fn(), describeTable: vi.fn(), getCompletionCatalog: vi.fn() }));
 vi.mock("../api/schema", () => api);
+const routinesApi = vi.hoisted(() => ({ listRoutines: vi.fn() }));
+vi.mock("../api/routines", () => routinesApi);
 
 import { useSchemaStore } from "./schema";
 import { dbId, tableId } from "../composables/schemaTree";
@@ -17,6 +19,8 @@ describe("schema store", () => {
     api.listTables.mockResolvedValue([{ name: "users", type: "table" }]);
     api.describeTable.mockResolvedValue({ name: "users", columns: [] });
     api.getCompletionCatalog.mockResolvedValue({ tables: [] });
+    routinesApi.listRoutines.mockReset();
+    routinesApi.listRoutines.mockResolvedValue([{ name: "p", kind: "procedure" }]);
   });
 
   it("carga bases una sola vez (lectura repetida no vuelve a pedir)", async () => {
@@ -113,5 +117,51 @@ describe("schema store", () => {
     expect(s.databasesOf(S)).toBeUndefined();
     expect(s.tablesOf(S, "app")).toBeUndefined();
     expect(s.isExpanded(S, dbId("app"))).toBe(false);
+  });
+
+  // ---- Rutinas (spec 21) ----------------------------------------------------------------------------------------------
+  it("las rutinas se piden solo con loadRoutines (no al cargar tablas) y una sola vez", async () => {
+    const s = useSchemaStore();
+    await s.loadTables(S, "app");
+    expect(routinesApi.listRoutines).not.toHaveBeenCalled();
+    await s.loadRoutines(S, "app");
+    await s.loadRoutines(S, "app");
+    expect(routinesApi.listRoutines).toHaveBeenCalledTimes(1);
+    expect(s.routinesOf(S, "app")).toHaveLength(1);
+  });
+
+  it("schema:invalidated con scope «routines» recarga las rutinas visibles y NO toca las tablas", async () => {
+    const s = useSchemaStore();
+    await s.loadTables(S, "app");
+    s.setExpanded(S, "db:app", true);
+    s.setExpanded(S, "db:app/procedures", true);
+    await s.loadRoutines(S, "app");
+    routinesApi.listRoutines.mockResolvedValueOnce([{ name: "p", kind: "procedure" }, { name: "q", kind: "procedure" }]);
+    await s.handleInvalidated({ sessionId: S, database: "app", scope: "routines" });
+    expect(s.routinesOf(S, "app")).toHaveLength(2);
+    expect(api.listTables).toHaveBeenCalledTimes(1);
+    expect(api.listDatabases).not.toHaveBeenCalled();
+  });
+
+  it("una invalidación completa también vacía las rutinas, y un grupo plegado no se recarga", async () => {
+    const s = useSchemaStore();
+    await s.loadRoutines(S, "app");
+    await s.handleInvalidated({ sessionId: S, database: "app" });
+    expect(s.routinesOf(S, "app")).toBeUndefined();
+    expect(routinesApi.listRoutines).toHaveBeenCalledTimes(1);
+  });
+
+  it("recargar con un grupo de tablas expandido no interpreta su id como una base", async () => {
+    const s = useSchemaStore();
+    s.setExpanded(S, "db:app/tables", true);
+    await s.handleInvalidated({ sessionId: S, database: "" });
+    expect(api.listTables).not.toHaveBeenCalledWith(S, "app/tables");
+  });
+
+  it("forgetSession olvida también las rutinas", async () => {
+    const s = useSchemaStore();
+    await s.loadRoutines(S, "app");
+    s.forgetSession(S);
+    expect(s.routinesOf(S, "app")).toBeUndefined();
   });
 });

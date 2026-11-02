@@ -395,6 +395,112 @@ export interface QueryTree {
 }
 
 /**
+ * Routine es una entrada de la lista de una base: sin cuerpo ni parámetros (una base puede tener cientos).
+ */
+export interface Routine {
+    "name": string;
+
+    /**
+     * procedure | function
+     */
+    "kind": string;
+    "definer": string;
+    "comment": string;
+
+    /**
+     * DEFINER | INVOKER
+     */
+    "securityType": string;
+    "lastAltered": string;
+}
+
+/**
+ * RoutineChange es lo que Vue pide: crear, reemplazar o borrar una rutina. SQL es el CREATE completo (vacío en drop).
+ */
+export interface RoutineChange {
+    "database": string;
+    "kind": string;
+    "name": string;
+    "op": string;
+    "sql": string;
+    "fingerprint": string;
+
+    /**
+     * RecreateDefiner quita la cláusula DEFINER del CREATE para que la rutina quede a nombre del usuario actual.
+     */
+    "recreateDefiner": boolean;
+}
+
+/**
+ * RoutineDetail es la lectura fresca de una rutina: el CREATE completo y lo que hace falta para recrearla igual.
+ */
+export interface RoutineDetail {
+    "name": string;
+
+    /**
+     * procedure | function
+     */
+    "kind": string;
+    "definer": string;
+    "comment": string;
+
+    /**
+     * DEFINER | INVOKER
+     */
+    "securityType": string;
+    "lastAltered": string;
+    "database": string;
+    "params": RoutineParam[] | null;
+
+    /**
+     * solo funciones
+     */
+    "returns": string;
+    "createSql": string;
+    "sqlMode": string;
+    "charsetClient": string;
+    "collationConnection": string;
+    "databaseCollation": string;
+
+    /**
+     * BodyHidden: el usuario no tiene privilegio para ver el cuerpo (CreateSQL vacío); no es un error.
+     */
+    "bodyHidden": boolean;
+    "fingerprint": string;
+}
+
+export interface RoutineParam {
+    "name": string;
+
+    /**
+     * IN | OUT | INOUT ("" en funciones)
+     */
+    "mode": string;
+    "type": string;
+    "ordinal": number;
+}
+
+export interface RoutinePreview {
+    "statements": string[] | null;
+    "sqlHash": string;
+    "warnings": AlterWarning[] | null;
+    "destructive": boolean;
+    "noRollback": boolean;
+}
+
+/**
+ * RoutineResult: un fallo de la base no es error de la llamada, llega en Failed. Restored dice que la original se
+ * recuperó tras un CREATE fallido; BackupSQL es la copia previa cuando ni la restauración funcionó.
+ */
+export interface RoutineResult {
+    "applied": string[] | null;
+    "failed": AlterFailure | null;
+    "restored": boolean;
+    "backupSql": string;
+    "detail": RoutineDetail | null;
+}
+
+/**
  * SSHConfig no lleva secretos: password/passphrase viajan en ConnectionSecrets y viven en el llavero.
  */
 export interface SSHConfig {

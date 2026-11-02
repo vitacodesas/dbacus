@@ -108,3 +108,10 @@ type ServerInfo struct {
 type DDLGenerator interface {
 	GenerateDDL(cs model.ChangeSet, m model.AlterModel, info ServerInfo) ([]string, error)
 }
+
+// RoutineReader es opcional (spec 21): lo implementa el SchemaReader de un motor con procedimientos y funciones.
+// Routines lista sin cuerpos (una base puede tener cientos); DescribeRoutine lee el CREATE completo, sin caché.
+type RoutineReader interface {
+	Routines(ctx context.Context, db string) ([]model.Routine, error)
+	DescribeRoutine(ctx context.Context, db, kind, name string) (model.RoutineDetail, error)
+}

@@ -1,10 +1,12 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import * as api from "../api/schema";
+import * as routinesApi from "../api/routines";
 import { asAppError } from "../api/errors";
 import { useUiStore } from "./ui";
 import { omit, omitWhere } from "../utils/record";
-import type { AppError, CompletionCatalog, Database, SchemaInvalidated, Table, TableDetail } from "../types";
+import { parseNodeId } from "../composables/schemaTree";
+import type { AppError, CompletionCatalog, Database, Routine, SchemaInvalidated, Table, TableDetail } from "../types";
 
 const k = (...parts: string[]) => parts.join("\u0001"); // separador que no puede aparecer en identificadores razonables
 
@@ -17,6 +19,8 @@ export const useSchemaStore = defineStore("schema", () => {
   const tables = ref<Record<string, Table[]>>({});
   const details = ref<Record<string, TableDetail>>({});
   const catalogs = ref<Record<string, CompletionCatalog>>({});
+  /** Procedimientos y funciones por base (spec 21): solo nombres; el cuerpo se pide al abrir una rutina. */
+  const routines = ref<Record<string, Routine[]>>({});
   /** Nodos expandidos: `${sessionId}\u0001${nodeId}`. */
   const expanded = ref<Record<string, true>>({});
   const loading = ref<Record<string, true>>({});
@@ -29,6 +33,7 @@ export const useSchemaStore = defineStore("schema", () => {
   const keyTables = (s: string, db: string) => k(s, "tables", db);
   const keyDetail = (s: string, db: string, t: string) => k(s, "detail", db, t);
   const keyCatalog = (s: string, db: string) => k(s, "catalog", db);
+  const keyRoutines = (s: string, db: string) => k(s, "routines", db);
 
   const isExpanded = (s: string, nodeId: string) => !!expanded.value[k(s, nodeId)];
   const isLoading = (key: string) => !!loading.value[key];
@@ -68,6 +73,14 @@ export const useSchemaStore = defineStore("schema", () => {
     if (r) details.value = { ...details.value, [key]: r };
   }
 
+  /** Se pide al expandir un grupo de rutinas, no al expandir la base (spec 21, D1). */
+  async function loadRoutines(sessionId: string, db: string) {
+    const key = keyRoutines(sessionId, db);
+    if (routines.value[key]) return;
+    const r = await run(key, () => routinesApi.listRoutines(sessionId, db));
+    if (r) routines.value = { ...routines.value, [key]: r };
+  }
+
   /** Catálogo para el autocompletado del editor (T4.4); se cachea hasta que cambie el esquema. */
   async function loadCatalog(sessionId: string, db: string): Promise<CompletionCatalog | undefined> {
     const key = keyCatalog(sessionId, db);
@@ -80,6 +93,7 @@ export const useSchemaStore = defineStore("schema", () => {
   const databasesOf = (s: string) => databases.value[s];
   const tablesOf = (s: string, db: string) => tables.value[keyTables(s, db)];
   const detailOf = (s: string, db: string, t: string) => details.value[keyDetail(s, db, t)];
+  const routinesOf = (s: string, db: string) => routines.value[keyRoutines(s, db)];
   const errorOf = (key: string) => errors.value[key];
 
   /** Expande o pliega un nodo; al expandir pide lo que le falte. `load` lo decide el árbol según el tipo de nodo. */
@@ -107,21 +121,28 @@ export const useSchemaStore = defineStore("schema", () => {
         return sid === s && kd === kind && (!ev.database || db === ev.database);
       });
 
-    if (!ev.database) databases.value = omit(databases.value, s);
-    tables.value = dropByDb(tables.value, "tables");
-    details.value = dropByDb(details.value, "detail");
-    catalogs.value = dropByDb(catalogs.value, "catalog");
+    // `scope: "routines"` (spec 21): solo cambió la lista de rutinas; las tablas cargadas no se tocan.
+    const routinesOnly = ev.scope === "routines";
+    if (!routinesOnly) {
+      if (!ev.database) databases.value = omit(databases.value, s);
+      tables.value = dropByDb(tables.value, "tables");
+      details.value = dropByDb(details.value, "detail");
+      catalogs.value = dropByDb(catalogs.value, "catalog");
+    }
+    routines.value = dropByDb(routines.value, "routines");
 
-    // Recarga lo visible: bases expandidas → tablas; tablas expandidas → detalle.
-    await loadDatabases(s);
+    // Recarga lo visible: bases expandidas → tablas; tablas expandidas → detalle; grupos de rutinas → su lista.
+    if (!routinesOnly) await loadDatabases(s);
     const reloads: Promise<void>[] = [];
     for (const key of Object.keys(expanded.value)) {
       const [sid, nodeId] = key.split("\u0001");
       if (sid !== s) continue;
-      const m = /^db:(.*?)(?:\/t:(.*))?$/.exec(nodeId);
-      if (!m || (ev.database && m[1] !== ev.database)) continue;
-      if (m[2] === undefined) reloads.push(loadTables(s, m[1]));
-      else reloads.push(loadDetail(s, m[1], m[2]));
+      const node = parseNodeId(nodeId);
+      if (!node || (ev.database && node.db !== ev.database)) continue;
+      if (node.level === "routines") reloads.push(loadRoutines(s, node.db));
+      else if (routinesOnly) continue;
+      else if (node.level === "db") reloads.push(loadTables(s, node.db));
+      else reloads.push(loadDetail(s, node.db, node.table));
     }
     await Promise.all(reloads);
   }
@@ -133,14 +154,15 @@ export const useSchemaStore = defineStore("schema", () => {
     tables.value = omitWhere(tables.value, mine);
     details.value = omitWhere(details.value, mine);
     catalogs.value = omitWhere(catalogs.value, mine);
+    routines.value = omitWhere(routines.value, mine);
     expanded.value = omitWhere(expanded.value, mine);
     errors.value = omitWhere(errors.value, mine);
   }
 
   return {
-    databases, tables, details, catalogs, expanded, loading, errors, filter, showSystem,
-    keyDbs, keyTables, keyDetail, keyCatalog, isExpanded, isLoading,
-    loadDatabases, loadTables, loadDetail, loadCatalog, databasesOf, tablesOf, detailOf, errorOf,
+    databases, tables, details, catalogs, routines, expanded, loading, errors, filter, showSystem,
+    keyDbs, keyTables, keyDetail, keyCatalog, keyRoutines, isExpanded, isLoading,
+    loadDatabases, loadTables, loadDetail, loadRoutines, loadCatalog, databasesOf, tablesOf, detailOf, routinesOf, errorOf,
     toggle, setExpanded, handleInvalidated, forgetSession,
   };
 });

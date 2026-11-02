@@ -16,6 +16,8 @@ interface Seed {
   queries?: { path: string; sql: string; profileId?: string; profileName?: string; database?: string }[];
   /** Milisegundos de latencia simulada en cada llamada (por defecto 20). */
   latencyMs?: number;
+  /** Procedimientos y funciones extra generados en `sakila` (spec 21): sirve para probar bases con cientos de rutinas. */
+  routines?: number;
 }
 const seed: Seed = (window as Any).__MOCK_SEED__ ?? {};
 const latency = seed.latencyMs ?? 20;
@@ -375,6 +377,106 @@ export const AlterService = {
       st.version++;
       Events.Emit("schema:invalidated", { sessionId, database: cs.database });
       return { applied: plan.statements, failed: null, model: alterModel(cs.database, cs.table) };
+    }),
+};
+
+// ---- Rutinas almacenadas (spec 21) ---------------------------------------------------------------------------------------------
+// Imita RoutineService: lista sin cuerpos, lee el CREATE, genera el SQL de la revisión y aplica sobre una copia en memoria.
+// Un CREATE que contiene «SYNTAX» falla en la pre-validación (la original no se toca); uno con «BOOM» falla al crear y se
+// restaura; una rutina llamada «secreta» no deja ver su cuerpo.
+interface MockRoutine { name: string; kind: "procedure" | "function"; comment: string; sql: string; params: Any[]; returns: string; version: number }
+const mkRoutine = (kind: "procedure" | "function", name: string, body: string, comment = ""): MockRoutine => ({
+  name, kind, comment, version: 1, returns: kind === "function" ? "int" : "",
+  params: kind === "procedure" ? [{ name: "p_id", mode: "IN", type: "int", ordinal: 1 }] : [],
+  sql: kind === "procedure" ? `CREATE DEFINER=\`root\`@\`localhost\` PROCEDURE \`${name}\`(IN p_id int)\nBEGIN\n  ${body}\nEND` : `CREATE DEFINER=\`root\`@\`localhost\` FUNCTION \`${name}\`() RETURNS int\nDETERMINISTIC\nRETURN ${body}`,
+});
+const routineStore: Record<string, MockRoutine[]> = {
+  sakila: [
+    mkRoutine("procedure", "film_in_stock", "SELECT 1;", "Películas disponibles"),
+    mkRoutine("procedure", "rewards_report", "SELECT 2;"),
+    mkRoutine("procedure", "secreta", "SELECT 3;"),
+    mkRoutine("function", "inventory_in_stock", "1"),
+    ...Array.from({ length: seed.routines ?? 0 }, (_, i) => (i % 2 ? mkRoutine("function", `fn_${String(i).padStart(3, "0")}`, `${i}`) : mkRoutine("procedure", `sp_${String(i).padStart(3, "0")}`, `SELECT ${i};`))),
+  ],
+};
+const routinesIn = (db: string) => (routineStore[db] ??= []);
+const routineSort = (a: MockRoutine, b: MockRoutine) => a.name.localeCompare(b.name) || a.kind.localeCompare(b.kind);
+const headOf = (sql: string) => /^\s*CREATE\s+(?:DEFINER\s*=\s*\S+\s+)?(PROCEDURE|FUNCTION)\s+(?:IF NOT EXISTS\s+)?(?:`([^`]+)`|([A-Za-z0-9_$]+))/i.exec(sql);
+function routineGuard(sessionId: string) {
+  if (profileOf(sessions.find((x) => x.sessionId === sessionId)?.profileId)?.readOnly) throw fail("QUERY_FAILED", "Esta conexión es de solo lectura: no se pueden crear, modificar ni borrar rutinas", "readonly");
+}
+const routineDetail = (db: string, r: MockRoutine) => ({
+  name: r.name, kind: r.kind, definer: "root@localhost", comment: r.comment, securityType: "DEFINER", lastAltered: "2026-01-01 00:00:00", database: db,
+  params: r.params, returns: r.returns, createSql: r.name === "secreta" ? "" : r.sql, sqlMode: "", charsetClient: "utf8mb4", collationConnection: "utf8mb4_0900_ai_ci", databaseCollation: "",
+  bodyHidden: r.name === "secreta", fingerprint: `fp${r.version}:${r.sql.length}`,
+});
+function routinePlan(sessionId: string, ch: Any) {
+  routineGuard(sessionId);
+  const v = (detail: string, msg: string) => fail("VALIDATION", msg, detail);
+  const list = routinesIn(ch.database);
+  const cur = list.find((r) => r.name === ch.name && r.kind === ch.kind);
+  const qn = `\`${ch.database}\`.\`${ch.name}\``;
+  const warnings: Any[] = [{ code: "no_rollback", severity: "danger", message: "MySQL confirma el DDL al ejecutarlo: no hay transacción." }];
+  let statements: string[];
+  if (ch.op === "drop") {
+    if (!cur) throw fail("NOT_FOUND", "La rutina ya no existe");
+    statements = [`DROP ${ch.kind.toUpperCase()} ${qn}`];
+    warnings.push({ code: "grants_lost", severity: "warning", message: "Al borrar una rutina el servidor elimina también sus permisos (GRANT)." });
+  } else {
+    if (!ch.sql.trim()) throw v("empty", "El código de la rutina está vacío");
+    if (/^\s*delimiter\b/im.test(ch.sql)) throw v("delimiter", "Quita las líneas DELIMITER");
+    const h = headOf(ch.sql);
+    if (!h) throw v("head", "El texto debe empezar por CREATE PROCEDURE o CREATE FUNCTION");
+    const name = h[2] ?? h[3];
+    if (h[1].toLowerCase() !== ch.kind) throw v("name_changed", "El tipo de la rutina no puede cambiar");
+    if (ch.op === "replace") {
+      if (!cur) throw fail("NOT_FOUND", "La rutina ya no existe");
+      if (name !== ch.name) throw v("name_changed", "El nombre de la rutina no puede cambiar: crea otra y borra esta");
+      if (ch.fingerprint && ch.fingerprint !== routineDetail(ch.database, cur).fingerprint) throw v("stale_model", "La rutina cambió desde que se abrió: vuelve a abrirla");
+      let sql = ch.sql;
+      if (ch.recreateDefiner) sql = sql.replace(/DEFINER\s*=\s*\S+\s+/i, "");
+      statements = ["SET SESSION sql_mode = ''", sql.replace(name, "__dbacus_tmp_1"), `DROP ${ch.kind.toUpperCase()} \`${ch.database}\`.\`__dbacus_tmp_1\``, `DROP ${ch.kind.toUpperCase()} ${qn}`, sql];
+      warnings.push({ code: "grants_lost", severity: "warning", message: "Al borrar una rutina el servidor elimina también sus permisos (GRANT)." });
+      warnings.push({ code: "temp_routine", severity: "info", message: "Antes de tocar la original se crea y se borra una rutina temporal." });
+      if (/DEFINER\s*=\s*`?otro/i.test(ch.sql) && !ch.recreateDefiner) warnings.push({ code: "definer_foreign", severity: "warning", message: "La rutina pertenece a otro@h y tú eres root@localhost: recrearla puede fallar." });
+    } else {
+      if (list.some((r) => r.name === name && r.kind === ch.kind)) throw fail("QUERY_FAILED", `PROCEDURE ${name} already exists`);
+      statements = [ch.sql];
+    }
+  }
+  return { statements, sqlHash: hashOf(statements), warnings, destructive: ch.op !== "create", noRollback: true };
+}
+export const RoutineService = {
+  List: (_s: string, db: string) => cp(() => routinesIn(db).slice().sort(routineSort).map((r) => ({ name: r.name, kind: r.kind, definer: "root@localhost", comment: r.comment, securityType: "DEFINER", lastAltered: "" }))),
+  Get: (_s: string, db: string, kind: string, name: string) =>
+    cp(() => {
+      const r = routinesIn(db).find((x) => x.name === name && x.kind === kind);
+      if (!r) throw fail("NOT_FOUND", "La rutina ya no existe");
+      return routineDetail(db, r);
+    }),
+  Template: (kind: string) => cp(() => (kind === "procedure" ? "CREATE PROCEDURE nueva_rutina()\nBEGIN\n  SELECT 1;\nEND" : "CREATE FUNCTION nueva_rutina() RETURNS INT\nDETERMINISTIC\nBEGIN\n  RETURN 0;\nEND")),
+  CallStatement: (_s: string, db: string, kind: string, name: string) => cp(() => (kind === "function" ? `SELECT \`${db}\`.\`${name}\`()` : `CALL \`${db}\`.\`${name}\`(/* p_id int */ NULL)`)),
+  Preview: (sessionId: string, ch: Any) => cp(() => { const p = routinePlan(sessionId, ch); return { statements: p.statements, sqlHash: p.sqlHash, warnings: p.warnings, destructive: p.destructive, noRollback: p.noRollback }; }),
+  Apply: (sessionId: string, ch: Any, sqlHash: string) =>
+    cp(() => {
+      const plan = routinePlan(sessionId, ch);
+      if (plan.sqlHash !== sqlHash) throw fail("VALIDATION", "El SQL cambió desde la revisión: vuelve a revisarlo", "stale_preview");
+      const list = routinesIn(ch.database);
+      const detailOf = (name: string) => { const r = list.find((x) => x.name === name && x.kind === ch.kind); return r ? routineDetail(ch.database, r) : null; };
+      const name = ch.op === "create" ? (headOf(ch.sql)![2] ?? headOf(ch.sql)![3]) : ch.name;
+      if (ch.op === "replace" && /SYNTAX/.test(ch.sql)) return { applied: [], failed: { index: 1, message: "You have an error in your SQL syntax" }, restored: false, backupSql: "", detail: detailOf(name) };
+      if (ch.op === "replace" && /BOOM/.test(ch.sql)) return { applied: [plan.statements[3]], failed: { index: 4, message: "Boom: el CREATE final falló" }, restored: true, backupSql: "", detail: detailOf(name) };
+      if (ch.op === "drop") {
+        routineStore[ch.database] = list.filter((x) => !(x.name === ch.name && x.kind === ch.kind));
+      } else if (ch.op === "create") {
+        list.push({ ...mkRoutine(ch.kind, name, "SELECT 1;"), sql: ch.sql });
+      } else {
+        const r = list.find((x) => x.name === ch.name && x.kind === ch.kind)!;
+        r.sql = plan.statements[4];
+        r.version++;
+      }
+      Events.Emit("schema:invalidated", { sessionId, database: ch.database, scope: "routines" });
+      return { applied: ch.op === "replace" ? [plan.statements[3], plan.statements[4]] : plan.statements, failed: null, restored: false, backupSql: "", detail: ch.op === "drop" ? null : detailOf(name) };
     }),
 };
 

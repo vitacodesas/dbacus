@@ -8,6 +8,8 @@ export interface MockSeed {
   paging?: boolean;
   /** Consultas guardadas ya existentes (spec 20). */
   queries?: { path: string; sql: string; profileId?: string; profileName?: string; database?: string }[];
+  /** Procedimientos y funciones extra en `sakila` (spec 21), para probar bases con cientos de rutinas. */
+  routines?: number;
 }
 
 /** Conexión de ejemplo ya guardada (el backend simulado empieza vacío en cada carga). */
