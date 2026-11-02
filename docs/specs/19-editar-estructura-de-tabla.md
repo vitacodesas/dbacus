@@ -77,7 +77,7 @@ Diferencias [Verificado en MySQL 8.0/8.4 y MariaDB 10.11 salvo donde se indica]:
 - **Solo lectura, tres capas** (D11):
   1. UI: ítem deshabilitado. No es una barrera, solo evita el intento.
   2. **Guardia en Go**: `Preview` y `Apply` releen el **perfil guardado** en cada llamada y rechazan si el perfil **o** la sesión son de solo lectura (`QUERY_FAILED/readonly`). La lógica «perfil OR sesión» hoy está en `QueryService.Execute` (`query.go:218`) y en `EditService.load` (`edit.go:92`); se **extrae a una función compartida** para no copiarla una tercera vez.
-  3. Servidor: la conexión sale de `Session.AcquireConn`/`AcquireEdit`, que ya ejecutan `SET SESSION TRANSACTION READ ONLY` y fallan cerrado (`pool.go:47-54`).
+  3. Servidor: la conexión sale de `Pool.AcquireEdit` (la misma que usa `AlterService`; `AcquireConn` hace lo propio), que ya ejecuta `SET SESSION TRANSACTION READ ONLY` y falla cerrado (`pool.go:47-54`).
   - Comprobación adicional: cada sentencia generada pasa por `sqlsplit.IsReadOnlySafe` y **debe devolver `false`** (un `ALTER` nunca es de lectura); un test lo fija para que una futura sentencia de lectura mal clasificada no se cuele.
 - Quitar el modo solo lectura exige reconectar (spec 10): una sesión abierta con el flag lo conserva en el servidor aunque el perfil cambie. Es el comportamiento actual y es el seguro.
 - **Cambios concurrentes**: `Apply` compara el `Fingerprint` de `GetModel` con una lectura fresca justo antes de ejecutar; si cambió → `VALIDATION/stale_model`. Es **mejor esfuerzo**: entre la comprobación y el `ALTER` otra sesión puede cambiar la tabla (carrera inevitable sin bloquear).

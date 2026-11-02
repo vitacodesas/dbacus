@@ -143,7 +143,7 @@ type HistoryEntry struct{ ID, ProfileID, SQL string; Database string; ExecutedAt
 | `query:done` | `{queryId, results: []StatementResult, elapsedMs}` |
 | `query:error` | `{queryId, stmtIndex, error: AppError}` |
 | `session:closed` | `{sessionId, reason}` (p. ej. túnel caído) |
-| `schema:invalidated` | `{sessionId, database?}` |
+| `schema:invalidated` | `{sessionId, database?, scope?}` (`scope: "routines"` invalida solo las rutinas de la base, spec 21) |
 | `export:progress` / `export:done` | `{jobId, rows, bytes}` / `{jobId, path, rows, bytes, canceled, error?}` |
 | `history:added` | `{profileId}` |
 
@@ -162,3 +162,6 @@ Consultas guardadas como archivos `.sql` bajo una carpeta raíz. `Root`, `List()
 
 ## AlterService (etapa 2, spec 19)
 `GetModel(sessionID, database, table) → AlterModel`, `Preview(sessionID, ChangeSet) → AlterPreview{Statements, SQLHash, Warnings, Destructive, NoRollback, EstimatedRows}`, `Apply(sessionID, ChangeSet, SQLHash) → AlterResult{Applied, Failed *AlterFailure, Model *AlterModel}` (un fallo de la base llega en `Failed`, no como error). `ChangeSet{Database, Table, Fingerprint, Ops[]AlterOp}`. Vue envía operaciones tipadas y nunca arma SQL. Errores: `QUERY_FAILED` con `Detail` `readonly` o `busy`; `VALIDATION` con `Detail` = campo, `stale_preview` o `stale_model`; `UNSUPPORTED`; `QUERY_CANCELED`. Reutiliza `schema:invalidated`. Detalle en el spec 19.
+
+## RoutineService (etapa 2, spec 21; propuesto)
+`List(sessionID, db) → []Routine{Name, Kind, Definer, Comment, SecurityType, LastAltered}` (sin cuerpos), `Get(sessionID, db, kind, name) → RoutineDetail{…, Params[], CreateSQL, SQLMode, CharsetClient, CollationConnection, BodyHidden, Fingerprint}`, `Template(kind) → string`, `Preview(sessionID, RoutineChange{Database, Kind, Name, Op create|replace|drop, SQL, Fingerprint, RecreateDefiner}) → RoutinePreview{Statements, SQLHash, Warnings, Destructive, NoRollback}`, `Apply(sessionID, RoutineChange, SQLHash) → RoutineResult{Applied, Failed, Restored, BackupSQL, Detail}`. Vue envía el texto del `CREATE` y una operación tipada y nunca arma SQL. Errores: `QUERY_FAILED` con `Detail` `readonly|busy`; `VALIDATION` con `Detail` `head|name_changed|database|delimiter|too_large|empty|stale_preview|stale_model`; `NOT_FOUND`; `UNSUPPORTED`; `QUERY_CANCELED`. `List` y `Get` funcionan en solo lectura. Detalle en el spec 21.

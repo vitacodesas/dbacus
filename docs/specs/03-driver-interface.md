@@ -86,7 +86,10 @@ func List() []Driver
 - Streaming real: `rows.Next()` sin `ReadAll`; `MaxAllowedPacket` respetado.
 
 ## Generación de DDL (spec 19, implementado en T13.2)
-Interfaz **opcional** `DDLGenerator` (patrón de `Validator`): `Generate(ChangeSet, Model, ServerInfo) → []string, []Warning`. `ServerInfo` expone la versión y si es MariaDB. Identificadores con `QuoteIdent`, literales con `QuoteString`. El driver no ejecuta: ejecuta `AlterService` por una conexión de `Session.AcquireConn`, así el modo solo lectura se aplica igual.
+Interfaz **opcional** `DDLGenerator` (patrón de `Validator`): `Generate(ChangeSet, Model, ServerInfo) → []string, []Warning`. `ServerInfo` expone la versión y si es MariaDB. Identificadores con `QuoteIdent`, literales con `QuoteString`. El driver no ejecuta: ejecuta `AlterService` por una conexión de `Pool.AcquireEdit` (efímera; igual que `AcquireConn` ejecuta `SET SESSION TRANSACTION READ ONLY` en perfiles de solo lectura), así el modo solo lectura se aplica igual.
+
+## Rutinas almacenadas (spec 21, propuesto)
+Interfaz **opcional** `RoutineReader` (patrón de `DDLGenerator`): `Routines(ctx, db) → []Routine` (sin cuerpos) y `DescribeRoutine(ctx, db, kind, name) → RoutineDetail`. Un driver que no la implemente no ofrece rutinas (`UNSUPPORTED`). La escritura (pre-validación, `DROP`, `CREATE`, restauración) la ejecuta `RoutineService` por `AcquireEdit`, una sentencia por llamada.
 
 ## Escritura parametrizada (T7.2, spec 13)
 `Pool.AcquireEdit(ctx)` entrega una conexión efímera con `CLIENT_FOUND_ROWS`, y `Conn` añade `Exec(ctx, stmt, args...) (rowsAffected, error)` (parámetros del driver, nunca interpolados), `Begin`, `Commit` y `Rollback` (idempotente sin transacción; `Release` revierte una transacción olvidada). Solo la edición de celdas los usa; el SQL del usuario sigue por `Run`. Verificado en MySQL 8.0/8.4 y MariaDB 10.11: `BIGINT UNSIGNED` máximo, `DECIMAL`, `DATETIME(6)`, bytes, emojis, NULL con `<=>`, intento de inyección guardado literalmente, commit/rollback y aislamiento entre conexiones.
