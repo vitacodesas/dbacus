@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/vitacodesas/dbacus/internal/apperr"
 	"github.com/vitacodesas/dbacus/internal/driver"
@@ -17,6 +18,11 @@ type pool struct {
 	aux *sql.DB // solo KILL QUERY
 	// edit: conexiones con CLIENT_FOUND_ROWS, solo para aplicar ediciones de celdas (driver.Pool.AcquireEdit).
 	edit *sql.DB
+	// mon: una sola conexión para el monitoreo (spec 22): no consume plazas de pestaña ni compite con el pool general.
+	// Se abre bajo demanda (sql.OpenDB no conecta) y cada uso la deja en solo lectura (ver withMon).
+	mon     *sql.DB
+	monMu   sync.Mutex
+	monKind int // 0 sin detectar, 1 MySQL, 2 MariaDB (decide max_execution_time o max_statement_time)
 	// readOnly: cada conexión dedicada arranca en una transacción de solo lectura (spec 10).
 	readOnly bool
 	schema   driver.SchemaReader
@@ -34,7 +40,9 @@ func (p *pool) ServerVersion(ctx context.Context) (string, error) {
 
 func (p *pool) Schema() driver.SchemaReader { return p.schema }
 
-func (p *pool) Close() error { return errors.Join(p.db.Close(), p.aux.Close(), p.edit.Close()) }
+func (p *pool) Close() error {
+	return errors.Join(p.db.Close(), p.aux.Close(), p.edit.Close(), p.mon.Close())
+}
 
 func (p *pool) Acquire(ctx context.Context) (driver.Conn, error) { return p.acquire(ctx, p.db) }
 

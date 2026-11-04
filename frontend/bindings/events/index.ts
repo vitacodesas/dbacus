@@ -29,6 +29,21 @@ export const ExportProgress = "export:progress";
 export const HistoryAdded = "history:added";
 
 /**
+ * Name of the custom event "monitor:processes".
+ */
+export const MonitorProcesses = "monitor:processes";
+
+/**
+ * Name of the custom event "monitor:sample".
+ */
+export const MonitorSample = "monitor:sample";
+
+/**
+ * Name of the custom event "monitor:state".
+ */
+export const MonitorState = "monitor:state";
+
+/**
  * Name of the custom event "ping:tick".
  */
 export const PingTick = "ping:tick";

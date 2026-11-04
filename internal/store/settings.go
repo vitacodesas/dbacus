@@ -62,6 +62,16 @@ func ValidateSettings(st model.Settings) *apperr.AppError {
 		return bad("sidebarWidth")
 	case st.SplitRatio < 0.1 || st.SplitRatio > 0.9:
 		return bad("splitRatio")
+	case st.MonitorRawDays < 1 || st.MonitorRawDays > 30:
+		return bad("monitorRawDays")
+	case st.MonitorHourlyDays < st.MonitorRawDays || st.MonitorHourlyDays > 365:
+		return bad("monitorHourlyDays")
+	case st.MonitorDailyDays < st.MonitorHourlyDays || st.MonitorDailyDays > 3650:
+		return bad("monitorDailyDays")
+	case st.MonitorMaxMiB < 50 || st.MonitorMaxMiB > 100_000:
+		return bad("monitorMaxMiB")
+	case st.MonitorIntervalSec < 5 || st.MonitorIntervalSec > 900:
+		return bad("monitorIntervalSec")
 	case len(st.CollapsedGroups) > maxCollapsedGroups || slices.ContainsFunc(st.CollapsedGroups, func(id string) bool { return len(id) > 64 }):
 		return bad("collapsedGroups")
 	}

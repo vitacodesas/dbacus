@@ -16,6 +16,15 @@
 - No hay `multiStatements` implícito en el driver; la división la hace `sqlsplit` y cada sentencia se envía por separado.
 - Opción por perfil "Solo lectura": la sesión ejecuta `SET SESSION TRANSACTION READ ONLY` y Go rechaza sentencias no-SELECT/SHOW/DESCRIBE/EXPLAIN (defensa en profundidad; la garantía real es del servidor).
 
+## Monitoreo (spec 22)
+- Solo lectura siempre: la conexión del monitor ejecuta `SET SESSION TRANSACTION READ ONLY` aunque el perfil no sea de solo lectura, y toda consulta que emite es `IsReadOnlySafe` (los `SET` de preparación de la conexión son constantes). Está permitido en perfiles de solo lectura.
+- **Nunca se persiste** `INFORMATION_SCHEMA.PROCESSLIST.INFO` ni `QUERY_SAMPLE_TEXT` (traen literales, a veces credenciales). Lo histórico guarda `DIGEST_TEXT` normalizado, su hash y contadores; `INFO` vive en memoria, truncado a 2 KiB, solo en la vista En vivo.
+- El texto normalizado puede revelar nombres de tablas y columnas: se avisa en Ajustes y existe «Borrar datos de monitoreo» por conexión.
+- Retención por tiempo y tope de tamaño (spec 22 ⚑D10); borrar un perfil borra sus datos.
+- `KILL` no existe en v1: «Copiar KILL» solo arma texto.
+- Los digests de las sentencias fijas del propio monitor (`monitor.IsOwnStatement`) no se guardan: no ensucian el ranking ni aparecen como actividad del usuario. Límite conocido: otro cliente que ejecute exactamente la misma forma tampoco aparece.
+- Los logs del monitor llevan códigos y contadores, nunca SQL ni texto de digest.
+
 ## Logs y telemetría
 - `slog` con redacción: claves `password|passphrase|secret|token` → `***`; el SQL se registra solo en nivel debug y truncado a 200 chars.
 - Sin telemetría ni llamadas de red salvo las del usuario.

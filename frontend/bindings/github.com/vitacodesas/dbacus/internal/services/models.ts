@@ -154,6 +154,32 @@ export interface HistoryQuery {
     "cursor": string;
 }
 
+export interface MonitorProcessesEvent {
+    "sessionId": string;
+    "snapshot": model$0.ProcessSnapshot;
+}
+
+export interface MonitorSampleEvent {
+    "runId": string;
+    "at": string;
+    "qps": number;
+    "threadsRunning": number;
+    "threadsConnected": number;
+    "longestSec": number;
+}
+
+export interface MonitorStateEvent {
+    "runId": string;
+    "profileId": string;
+
+    /**
+     * running | stopped | disconnected | degraded
+     */
+    "state": string;
+    "source"?: string;
+    "reason"?: string;
+}
+
 /**
  * PageRequest pide otra página de una sentencia ya paginada.
  */

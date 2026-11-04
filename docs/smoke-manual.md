@@ -102,6 +102,26 @@ Hacerlo con la app nativa y una base de pruebas con rutinas (la verdad contra un
 - [ ] Un `CREATE PROCEDURE` ejecutado desde una pestaña de consulta refresca el grupo de rutinas sin recargar las tablas.
 - [ ] «Ver CREATE» de una tabla se ve en Monaco de solo lectura y se puede copiar.
 
+## Monitoreo DBA (spec 22)
+Hacerlo con la app nativa contra un servidor real (la verdad contra el servidor solo se probó desde Go y la UI contra el simulado; nada pasó por los bindings de Wails con un servidor real).
+- [ ] El ítem «Monitor» de la barra de actividad abre la vista; volver a las consultas conserva las pestañas, el texto de Monaco, los resultados y las ediciones pendientes (Monaco sin perder tamaño ni foco).
+- [ ] **En vivo**: la lista de procesos coincide con `SHOW PROCESSLIST` hecho a mano; la conexión del propio monitor no aparece; «Copiar KILL» y «KILL QUERY» pegan el texto correcto; el máximo de conexiones coincide con `@@max_connections`.
+- [ ] **Servidor con carga** (p. ej. `sysbench` o un bucle de consultas con una sin índice): iniciar el monitoreo; tras unos minutos «Top queries» muestra la consulta cara arriba por tiempo total, con filas examinadas/enviadas altas y «sin índice»; cambiar de criterio reordena.
+- [ ] **Ejecución de varias horas**: dejar monitoreando 4–8 h con el intervalo por defecto (30 s). Comprobar que la app no crece en memoria de forma sostenida, que el tamaño de `app.db` está en el orden de lo medido (~5 MiB/día en datos sintéticos) y que la carga del servidor por el monitor es despreciable (`SHOW PROCESSLIST` y `Threads_connected`: el monitor es una sola conexión).
+- [ ] **Cierre y reapertura de la app** con el monitoreo en marcha: al reabrir, «Ejecuciones» muestra la anterior con motivo «App cerrada» (o «Cierre brusco» si se mató el proceso) y las gráficas muestran el tramo como hueco «sin datos», no como ceros ni línea continua.
+- [ ] **Cerrar la conexión** con el monitoreo en marcha: la ejecución termina con «Conexión cerrada» y aparece el aviso; reconectar y reiniciar no mezcla las lecturas (la primera muestra solo fija la línea base).
+- [ ] **Reinicio o `TRUNCATE`** (en un servidor de pruebas): `TRUNCATE TABLE performance_schema.events_statements_summary_by_digest` y reinicio del servidor durante la ejecución no producen picos negativos ni enormes en el ranking ni en las tasas.
+- [ ] **Usuario sin `PROCESS`**: banner «solo se ven los procesos de tu propio usuario» con el `GRANT` copiable; el monitoreo funciona con lo que se ve.
+- [ ] **Usuario sin `SELECT` en `performance_schema`**: «Top queries» muestra el motivo y el `GRANT`; En vivo y Métricas siguen funcionando; no se ejecutó nada para arreglarlo.
+- [ ] **`performance_schema` apagado** (`performance_schema=OFF` y reinicio): el aviso dice que requiere reiniciar el servidor y no ofrece ningún botón para activarlo.
+- [ ] **MariaDB 10.11 con `performance_schema=ON`** (la imagen de prueba lo trae apagado): el ranking de extremo a extremo, los digests propios del monitor ocultos y las columnas del digest (**sin verificar**).
+- [ ] **Mutex del processlist bajo carga** en MySQL 8.0.22+ con cientos de conexiones activas: medir la latencia de otros clientes con y sin la vista En vivo abierta (intervalo de 2 s) y con `performance_schema_show_processlist` en ON y OFF (**sin medir**).
+- [ ] **Perfil de solo lectura**: se puede iniciar el monitoreo y no se escribe nada en el servidor (comprobar con el general log o `performance_schema` que solo hay `SELECT`/`SHOW`/`SET SESSION`).
+- [ ] **Anotaciones**: clic en una gráfica o «Añadir nota» crea la línea vertical; borrarla la quita; sobrevive al reiniciar la app.
+- [ ] **Gráficas (uPlot)** en la ventana nativa de macOS, Windows y Linux, en claro y oscuro: se pintan, no hay pantalla en blanco ni violaciones de CSP, cambiar de tema las repinta, y funcionan tanto en el build como en `wails3 dev`.
+- [ ] **Ajustes**: cambiar retención, tope de tamaño e intervalo y reabrir; un valor fuera de rango se rechaza en el campo. «Borrar datos» pide confirmación y vacía «Ejecuciones».
+- [ ] Rango de 7 días en «Top queries» con varios días de datos crudos: tarda del orden de 0,7 s (spinner visible) y no bloquea la interfaz.
+
 ## Ajustes e interfaz
 - [ ] Cambiar tema/idioma en Ajustes (`⌘/Ctrl+,`) y reabrir: se conserva. Ancho del panel y del divisor también.
 - [ ] Un límite de filas bajo (p. ej. 1 000) aplica a la siguiente consulta; uno fuera de rango se rechaza en el campo.
@@ -113,3 +133,4 @@ Hacerlo con la app nativa y una base de pruebas con rutinas (la verdad contra un
 - 2026-10-28 (tarde, macOS): verificado el modo solo lectura con la sesión abierta (protección al instante, aviso «Reconectar», candado visible), el llavero (la entrada se crea al guardar y desaparece al borrar la conexión) y la corrección C1 (base por pestaña tras reconectar).
 - 2026-10-28 (macOS, `wails3 dev`, MySQL de prueba): verificado el bloque de exportación completo y la cancelación de SLEEP. Hallazgo: la exportación con LIMIT automático exportaba solo lo cargado; corregido (spec 07). Pendiente: llavero, SSH/TLS, solo lectura en la app nativa, CSP en la ventana nativa, fluidez del scroll con 1 M de filas.
 - 2026-10-28 (noche, macOS): verificado «Nueva fila» y la reapertura de la conexión de la pestaña tras detener una consulta (C7). Pendiente de probar en la app nativa: insertar a partir de una fila existente, eliminar/restaurar, conflictos de borrado, CASCADE/RESTRICT y el lote mixto.
+- 2026-11-04: añadido el bloque «Monitoreo DBA» (spec 22). Nada verificado aún en la app nativa.

@@ -109,6 +109,25 @@ type DDLGenerator interface {
 	GenerateDDL(cs model.ChangeSet, m model.AlterModel, info ServerInfo) ([]string, error)
 }
 
+// ActivityReader es opcional (spec 22): lo implementa el Pool de un motor con procesos y estadísticas por digest. El
+// servicio lo obtiene con sess.Pool.(ActivityReader) y devuelve UNSUPPORTED si falta. Todo es de solo lectura y va por una
+// conexión propia (no consume plazas de pestaña ni compite con el pool general). Una fuente que no se puede leer por
+// falta de privilegios o de performance_schema es un estado de Probe, no un error.
+type ActivityReader interface {
+	// Probe sondea cada fuente y devuelve su estado con un Hint fijo. Solo falla si no hay conexión.
+	Probe(ctx context.Context) (model.MonitorCaps, error)
+	// Processes lista los hilos (INFO truncado a 2 KiB), sin la conexión del monitor, por TimeSec descendente.
+	Processes(ctx context.Context) ([]model.Process, error)
+	// GlobalStatus devuelve los contadores numéricos pedidos; una variable ausente o no numérica no aparece en el mapa.
+	GlobalStatus(ctx context.Context, names []string) (map[string]uint64, error)
+	// MaxConnections devuelve @@global.max_connections (el máximo con el que se compara Threads_connected).
+	MaxConnections(ctx context.Context) (uint64, error)
+	// Digests lee los contadores acumulados de cada digest, sin su texto.
+	Digests(ctx context.Context) ([]model.DigestCounters, error)
+	// DigestTexts devuelve el texto normalizado (≤ 4 KiB) de los digests pedidos.
+	DigestTexts(ctx context.Context, digests []string) (map[string]string, error)
+}
+
 // RoutineReader es opcional (spec 21): lo implementa el SchemaReader de un motor con procedimientos y funciones.
 // Routines lista sin cuerpos (una base puede tener cientos); DescribeRoutine lee el CREATE completo, sin caché.
 type RoutineReader interface {

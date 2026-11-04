@@ -28,7 +28,10 @@ func TestMigrationsIdempotent(t *testing.T) {
 		require.NoError(t, err)
 		var n int
 		require.NoError(t, s.db.QueryRow(`SELECT COUNT(1) FROM schema_migrations`).Scan(&n))
-		require.Equal(t, 2, n)
+		require.Equal(t, 3, n)
+		for _, tbl := range []string{"monitor_run", "monitor_sample", "monitor_digest", "monitor_digest_sample", "monitor_rollup_hour", "monitor_rollup_day", "monitor_annotation"} {
+			require.NoError(t, s.db.QueryRow(`SELECT COUNT(1) FROM `+tbl).Scan(&n), tbl)
+		}
 		require.NoError(t, s.Close())
 	}
 }

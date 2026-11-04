@@ -1,5 +1,5 @@
 import { Events } from "@wailsio/runtime";
-import type { EditApplied, ExportDone, ExportProgress, HistoryAdded, QueryDone, QueryError, QueryProgress, QueryStarted, QueryStatement, SchemaInvalidated, SessionClosed } from "../types";
+import type { EditApplied, ExportDone, ExportProgress, HistoryAdded, QueryDone, QueryError, QueryProgress, QueryStarted, QueryStatement, SchemaInvalidated, SessionClosed, MonitorProcessesEvent, MonitorSampleEvent, MonitorStateEvent } from "../types";
 
 export interface PingTick {
   seq: number;
@@ -47,4 +47,14 @@ export function onExportProgress(h: (ev: ExportProgress) => void): Unsubscribe {
 }
 export function onExportDone(h: (ev: ExportDone) => void): Unsubscribe {
   return Events.On("export:done", (e: { data: ExportDone }) => h(e.data));
+}
+
+export function onMonitorSample(h: (ev: MonitorSampleEvent) => void): Unsubscribe {
+  return Events.On("monitor:sample", (e: { data: MonitorSampleEvent }) => h(e.data));
+}
+export function onMonitorState(h: (ev: MonitorStateEvent) => void): Unsubscribe {
+  return Events.On("monitor:state", (e: { data: MonitorStateEvent }) => h(e.data));
+}
+export function onMonitorProcesses(h: (ev: MonitorProcessesEvent) => void): Unsubscribe {
+  return Events.On("monitor:processes", (e: { data: MonitorProcessesEvent }) => h(e.data));
 }

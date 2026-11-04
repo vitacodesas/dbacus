@@ -16,6 +16,9 @@ declare module "@wailsio/runtime" {
             "export:done": services$0.ExportDone;
             "export:progress": services$0.ExportProgress;
             "history:added": services$0.HistoryAdded;
+            "monitor:processes": services$0.MonitorProcessesEvent;
+            "monitor:sample": services$0.MonitorSampleEvent;
+            "monitor:state": services$0.MonitorStateEvent;
             "ping:tick": services$0.PingTick;
             "query:done": services$0.QueryDone;
             "query:error": services$0.QueryError;

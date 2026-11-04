@@ -35,6 +35,15 @@ type Driver struct {
 	// OnDDL genera el SQL de un ChangeSet (driver.DDLGenerator); si es nil devuelve un único «ALTER TABLE fake».
 	OnDDL func(cs model.ChangeSet, m model.AlterModel, info driver.ServerInfo) ([]string, error)
 
+	// Monitoreo (driver.ActivityReader, spec 22). Sin hook, cada método devuelve un resultado vacío; Caps vacío ⇒ todas las
+	// fuentes en `ok`.
+	Caps             *model.MonitorCaps
+	OnProcesses      func(ctx context.Context) ([]model.Process, error)
+	OnGlobalStatus   func(ctx context.Context, names []string) (map[string]uint64, error)
+	OnMaxConnections func(ctx context.Context) (uint64, error)
+	OnDigests        func(ctx context.Context) ([]model.DigestCounters, error)
+	OnDigestTexts    func(ctx context.Context, digests []string) (map[string]string, error)
+
 	SchemaReader driver.SchemaReader // si es nil se usa un *Schema vacío
 	OnKill       func(connID string) // se llama en cada Conn.Kill
 }
@@ -99,6 +108,51 @@ func (p *Pool) Schema() driver.SchemaReader {
 	return &Schema{}
 }
 func (p *Pool) Close() error { p.Closed.Store(true); return nil }
+
+var _ driver.ActivityReader = (*Pool)(nil)
+
+func (p *Pool) Probe(context.Context) (model.MonitorCaps, error) {
+	if c := p.d.Caps; c != nil {
+		return *c, nil
+	}
+	ok := model.SourceState{State: model.SourceOK, Reason: model.ReasonOK}
+	return model.MonitorCaps{ServerVersion: p.d.Version, ServerID: "fake", Processlist: ok, Digest: ok, Status: ok}, nil
+}
+
+func (p *Pool) Processes(ctx context.Context) ([]model.Process, error) {
+	if p.d.OnProcesses != nil {
+		return p.d.OnProcesses(ctx)
+	}
+	return []model.Process{}, nil
+}
+
+func (p *Pool) GlobalStatus(ctx context.Context, names []string) (map[string]uint64, error) {
+	if p.d.OnGlobalStatus != nil {
+		return p.d.OnGlobalStatus(ctx, names)
+	}
+	return map[string]uint64{}, nil
+}
+
+func (p *Pool) MaxConnections(ctx context.Context) (uint64, error) {
+	if p.d.OnMaxConnections != nil {
+		return p.d.OnMaxConnections(ctx)
+	}
+	return 0, nil
+}
+
+func (p *Pool) Digests(ctx context.Context) ([]model.DigestCounters, error) {
+	if p.d.OnDigests != nil {
+		return p.d.OnDigests(ctx)
+	}
+	return []model.DigestCounters{}, nil
+}
+
+func (p *Pool) DigestTexts(ctx context.Context, digests []string) (map[string]string, error) {
+	if p.d.OnDigestTexts != nil {
+		return p.d.OnDigestTexts(ctx, digests)
+	}
+	return map[string]string{}, nil
+}
 
 // AcquireEdit entrega una conexión como Acquire y la anota en Edits (para que los tests distingan las de edición).
 func (p *Pool) AcquireEdit(ctx context.Context) (driver.Conn, error) {

@@ -102,10 +102,16 @@ func Run(assets fs.FS) error {
 	})
 	queryFiles.PurgeTrash(lc.Context())
 
+	monitorSvc := services.NewMonitorService(services.MonitorDeps{Sessions: sessions, Store: st, Emit: emit})
+	lc.OnShutdown("monitor", monitorSvc.ServiceShutdown) // después de sessions en el registro: se cierra antes (LIFO)
+	monitorBG := services.BackgroundOf(monitorSvc)
+	lc.Go(monitorBG.RunMaintenance)
+
 	svcs := []application.Service{
 		application.NewService(&services.PingService{}),
 		application.NewService(services.NewConnectionService(services.ConnectionDeps{
 			Store: st, Secrets: secrets.NewKeyring(), Sessions: sessions, KnownHosts: knownHosts,
+			OnConnected: monitorBG.AutoStart,
 			PickFile: func(title string) (string, error) {
 				return application.Get().Dialog.OpenFile().SetTitle(title).CanChooseFiles(true).PromptForSingleSelection()
 			},
@@ -118,6 +124,7 @@ func Run(assets fs.FS) error {
 		application.NewService(services.NewEditService(services.EditDeps{Sessions: sessions, Results: resultMgr, Schema: schemaSvc, Store: st, History: history, Emit: emit})),
 		application.NewService(services.NewRoutineService(services.RoutineDeps{Sessions: sessions, Schema: schemaSvc, Store: st, History: history})),
 		application.NewService(queryFiles),
+		application.NewService(monitorSvc),
 		application.NewService(services.NewSettingsService(st)),
 	}
 

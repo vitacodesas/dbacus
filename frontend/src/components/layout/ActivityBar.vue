@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Database, FileCode, FolderTree, History, Settings } from "lucide-vue-next";
+import { Activity, Database, FileCode, FolderTree, History, Settings } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { useUiStore, type SidebarView } from "../../stores/ui";
 import BaseTooltip from "../ui/BaseTooltip.vue";
@@ -25,6 +25,18 @@ const items: { view: SidebarView; icon: typeof Database; label: string }[] = [
         @click="ui.selectSidebarView(item.view)"
       >
         <component :is="item.icon" class="size-5" />
+      </button>
+    </BaseTooltip>
+    <BaseTooltip :text="t('activity.monitor')">
+      <button
+        class="grid size-9 place-items-center rounded-md text-muted hover:bg-hover hover:text-fg"
+        :class="ui.mainView === 'monitor' && 'bg-hover text-fg'"
+        :aria-label="t('activity.monitor')"
+        :aria-pressed="ui.mainView === 'monitor'"
+        data-testid="open-monitor"
+        @click="ui.toggleMonitor()"
+      >
+        <Activity class="size-5" />
       </button>
     </BaseTooltip>
     <div class="mt-auto">

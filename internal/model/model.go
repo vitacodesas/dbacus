@@ -40,6 +40,8 @@ type ConnectionProfile struct {
 	NoHistory bool `json:"noHistory"`
 	// ReadOnly abre las conexiones con SET SESSION TRANSACTION READ ONLY y rechaza en Go lo que no sea lectura (spec 10).
 	ReadOnly bool `json:"readOnly"`
+	// MonitorAutoStart inicia el monitoreo al conectar (spec 22). Cero = solo cuando el usuario lo inicia.
+	MonitorAutoStart bool `json:"monitorAutoStart"`
 	// Estado de los secretos en el llavero; los fija el servicio (el cliente no puede escribirlos).
 	HasPassword      bool      `json:"hasPassword"`
 	HasSSHPassword   bool      `json:"hasSshPassword"`
@@ -82,6 +84,12 @@ type Settings struct {
 	SplitRatio          float64 `json:"splitRatio"`
 	// CollapsedGroups son los ids de los grupos de conexiones plegados en la lista (spec 17); "__none__" es «Sin grupo».
 	CollapsedGroups []string `json:"collapsedGroups"`
+	// Monitoreo DBA (spec 22): retención escalonada, tope de tamaño del archivo local e intervalo por defecto.
+	MonitorRawDays     int `json:"monitorRawDays"`
+	MonitorHourlyDays  int `json:"monitorHourlyDays"`
+	MonitorDailyDays   int `json:"monitorDailyDays"`
+	MonitorMaxMiB      int `json:"monitorMaxMiB"`
+	MonitorIntervalSec int `json:"monitorIntervalSec"`
 }
 
 func DefaultSettings() Settings {
@@ -95,6 +103,12 @@ func DefaultSettings() Settings {
 		SidebarWidth:       300,
 		SplitRatio:         0.5,
 		CollapsedGroups:    []string{},
+
+		MonitorRawDays:     7,
+		MonitorHourlyDays:  90,
+		MonitorDailyDays:   365,
+		MonitorMaxMiB:      500,
+		MonitorIntervalSec: 30,
 	}
 }
 

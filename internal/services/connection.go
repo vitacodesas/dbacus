@@ -69,6 +69,8 @@ type ConnectionDeps struct {
 	KnownHosts *tunnel.KnownHosts
 	// PickFile abre el diálogo nativo de archivo; "" si se cancela.
 	PickFile func(title string) (string, error)
+	// OnConnected se llama tras abrir una sesión (opcional; no debe bloquear). Lo usa el monitoreo automático (spec 22).
+	OnConnected func(sessionID string, p model.ConnectionProfile)
 }
 
 // ConnectionService expone la gestión de perfiles y sesiones a Vue (spec 02/04).
@@ -318,6 +320,9 @@ func (s *ConnectionService) Connect(ctx context.Context, id string, overrides *C
 	sess, err := s.d.Sessions.Open(ctx, req)
 	if err != nil {
 		return SessionInfo{}, toAppErr(err)
+	}
+	if s.d.OnConnected != nil {
+		s.d.OnConnected(sess.ID, p)
 	}
 	return infoOf(sess), nil
 }

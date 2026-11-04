@@ -11,6 +11,7 @@
 │ StatusBar: sesión · BD · filas · tiempo · estado                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
+- **Monitor** (spec 22): ítem de la `ActivityBar` que cambia el **área principal** a `MonitorView` (`ui.mainView = 'monitor'`) sin desmontar las pestañas de consulta; sus sub-pestañas son En vivo, Top queries, Métricas y Ejecuciones. No usa el sidebar ni `TabState`.
 - Sin sesión activa: pantalla de bienvenida con lista de conexiones y CTA "Nueva conexión".
 - Sidebar redimensionable (240–480 px) y colapsable (`⌘/Ctrl+B`); splitter editor/resultados persistido.
 

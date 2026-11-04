@@ -19,6 +19,8 @@ const (
 	idleTime     = 5 * time.Minute
 	// Pool auxiliar solo para KILL QUERY: nunca compite con el pool general.
 	auxMaxConns = 2
+	// Conexión del monitoreo (spec 22): una sola, así una muestra lenta nunca abre más carga sobre el servidor.
+	monMaxConns = 1
 )
 
 func init() { driver.Register(&Driver{}) }
@@ -64,7 +66,12 @@ func (*Driver) Open(_ context.Context, cfg driver.ConnConfig, dial driver.DialFu
 	edit.SetMaxIdleConns(0) // efímera: no se conserva abierta
 	edit.SetConnMaxIdleTime(time.Second)
 
-	p := &pool{db: db, aux: aux, edit: edit, readOnly: cfg.Profile.ReadOnly}
+	mon := sql.OpenDB(connector)
+	mon.SetMaxOpenConns(monMaxConns)
+	mon.SetMaxIdleConns(1)
+	mon.SetConnMaxIdleTime(2 * time.Minute)
+
+	p := &pool{db: db, aux: aux, edit: edit, mon: mon, readOnly: cfg.Profile.ReadOnly}
 	p.schema = newSchemaReader(db)
 	return p, nil
 }

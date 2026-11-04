@@ -13,7 +13,8 @@ Go es la fuente de verdad de datos; Pinia guarda **proyecciones** para pintar y 
 | `results` | por `tabId`: `status`, `statements[]` (con `paging`), `error`, `rowCounts`, `pageSeq` y `paging` (páginas en curso), `windows` (LRU; cambiar de página vacía la caché y `pageSeq` descarta las ventanas pedidas antes del cambio) | `onStarted/onStatement/onProgress/onDone/onError`, `fetchWindow`, `page(tabId, stmt, direction, column?)` | eventos `query:*` + `GetRows` |
 | `queryFiles` | `tree`, `root`, `search`, `unsaved` (derivado de `queryTabs`), `lastFolder` | `load`, `open`, `save`, `saveAs`, `move`, `remove`, `pickRoot`; aplica `PathChange` a `queryTabs` | `QueryFilesService` (spec 20) |
 | `history` | `entries[]`, `cursor`, `search` | `load`, `delete`, `clear` | `HistoryService` |
-| `ui` | `theme`, `sidebarWidth`, `splitRatio`, `sidebarView`, `locale`, `collapsedGroups[]`, `toasts[]` | setters; persistencia en Go (`ui_state`) | local + `SettingsService` |
+| `monitor` | por sesión: `caps`, `run`, `processes` (último `ProcessSnapshot`), `live` (arrendamiento activo), `tab`; por vista: `topRequest`, `top[]`, `series[]`, `runs[]` (todo lo calcula Go: el store **no agrega, ordena ni filtra**) | `start`, `stop`, `watch`/`unwatch` (renueva el arrendamiento cada 15 s y lo suelta al ocultar la vista), `loadTop`, `loadSeries`, `compare`, `annotate`, `purge`, `copyKill` | `MonitorService` (spec 22) + eventos `monitor:*` |
+| `ui` | `theme`, `sidebarWidth`, `splitRatio`, `sidebarView`, `mainView` (`queries`\|`monitor`), `locale`, `collapsedGroups[]`, `toasts[]` | setters; persistencia en Go (`ui_state`) | local + `SettingsService` |
 
 ## Reglas
 - Un solo punto de suscripción a eventos: `api/events.ts` registra listeners al arrancar y despacha a stores; los componentes **no** se suscriben directamente.

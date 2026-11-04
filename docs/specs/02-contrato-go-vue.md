@@ -25,6 +25,7 @@ type ConnectionProfile struct {
   SSH  SSHConfig
   Params map[string]string      // opciones extra del DSN (charset, timeout, etc.)
   ReadOnly bool                 // solo lectura (spec 10): sesión READ ONLY y Go rechaza lo que no sea lectura (`QUERY_FAILED`, Detail `readonly`)
+  MonitorAutoStart bool         // spec 22: iniciar el monitoreo al conectar (por defecto false)
   SavePassword bool             // si false, se pide al conectar (aplica a todos los secretos del perfil)
   HasPassword, HasSshPassword, HasSshPassphrase bool // solo lectura: los fija el servidor; evita leer el llavero al listar
   CreatedAt, UpdatedAt time.Time
@@ -123,7 +124,7 @@ Métodos:
 - `Explain(...)`: fuera de etapa 1.
 
 ## SettingsService
-`Get()` → `Settings{Theme, Locale, MaxRows, MaxResultMemoryMiB, HistoryRetention, ShowSystemDatabases, ConfirmEdits, SidebarWidth, SplitRatio, CollapsedGroups []string}` (`CollapsedGroups`: ids de grupos de conexiones plegados en la lista, `"__none__"` = «Sin grupo»; máx. 500 ids de ≤ 64 caracteres, spec 17); `Set(Settings)` → `Settings` (lo guardado). Cambios se validan en Go (`VALIDATION` con `Detail` = nombre del campo) y se persisten en `settings`. `QueryService` y el historial releen el store en cada uso: los límites aplican a la siguiente consulta sin reiniciar.
+`Get()` → `Settings{Theme, Locale, MaxRows, MaxResultMemoryMiB, HistoryRetention, ShowSystemDatabases, ConfirmEdits, SidebarWidth, SplitRatio, CollapsedGroups []string, MonitorRawDays, MonitorHourlyDays, MonitorDailyDays, MonitorMaxMiB, MonitorIntervalSec}` (los cinco `Monitor*` son de retención y muestreo, spec 22) (`CollapsedGroups`: ids de grupos de conexiones plegados en la lista, `"__none__"` = «Sin grupo»; máx. 500 ids de ≤ 64 caracteres, spec 17); `Set(Settings)` → `Settings` (lo guardado). Cambios se validan en Go (`VALIDATION` con `Detail` = nombre del campo) y se persisten en `settings`. `QueryService` y el historial releen el store en cada uso: los límites aplican a la siguiente consulta sin reiniciar.
 
 Reglas de serialización de celdas: enteros > 2^53 → `T:"bigint"` con `V` string; `[]byte` no UTF-8 → `T:"bytes"` con hex truncado; `DATETIME/TIMESTAMP` → string ISO sin zona salvo `TIMESTAMP`; `JSON` → string; textos > 64 KiB se truncan (`Trunc:true`) con opción de "ver completo" vía `GetCell(queryID, stmtIndex, row, col)`.
 
@@ -146,6 +147,9 @@ type HistoryEntry struct{ ID, ProfileID, SQL string; Database string; ExecutedAt
 | `schema:invalidated` | `{sessionId, database?, scope?}` (`scope: "routines"` invalida solo las rutinas de la base, spec 21) |
 | `export:progress` / `export:done` | `{jobId, rows, bytes}` / `{jobId, path, rows, bytes, canceled, error?}` |
 | `history:added` | `{profileId}` |
+| `monitor:sample` | `{runId, at, qps, threadsRunning, threadsConnected, longestSec}` (spec 22) |
+| `monitor:state` | `{runId, profileId, state "running\|stopped\|disconnected\|degraded", source?, reason?}` |
+| `monitor:processes` | `{sessionId, snapshot: ProcessSnapshot{at, rows, summary, maxConnections}}` (solo en memoria; `INFO` truncado a 2 KiB; `maxConnections` 0 si no se pudo leer) |
 
 ## Reglas
 - Todas las llamadas devuelven `(T, *AppError)` semánticamente: en Wails se expone como excepción con `AppError` serializado en JSON; `api/` lo reconstruye.
@@ -165,3 +169,6 @@ Consultas guardadas como archivos `.sql` bajo una carpeta raíz. `Root`, `List()
 
 ## RoutineService (etapa 2, spec 21)
 `List(sessionID, db) → []Routine{Name, Kind, Definer, Comment, SecurityType, LastAltered}` (sin cuerpos), `Get(sessionID, db, kind, name) → RoutineDetail{…, Params[], CreateSQL, SQLMode, CharsetClient, CollationConnection, BodyHidden, Fingerprint}`, `Template(kind) → string`, `CallStatement(sessionID, db, kind, name) → string`, `Preview(sessionID, RoutineChange{Database, Kind, Name, Op create|replace|drop, SQL, Fingerprint, RecreateDefiner}) → RoutinePreview{Statements, SQLHash, Warnings, Destructive, NoRollback}`, `Apply(sessionID, RoutineChange, SQLHash) → RoutineResult{Applied, Failed, Restored, BackupSQL, Detail}`. Vue envía el texto del `CREATE` y una operación tipada y nunca arma SQL. Errores: `QUERY_FAILED` con `Detail` `readonly|busy`; `VALIDATION` con `Detail` `head|name_changed|name|database|system|kind|op|delimiter|too_large|empty|body_hidden|stale_preview|stale_model`; `NOT_FOUND`; `UNSUPPORTED`; `QUERY_CANCELED`. `List` y `Get` funcionan en solo lectura. Detalle en el spec 21.
+
+## MonitorService (etapa 2, spec 22)
+`Capabilities(sessionID) → MonitorCaps{ServerVersion, IsMariaDB, ServerID, Processlist, Digest, Status SourceState{State, Reason, Hint}}` (sondea una vez por sesión y cachea) y `RefreshCapabilities(sessionID)` (vuelve a sondear), `Start(sessionID, MonitorConfig{IntervalSec, TopK, Processes, Status, Digest}) → MonitorRun{ID string, ProfileID, StartedAt, EndedAt?, Reason, IntervalSec, ServerVersion, ServerID, Samples, Gaps}` (intervalo 0 = el de `Settings`; sin ninguna fuente marcada = las tres; las no disponibles se omiten), `Stop(runID string)`, `Runs(profileID) → []MonitorRun`, `WatchProcesses(sessionID, intervalMs)` / `UnwatchProcesses(sessionID)` (arrendamiento de 30 s que la vista renueva), `Top(TopRequest) → []DigestStat`, `Digest(profileID, digest, from, to) → DigestDetail`, `Series(SeriesRequest) → []Series{Metric, Level, Points, Gaps, Annotations}` (además de las columnas de métricas admite la derivada `bp_hit_ratio`, % de aciertos del buffer pool, que calcula Go), `Compare(profileID, rangeA, rangeB) → Comparison`, `Annotate`, `DeleteAnnotation(id string)`, `Purge(profileID, before?)` (sin `before` y con una ejecución activa: `QUERY_FAILED/busy`), `CopyKill(sessionID, processID int64, queryOnly) → string` (arma `KILL <id>;` o `KILL QUERY <id>;`; no ejecuta). Las anotaciones usan `ID string`. Vue nunca agrega, ordena ni filtra. Errores: `QUERY_FAILED` con `Detail` `busy`; `VALIDATION` con `Detail` `interval|topK|range|metric|orderBy|text|processId|id|profileId`; `NOT_FOUND`; `UNSUPPORTED` (el driver no implementa `ActivityReader` o ninguna fuente pedida está disponible); `QUERY_CANCELED`. La falta de `performance_schema` o de privilegios es **estado en `Capabilities`**, no error. `Settings` gana `MonitorRawDays`, `MonitorHourlyDays`, `MonitorDailyDays`, `MonitorMaxMiB`, `MonitorIntervalSec`; `ConnectionProfile` gana `MonitorAutoStart`. Eventos `monitor:sample`, `monitor:state` y `monitor:processes`. Detalle en el spec 22.

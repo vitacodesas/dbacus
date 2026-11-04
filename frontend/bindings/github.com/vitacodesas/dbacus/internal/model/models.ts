@@ -91,6 +91,20 @@ export interface AlterWarning {
     "severity": string;
 }
 
+/**
+ * Annotation es una nota del usuario sobre la línea de tiempo (p. ej. «deploy v2.14»).
+ */
+export interface Annotation {
+    "id": string;
+    "profileId": string;
+    "at": string;
+
+    /**
+     * ≤ 200 caracteres
+     */
+    "text": string;
+}
+
 export interface CatalogColumn {
     "name": string;
     "dataType": string;
@@ -184,6 +198,16 @@ export interface ColumnSpec {
 }
 
 /**
+ * Comparison es el resultado de comparar un periodo base (A) con uno actual (B): consultas que empeoraron,
+ * aparecidas en B y desaparecidas de B. Las de Regressions y New traen Prev (el valor en A), ChangePct y Regression.
+ */
+export interface Comparison {
+    "regressions": DigestStat[] | null;
+    "new": DigestStat[] | null;
+    "gone": DigestStat[] | null;
+}
+
+/**
  * CompletionCatalog alimenta el autocompletado de Monaco (spec 05).
  */
 export interface CompletionCatalog {
@@ -231,6 +255,11 @@ export interface ConnectionProfile {
     "readOnly": boolean;
 
     /**
+     * MonitorAutoStart inicia el monitoreo al conectar (spec 22). Cero = solo cuando el usuario lo inicia.
+     */
+    "monitorAutoStart": boolean;
+
+    /**
      * Estado de los secretos en el llavero; los fija el servicio (el cliente no puede escribirlos).
      */
     "hasPassword": boolean;
@@ -243,6 +272,53 @@ export interface ConnectionProfile {
 export interface Database {
     "name": string;
     "isSystem": boolean;
+}
+
+/**
+ * DigestDetail es el detalle de un digest en un rango: totales, serie de ejecuciones/media y huecos del muestreo.
+ * Schema va vacío si el mismo digest aparece en varias bases (Schemas las lista todas).
+ */
+export interface DigestDetail {
+    "digest": string;
+    "text": string;
+    "schemas": string[] | null;
+    "stat": DigestStat;
+    "points": DigestPoint[] | null;
+    "gaps": TimeGap[] | null;
+}
+
+/**
+ * DigestPoint es un punto de la serie propia de un digest.
+ */
+export interface DigestPoint {
+    "t": string;
+    "execs": number;
+    "totalMs": number;
+    "avgMs": number;
+}
+
+export interface DigestStat {
+    "digest": string;
+    "schema": string;
+    "text": string;
+    "execs": number;
+    "totalMs": number;
+    "avgMs": number;
+    "maxObservedMs": number;
+    "rowsExamined": number;
+    "rowsSent": number;
+    "noIndex": number;
+    "tmpDisk": number;
+    "errors": number;
+    "prev"?: DigestStat | null;
+    "changePct": number;
+    "isNew": boolean;
+
+    /**
+     * ChangePct ≥ RegressionMinPct con ≥ RegressionMinExecs ejecuciones en ambos periodos (spec 22 ⚑D14)
+     */
+    "regression": boolean;
+    "approx": boolean;
 }
 
 export interface FKSpec {
@@ -322,9 +398,97 @@ export interface IndexSpec {
     "columns": IndexColumn[] | null;
 }
 
+export interface MonitorCaps {
+    "serverVersion": string;
+    "isMariaDB": boolean;
+
+    /**
+     * @@server_uuid o, si no existe, "id:<@@server_id>"
+     */
+    "serverId": string;
+    "processlist": SourceState;
+    "digest": SourceState;
+    "status": SourceState;
+}
+
+export interface MonitorConfig {
+    "intervalSec": number;
+    "topK": number;
+    "processes": boolean;
+    "status": boolean;
+    "digest": boolean;
+}
+
+/**
+ * MonitorRun es una sesión de monitoreo (spec 22 ⚑D15) tal como la ve Vue. El ID es texto: en el store es numérico.
+ */
+export interface MonitorRun {
+    "id": string;
+    "profileId": string;
+    "startedAt": string;
+    "endedAt"?: string | null;
+
+    /**
+     * running | stopped | disconnected | app_closed | crashed
+     */
+    "reason": string;
+    "intervalSec": number;
+    "serverVersion": string;
+    "serverId": string;
+    "samples": number;
+    "gaps": number;
+}
+
 export interface PathChange {
     "from": string;
     "to": string;
+}
+
+/**
+ * Process es una fila de INFORMATION_SCHEMA.PROCESSLIST. Info solo vive en memoria (spec 22 ⚑D7): nunca se persiste.
+ */
+export interface Process {
+    "id": number;
+    "user": string;
+    "host": string;
+    "db": string;
+    "command": string;
+    "timeSec": number;
+    "state": string;
+
+    /**
+     * truncado a 2 KiB
+     */
+    "info": string;
+    "infoTruncated": boolean;
+}
+
+/**
+ * ProcessSnapshot es lo que recibe la vista En vivo; solo en memoria.
+ */
+export interface ProcessSnapshot {
+    "at": string;
+    "rows": Process[] | null;
+    "summary": ProcessSummary;
+
+    /**
+     * MaxConnections es @@global.max_connections, leído una vez por vigilancia; 0 si no se pudo leer.
+     */
+    "maxConnections": number;
+}
+
+export interface ProcessSummary {
+    "total": number;
+
+    /**
+     * COMMAND <> 'Sleep'
+     */
+    "running": number;
+    "sleeping": number;
+    "waitingLock": number;
+    "longestSec": number;
+    "byCommand": { [_ in string]?: number } | null;
+    "byUser": { [_ in string]?: number } | null;
 }
 
 export interface QueryFile {
@@ -534,6 +698,33 @@ export interface SaveQueryRequest {
     "overwrite": boolean;
 }
 
+export interface Series {
+    "metric": string;
+
+    /**
+     * raw | hour | day
+     */
+    "level": string;
+    "points": SeriesPoint[] | null;
+    "gaps": TimeGap[] | null;
+    "annotations": Annotation[] | null;
+}
+
+export interface SeriesPoint {
+    "t": string;
+    "v": number;
+    "min"?: number | null;
+    "max"?: number | null;
+}
+
+export interface SeriesRequest {
+    "profileId": string;
+    "from": string;
+    "to": string;
+    "metrics": string[] | null;
+    "maxPoints": number;
+}
+
 export interface Settings {
     /**
      * light|dark|system
@@ -556,6 +747,32 @@ export interface Settings {
      * CollapsedGroups son los ids de los grupos de conexiones plegados en la lista (spec 17); "__none__" es «Sin grupo».
      */
     "collapsedGroups": string[] | null;
+
+    /**
+     * Monitoreo DBA (spec 22): retención escalonada, tope de tamaño del archivo local e intervalo por defecto.
+     */
+    "monitorRawDays": number;
+    "monitorHourlyDays": number;
+    "monitorDailyDays": number;
+    "monitorMaxMiB": number;
+    "monitorIntervalSec": number;
+}
+
+/**
+ * SourceState describe si una fuente (procesos, digest, estado global) se puede leer. Una fuente no disponible es un
+ * estado, no un error (spec 22 ⚑D9). Hint es texto fijo que explica cómo habilitarla; la app nunca lo ejecuta.
+ */
+export interface SourceState {
+    /**
+     * ok | degraded | unavailable
+     */
+    "state": string;
+
+    /**
+     * ver Reason*
+     */
+    "reason": string;
+    "hint": string;
 }
 
 export interface TLSConfig {
@@ -622,4 +839,28 @@ export interface TableDetail {
      * Collation es la collation por defecto de la tabla (spec 19): una columna que la tiene igual no la escribe en el DDL.
      */
     "collation": string;
+}
+
+export interface TimeGap {
+    "from": string;
+    "to": string;
+}
+
+/**
+ * TimeRange es un intervalo [From, To).
+ */
+export interface TimeRange {
+    "from": string;
+    "to": string;
+}
+
+export interface TopRequest {
+    "profileId": string;
+    "from": string;
+    "to": string;
+    "schema": string;
+    "orderBy": string;
+    "limit": number;
+    "compare": boolean;
+    "includeSystem": boolean;
 }

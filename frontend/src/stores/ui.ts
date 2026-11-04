@@ -6,7 +6,10 @@ import { setLocale, type Locale } from "../i18n";
 import type { AppError, Settings } from "../types";
 import { NO_GROUP } from "../composables/connectionGroups";
 
+type MonitorSettings = Pick<Settings, "monitorRawDays" | "monitorHourlyDays" | "monitorDailyDays" | "monitorMaxMiB" | "monitorIntervalSec">;
+
 export type Theme = "light" | "dark" | "system";
+export type MainView = "queries" | "monitor";
 export type SidebarView = "connections" | "schema" | "queries" | "history";
 export interface Toast {
   id: number;
@@ -30,6 +33,8 @@ export const useUiStore = defineStore("ui", () => {
   const sidebarCollapsed = ref(false);
   const splitRatio = ref(0.5);
   const sidebarView = ref<SidebarView>("connections");
+  /** Qué ocupa el área principal (spec 22 ⚑D12): no se persiste; el workspace de consultas sigue montado debajo. */
+  const mainView = ref<MainView>("queries");
   const locale = ref<Locale>("es");
   const showSystemDatabases = ref(false);
   const confirmEdits = ref(true);
@@ -39,6 +44,9 @@ export const useUiStore = defineStore("ui", () => {
   const settingsOpen = ref(false);
   /** Grupos de conexiones plegados en la lista (spec 17); NO_GROUP = «Sin grupo». Se guarda con el resto de ajustes. */
   const collapsedGroups = ref<string[]>([]);
+  // Retención y muestreo del monitoreo (spec 22): los edita la sección de Ajustes del Monitor; aquí solo viajan de ida y
+  // vuelta para que guardar otros ajustes no los pierda (Go valida el conjunto completo).
+  const monitor = ref<MonitorSettings>({ monitorRawDays: 7, monitorHourlyDays: 90, monitorDailyDays: 365, monitorMaxMiB: 500, monitorIntervalSec: 30 });
   let knownGroupIds: string[] | null = null;
   /** LIMIT automático para SELECT simples (0 = sin límite; el tope real es MaxRows de Go). */
   const autoLimit = ref(1000);
@@ -69,6 +77,10 @@ export const useUiStore = defineStore("ui", () => {
     }
   }
 
+  function toggleMonitor() {
+    mainView.value = mainView.value === "monitor" ? "queries" : "monitor";
+  }
+
   function toast(kind: Toast["kind"], message: string, action?: Toast["action"]) {
     const id = ++toastSeq;
     toasts.value.push({ id, kind, message, action });
@@ -86,6 +98,7 @@ export const useUiStore = defineStore("ui", () => {
     theme: theme.value, locale: locale.value, maxRows: maxRows.value, maxResultMemoryMiB: maxResultMemoryMiB.value,
     historyRetention: historyRetention.value, showSystemDatabases: showSystemDatabases.value, confirmEdits: confirmEdits.value,
     sidebarWidth: sidebarWidth.value, splitRatio: splitRatio.value, collapsedGroups: [...collapsedGroups.value],
+    ...monitor.value,
   });
   function apply(s: Settings) {
     theme.value = s.theme as Theme;
@@ -98,6 +111,10 @@ export const useUiStore = defineStore("ui", () => {
     sidebarWidth.value = s.sidebarWidth;
     splitRatio.value = s.splitRatio;
     collapsedGroups.value = [...(s.collapsedGroups ?? [])];
+    monitor.value = {
+      monitorRawDays: s.monitorRawDays, monitorHourlyDays: s.monitorHourlyDays, monitorDailyDays: s.monitorDailyDays,
+      monitorMaxMiB: s.monitorMaxMiB, monitorIntervalSec: s.monitorIntervalSec,
+    };
     prune();
   }
 
@@ -167,7 +184,7 @@ export const useUiStore = defineStore("ui", () => {
 
   return {
     theme, systemDark, resolvedTheme, sidebarWidth, sidebarCollapsed, splitRatio, sidebarView, locale, autoLimit, toasts,
-    showSystemDatabases, confirmEdits, maxRows, maxResultMemoryMiB, historyRetention, settingsOpen, collapsedGroups, isGroupCollapsed,
+    showSystemDatabases, confirmEdits, maxRows, maxResultMemoryMiB, historyRetention, settingsOpen, collapsedGroups, monitor, mainView, toggleMonitor, isGroupCollapsed,
     toggleGroup, forgetGroup, pruneGroups, load, saveSettings,
     setSidebarWidth, resizeSidebar, setSplitRatio, toggleSidebar, selectSidebarView, toast, dismissToast,
   };

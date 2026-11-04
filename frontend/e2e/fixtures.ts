@@ -10,6 +10,8 @@ export interface MockSeed {
   queries?: { path: string; sql: string; profileId?: string; profileName?: string; database?: string }[];
   /** Procedimientos y funciones extra en `sakila` (spec 21), para probar bases con cientos de rutinas. */
   routines?: number;
+  /** Monitor DBA (spec 22): escenario de permisos (`ok|own_only|no_privilege|perf_schema_off|consumer_off`) y cadencia de las muestras simuladas. */
+  monitor?: { caps?: string | Record<string, string>; processes?: number; sampleMs?: number };
 }
 
 /** Conexión de ejemplo ya guardada (el backend simulado empieza vacío en cada carga). */

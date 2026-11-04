@@ -7,6 +7,8 @@ type Any = any;
 interface Seed {
   profiles?: Any[];
   groups?: Any[];
+  /** Sesiones ya abiertas al arrancar (p. ej. para probar el Monitor sin pasar por el diálogo de conexión). */
+  sessions?: Any[];
   /**
    * Simula la paginación por cursor (spec 18) para `SELECT * FROM <tabla con clave>`. Es opt-in porque con ella activa los
    * resultados dejan de cargarse enteros y los E2E anteriores a T12.6 dan por hecho el LIMIT automático.
@@ -18,6 +20,12 @@ interface Seed {
   latencyMs?: number;
   /** Procedimientos y funciones extra generados en `sakila` (spec 21): sirve para probar bases con cientos de rutinas. */
   routines?: number;
+  /**
+   * Monitor DBA (spec 22): `caps` fija qué puede leer cada conexión (un escenario para todas o uno por id de perfil:
+   * ok | own_only | no_privilege | perf_schema_off | consumer_off), `processes` cuántos procesos simula (por defecto 8; con
+   * cientos se prueba la lista virtualizada) y `sampleMs` cada cuánto emite una muestra (por defecto, el intervalo).
+   */
+  monitor?: { caps?: string | Record<string, string>; processes?: number; sampleMs?: number };
 }
 const seed: Seed = (window as Any).__MOCK_SEED__ ?? {};
 const latency = seed.latencyMs ?? 20;
@@ -44,9 +52,9 @@ const fail = (code: string, message: string, detail = "") =>
 // ---- estado ------------------------------------------------------------------------------------------------------------
 const profiles: Any[] = (seed.profiles ?? []).map((p) => ({ ...blankProfile(), ...p }));
 const groups: Any[] = (seed.groups ?? []).map((g) => ({ id: "", name: "", color: "", createdAt: "", updatedAt: "", ...g }));
-const sessions: Any[] = [];
+const sessions: Any[] = (seed.sessions ?? []).map((x) => ({ sessionId: "", profileId: "", serverVersion: "8.0.36", currentDatabase: "", ...x }));
 const history: Any[] = [];
-let settings: Any = { theme: "light", locale: "es", maxRows: 100_000, maxResultMemoryMiB: 512, historyRetention: 5000, showSystemDatabases: false, confirmEdits: true, sidebarWidth: 300, splitRatio: 0.5, collapsedGroups: [] };
+let settings: Any = { theme: "light", locale: "es", maxRows: 100_000, maxResultMemoryMiB: 512, historyRetention: 5000, showSystemDatabases: false, confirmEdits: true, sidebarWidth: 300, splitRatio: 0.5, collapsedGroups: [], monitorRawDays: 7, monitorHourlyDays: 90, monitorDailyDays: 365, monitorMaxMiB: 500, monitorIntervalSec: 30 };
 let tabs: Any[] = [];
 
 function blankProfile(): Any {
@@ -267,7 +275,7 @@ export const ConnectionService = {
   ListSessions: () => cp(() => sessions.map((s) => ({ ...s }))),
   ListDrivers: () => cp(() => [{ name: "mysql", displayName: "MySQL / MariaDB", defaultPort: 3306, ssl: true }]),
   PickFile: () => cp(() => "/tmp/mock-key.pem"),
-  Disconnect: (id: string) => cp(() => void sessions.splice(0, sessions.length, ...sessions.filter((s) => s.sessionId !== id))),
+  Disconnect: (id: string) => cp(() => { monOnDisconnect(id); sessions.splice(0, sessions.length, ...sessions.filter((s) => s.sessionId !== id)); }),
   TrustHostKey: () => cp(() => undefined),
 };
 
@@ -981,6 +989,314 @@ export const SettingsService = {
     }),
 };
 
+
+// ---- Monitor DBA (spec 22) ----------------------------------------------------------------------------------------------
+// Imita MonitorService: mismos errores y validaciones que Go, procesos que cambian con el tiempo, 5 000 muestras con
+// huecos y anotaciones para Series, y un Top con datos de ejemplo. Nada de esto toca red ni base de datos.
+const MON_METRICS = [
+  "qps", "com_select", "com_insert", "com_update", "com_delete", "slow_queries", "aborted_connects", "aborted_clients",
+  "row_lock_waits", "row_lock_time_ms", "bp_reads", "bp_read_requests", "tmp_tables", "tmp_disk_tables", "select_full_join",
+  "bytes_received", "bytes_sent", "threads_connected", "threads_running", "proc_total", "proc_running", "proc_sleeping",
+  "proc_waiting_lock", "proc_longest_sec", "proc_long_count",
+  "bp_hit_ratio", // derivada: la calcula Go (store.MetricBufferPoolHitRatio)
+];
+const MON_ORDER = ["total_time", "execs", "avg_time", "rows_ratio", "no_index", "tmp_disk", "errors"];
+const MON_SYSTEM = new Set(["mysql", "sys", "performance_schema", "information_schema"]);
+const monScenarios: Record<string, string> = {};
+/** Perfiles cuyo histórico se «borró» (Purge sin fecha): Runs/Series/Top dejan de devolver el de ejemplo. */
+const monPurged = new Set<string>();
+const monScenario = (profileId: string): string => monScenarios[profileId] ?? (typeof seed.monitor?.caps === "object" ? (seed.monitor.caps[profileId] ?? "ok") : (seed.monitor?.caps ?? "ok"));
+const monOK = () => ({ state: "ok", reason: "ok", hint: "" });
+const monSession = (id: string) => {
+  const sess = sessions.find((x) => x.sessionId === id);
+  if (!sess) throw fail("NOT_FOUND", "La sesión no existe");
+  return sess;
+};
+function monCaps(sessionId: string) {
+  const sess = monSession(sessionId);
+  const sc = monScenario(sess.profileId);
+  const caps: Any = { serverVersion: sess.serverVersion, isMariaDB: false, serverId: "mock-server-uuid", processlist: monOK(), digest: monOK(), status: monOK() };
+  if (sc === "own_only") caps.processlist = { state: "degraded", reason: "own_only", hint: "GRANT PROCESS ON *.* TO 'app'@'%';" };
+  if (sc === "no_privilege") caps.digest = { state: "unavailable", reason: "no_privilege", hint: "GRANT SELECT ON performance_schema.* TO 'app'@'%';" };
+  if (sc === "perf_schema_off") caps.digest = { state: "unavailable", reason: "perf_schema_off", hint: "" };
+  if (sc === "consumer_off") caps.digest = { state: "unavailable", reason: "consumer_off", hint: "" };
+  return caps;
+}
+
+let monTick = 0;
+const MON_USERS = ["app_rw", "app_ro", "report", "etl", "root"];
+const MON_DBS = ["sakila", "pedidos", "catalogo", "staging"];
+const MON_SQL = [
+  "SELECT o.*, c.nombre FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.status = 'open'",
+  "SELECT DATE(created_at), SUM(total) FROM orders GROUP BY 1",
+  "UPDATE stock SET qty = qty - 1 WHERE sku = 'A-1029'",
+  "SELECT * FROM products WHERE category_id = 7 ORDER BY price",
+  "INSERT INTO audit_log (user_id, action) VALUES (42, 'login')",
+];
+function monProcesses(sessionId: string) {
+  const sess = monSession(sessionId);
+  const own = monScenario(sess.profileId) === "own_only";
+  const count = seed.monitor?.processes ?? 8;
+  let rows: Any[] = [];
+  for (let i = 0; i < count; i++) {
+    const sleeping = i % 3 === 1;
+    const timeSec = sleeping ? (i * 37 + monTick * 2) % 600 : (i * 11 + monTick) % 90;
+    const info = sleeping ? "" : MON_SQL[i % MON_SQL.length] + (i === 0 ? " /* " + "x".repeat(2100) + " */" : "");
+    rows.push({
+      id: 9000 + i, user: MON_USERS[i % MON_USERS.length], host: `10.0.0.${(i % 200) + 1}:5${String(i).padStart(4, "0")}`, db: MON_DBS[i % MON_DBS.length],
+      command: sleeping ? "Sleep" : "Query", timeSec, state: sleeping ? "" : i % 5 === 0 ? "Waiting for table metadata lock" : "executing",
+      info: info.length > 2048 ? info.slice(0, 2048) : info, infoTruncated: info.length > 2048,
+    });
+  }
+  if (own) rows = rows.filter((r) => r.user === "app_rw");
+  rows.sort((a, b) => b.timeSec - a.timeSec || a.id - b.id);
+  const by = (key: string) => rows.reduce((m: Any, r) => ((m[r[key]] = (m[r[key]] ?? 0) + 1), m), {});
+  return {
+    at: new Date().toISOString(), rows, maxConnections: 151,
+    summary: { total: rows.length, running: rows.filter((r) => r.command !== "Sleep").length, sleeping: rows.filter((r) => r.command === "Sleep").length, waitingLock: rows.filter((r) => /Waiting for/.test(r.state)).length, longestSec: Math.max(0, ...rows.filter((r) => r.command !== "Sleep").map((r) => r.timeSec)), byCommand: by("command"), byUser: by("user") },
+  };
+}
+
+const MON_LEASE_MS = 30_000;
+const monWatchers = new Map<string, { timer: ReturnType<typeof setInterval>; until: number; ms: number }>();
+const monStopWatch = (sessionId: string) => {
+  const w = monWatchers.get(sessionId);
+  if (w) clearInterval(w.timer);
+  monWatchers.delete(sessionId);
+};
+const monRuns: Any[] = [];
+const monTimers = new Map<string, ReturnType<typeof setInterval>>();
+let monRunSeq = 0;
+let monAnnSeq = 0;
+const monAnn: Any[] = [{ id: String(++monAnnSeq), profileId: "*", at: new Date(Date.now() - 20 * 3600_000).toISOString(), text: "deploy v2.14" }];
+const monActive = (profileId: string) => monRuns.find((r) => r.profileId === profileId && r.reason === "running");
+function monEnd(run: Any, reason: string, source = "") {
+  const t = monTimers.get(run.id);
+  if (t) clearInterval(t);
+  monTimers.delete(run.id);
+  run.reason = reason;
+  run.endedAt = new Date().toISOString();
+  Events.Emit("monitor:state", { runId: run.id, profileId: run.profileId, state: reason, source });
+}
+function monOnDisconnect(sessionId: string) {
+  const sess = sessions.find((x) => x.sessionId === sessionId);
+  monStopWatch(sessionId);
+  const run = sess && monActive(sess.profileId);
+  if (run) monEnd(run, "disconnected");
+}
+
+/** Muestras crudas simuladas (una cada 30 s, 5 000 en total, con dos huecos de «app cerrada»). Se generan una vez. */
+const MON_STEP_MS = 30_000;
+const MON_SAMPLES = 5000;
+let monRaw: { t: number; i: number }[] | null = null;
+const monRawSamples = () => {
+  if (monRaw) return monRaw;
+  const end = Math.floor(Date.now() / MON_STEP_MS) * MON_STEP_MS;
+  monRaw = [];
+  for (let i = 0; i < MON_SAMPLES; i++) {
+    if ((i >= 1800 && i < 1900) || (i >= 3500 && i < 3560)) continue;
+    monRaw.push({ t: end - (MON_SAMPLES - 1 - i) * MON_STEP_MS, i });
+  }
+  return monRaw;
+};
+const monValue = (metric: string, i: number) => {
+  if (metric === "bp_hit_ratio") return Math.round((99.2 + 0.7 * Math.sin(i / 120) - (i % 400 < 6 ? 2.5 : 0)) * 100) / 100;
+  const k = MON_METRICS.indexOf(metric) + 1;
+  const base = 200 + k * 40;
+  return Math.max(0, Math.round((base * (1 + 0.5 * Math.sin(i / (90 + k * 7)) + 0.15 * Math.sin(i / 7 + k)) ) * 100) / 100);
+};
+const monRange = (from: string, to: string) => {
+  const a = Date.parse(from), b = Date.parse(to);
+  if (!from || !to || Number.isNaN(a) || Number.isNaN(b) || a >= b) throw fail("VALIDATION", "El rango no es válido", "range");
+  return [a, b] as const;
+};
+function monSeries(req: Any) {
+  if (!req.profileId) throw fail("VALIDATION", "Falta el perfil", "profileId");
+  const [a, b] = monRange(req.from, req.to);
+  const metrics: string[] = req.metrics ?? [];
+  if (!metrics.length || metrics.some((m) => !MON_METRICS.includes(m))) throw fail("VALIDATION", "Métrica desconocida", "metric");
+  const max = req.maxPoints > 0 && req.maxPoints <= 300 ? req.maxPoints : 300;
+  const inRange = monPurged.has(req.profileId) ? [] : monRawSamples().filter((s) => s.t >= a && s.t < b);
+  const gaps: Any[] = [];
+  const edge = (from: number, to: number) => from < to && gaps.push({ from: new Date(from).toISOString(), to: new Date(to).toISOString() });
+  if (!inRange.length) edge(a, b);
+  else {
+    edge(a, inRange[0].t);
+    for (let i = 1; i < inRange.length; i++) if (inRange[i].t - inRange[i - 1].t > 2 * MON_STEP_MS) edge(inRange[i - 1].t, inRange[i].t);
+    edge(inRange[inRange.length - 1].t, b);
+  }
+  const anns = monAnn.filter((x) => (x.profileId === req.profileId || x.profileId === "*") && Date.parse(x.at) >= a && Date.parse(x.at) < b).map((x) => ({ ...x, profileId: req.profileId }));
+  const level = b - a <= 6 * 3600_000 ? "raw" : "hour";
+  return metrics.map((metric) => {
+    const per = Math.max(1, Math.ceil(inRange.length / max));
+    const points: Any[] = [];
+    for (let i = 0; i < inRange.length; i += per) {
+      const chunk = inRange.slice(i, i + per);
+      const vals = chunk.map((s) => monValue(metric, s.i));
+      points.push({ t: new Date(chunk[Math.floor(chunk.length / 2)].t).toISOString(), v: Math.round((vals.reduce((x, y) => x + y, 0) / vals.length) * 100) / 100, min: Math.min(...vals), max: Math.max(...vals) });
+    }
+    return { metric, level, points, gaps, annotations: anns };
+  });
+}
+
+const MON_DIGESTS: Any[] = [
+  { digest: "d1", schema: "pedidos", text: "SELECT o . * , c . nombre FROM orders o JOIN customers c ON c . id = o . customer_id WHERE o . status = ?", execs: 182_000, totalMs: 11_520_000, rowsExamined: 75_000_000, rowsSent: 182_000, noIndex: 182_000, tmpDisk: 0, errors: 0, trend: 1.38 },
+  { digest: "d2", schema: "pedidos", text: "SELECT DATE ( created_at ) , SUM ( total ) FROM orders GROUP BY ?", execs: 1_440, totalMs: 3_900_000, rowsExamined: 9_600_000, rowsSent: 100_000, noIndex: 1_440, tmpDisk: 1_440, errors: 0, trend: 1.02 },
+  { digest: "d3", schema: "pedidos", text: "UPDATE stock SET qty = qty - ? WHERE sku = ?", execs: 2_400_000, totalMs: 2_880_000, rowsExamined: 2_400_000, rowsSent: 0, noIndex: 0, tmpDisk: 0, errors: 12, trend: 0.96 },
+  { digest: "d4", schema: "catalogo", text: "SELECT * FROM products WHERE category_id = ? ORDER BY price", execs: 640_000, totalMs: 1_860_000, rowsExamined: 5_100_000, rowsSent: 640_000, noIndex: 0, tmpDisk: 0, errors: 0, trend: 0, isNew: true },
+  { digest: "d5", schema: "sakila", text: "SELECT COUNT ( * ) FROM rental WHERE customer_id = ?", execs: 90_000, totalMs: 450_000, rowsExamined: 90_000, rowsSent: 90_000, noIndex: 0, tmpDisk: 0, errors: 0, trend: 1.0 },
+  { digest: "d6", schema: "staging", text: "INSERT INTO audit_log ( user_id , action ) VALUES (...)", execs: 800_000, totalMs: 400_000, rowsExamined: 0, rowsSent: 0, noIndex: 0, tmpDisk: 0, errors: 3, trend: 1.1 },
+  { digest: "d7", schema: "information_schema", text: "SELECT SCHEMA_NAME FROM information_schema . SCHEMATA", execs: 5_000, totalMs: 60_000, rowsExamined: 50_000, rowsSent: 50_000, noIndex: 5_000, tmpDisk: 0, errors: 0, trend: 1.0 },
+];
+function monTop(req: Any) {
+  if (!req.profileId) throw fail("VALIDATION", "Falta el perfil", "profileId");
+  const [a, b] = monRange(req.from, req.to);
+  const order = req.orderBy || "total_time";
+  if (!MON_ORDER.includes(order)) throw fail("VALIDATION", "Criterio de orden desconocido", "orderBy");
+  const limit = req.limit || 50;
+  if (limit < 1 || limit > 1000) throw fail("VALIDATION", "El límite debe estar entre 1 y 1000", "topK");
+  if (monPurged.has(req.profileId)) return [];
+  const scale = (b - a) / 86_400_000;
+  const stat = (d: Any, k: number): Any => {
+    const execs = Math.round(d.execs * k), totalMs = Math.round(d.totalMs * k);
+    return { digest: d.digest, schema: d.schema, text: d.text, execs, totalMs, avgMs: execs ? Math.round((totalMs / execs) * 100) / 100 : 0, maxObservedMs: Math.round(totalMs / Math.max(1, execs) * 40), rowsExamined: Math.round(d.rowsExamined * k), rowsSent: Math.round(d.rowsSent * k), noIndex: Math.round(d.noIndex * k), tmpDisk: Math.round(d.tmpDisk * k), errors: Math.round(d.errors * k), prev: null, changePct: 0, isNew: false, regression: false, approx: false };
+  };
+  const key: Record<string, (s: Any) => number> = {
+    total_time: (s) => s.totalMs, execs: (s) => s.execs, avg_time: (s) => s.avgMs, rows_ratio: (s) => (s.rowsExamined ? s.rowsExamined / Math.max(1, s.rowsSent) : 0),
+    no_index: (s) => s.noIndex, tmp_disk: (s) => s.tmpDisk, errors: (s) => s.errors,
+  };
+  let out = MON_DIGESTS.filter((d) => (!req.schema || d.schema === req.schema) && (req.includeSystem || !MON_SYSTEM.has(d.schema))).map((d) => {
+    const cur = stat(d, scale);
+    if (req.compare) {
+      cur.isNew = !!d.isNew;
+      if (!d.isNew) {
+        cur.prev = stat({ ...d, totalMs: d.totalMs / d.trend }, scale);
+        cur.changePct = Math.round((cur.avgMs / (cur.prev.avgMs || 1) - 1) * 1000) / 10;
+        cur.regression = cur.changePct >= 25 && cur.execs >= 100 && cur.prev.execs >= 100;
+      }
+    }
+    return cur;
+  });
+  out = out.filter((s) => order === "total_time" || order === "execs" || order === "avg_time" || key[order](s) > 0);
+  out.sort((x, y) => key[order](y) - key[order](x));
+  return out.slice(0, limit);
+}
+
+export const MonitorService = {
+  Capabilities: (sessionId: string) => cp(() => monCaps(sessionId)),
+  RefreshCapabilities: (sessionId: string) => cp(() => monCaps(sessionId)),
+  Start: (sessionId: string, cfg: Any) =>
+    cp(() => {
+      const sess = monSession(sessionId);
+      const c = { ...cfg };
+      if (!c.intervalSec) c.intervalSec = settings.monitorIntervalSec;
+      if (!c.topK) c.topK = 30;
+      if (!c.processes && !c.status && !c.digest) Object.assign(c, { processes: true, status: true, digest: true });
+      if (c.intervalSec < 5 || c.intervalSec > 900) throw fail("VALIDATION", "El intervalo debe estar entre 5 s y 15 min", "interval");
+      if (c.topK < 1 || c.topK > 200) throw fail("VALIDATION", "El top debe estar entre 1 y 200", "topK");
+      if (monActive(sess.profileId)) throw fail("QUERY_FAILED", "Ya hay un monitoreo en marcha para esta conexión", "busy");
+      const caps = monCaps(sessionId);
+      const usable = (c.processes && caps.processlist.state !== "unavailable") || (c.status && caps.status.state !== "unavailable") || (c.digest && caps.digest.state !== "unavailable");
+      if (!usable) throw fail("UNSUPPORTED", "Ninguna fuente de monitoreo está disponible en esta conexión");
+      const run: Any = { id: String(++monRunSeq), profileId: sess.profileId, startedAt: new Date().toISOString(), endedAt: null, reason: "running", intervalSec: c.intervalSec, serverVersion: sess.serverVersion, serverId: "mock-server-uuid", samples: 0, gaps: 0 };
+      monRuns.push(run);
+      Events.Emit("monitor:state", { runId: run.id, profileId: run.profileId, state: "running" });
+      monTimers.set(run.id, setInterval(() => {
+        run.samples++;
+        Events.Emit("monitor:sample", { runId: run.id, at: new Date().toISOString(), qps: 800 + (monTick % 7) * 40, threadsRunning: 3 + (monTick % 5), threadsConnected: 40 + (monTick % 9), longestSec: 12 + (monTick % 40) });
+      }, seed.monitor?.sampleMs ?? c.intervalSec * 1000));
+      return { ...run };
+    }),
+  Stop: (runId: string) =>
+    cp(() => {
+      const run = monRuns.find((r) => r.id === runId);
+      if (!run) throw fail("NOT_FOUND", "La ejecución no existe");
+      if (run.reason === "running") monEnd(run, "stopped");
+    }),
+  Runs: (profileId: string) =>
+    cp(() => {
+      const real = monRuns.filter((r) => r.profileId === profileId).map((r) => ({ ...r })).reverse();
+      if (monPurged.has(profileId)) return real;
+      // Historial de ejemplo: una ejecución por bloque de muestras entre los huecos de «app cerrada»; la última viene de otro servidor.
+      const raw = monRawSamples();
+      const block = (i0: number, i1: number, reason: string, serverId: string, id: string) => {
+        const a = raw.find((x) => x.i >= i0)!, b = [...raw].reverse().find((x) => x.i < i1)!;
+        return { id, profileId, startedAt: new Date(a.t).toISOString(), endedAt: new Date(b.t).toISOString(), reason, intervalSec: 30, serverVersion: "8.0.36", serverId, samples: raw.filter((x) => x.i >= i0 && x.i < i1).length, gaps: id === "h2" ? 1 : 0 };
+      };
+      return [...real, block(3560, MON_SAMPLES, "stopped", "mock-server-uuid-2", "h3"), block(1900, 3500, "app_closed", "mock-server-uuid", "h2"), block(0, 1800, "crashed", "mock-server-uuid", "h1")];
+    }),
+  WatchProcesses: (sessionId: string, intervalMs: number) =>
+    cp(() => {
+      monSession(sessionId);
+      const ms = intervalMs || 2000;
+      if (ms < 0 || ms > 60_000) throw fail("VALIDATION", "El intervalo de la vista en vivo debe estar entre 1 y 60 segundos", "interval");
+      const cur = monWatchers.get(sessionId);
+      if (cur) { cur.until = Date.now() + MON_LEASE_MS; return; }
+      if (monCaps(sessionId).processlist.state === "unavailable") throw fail("UNSUPPORTED", "La lista de procesos no está disponible en esta conexión");
+      const emit = () => {
+        const w = monWatchers.get(sessionId);
+        if (!w) return;
+        if (Date.now() > w.until || !sessions.some((x) => x.sessionId === sessionId)) return monStopWatch(sessionId);
+        monTick++;
+        Events.Emit("monitor:processes", { sessionId, snapshot: monProcesses(sessionId) });
+      };
+      monWatchers.set(sessionId, { timer: setInterval(emit, Math.max(1000, ms)), until: Date.now() + MON_LEASE_MS, ms });
+      emit();
+    }),
+  UnwatchProcesses: (sessionId: string) => cp(() => monStopWatch(sessionId)),
+  Top: (req: Any) => cp(() => monTop(req)),
+  Digest: (profileId: string, digest: string, from: string, to: string) =>
+    cp(() => {
+      const d = MON_DIGESTS.find((x) => x.digest === digest);
+      if (!d) throw fail("NOT_FOUND", "El digest no existe");
+      const [a, b] = monRange(from, to);
+      const stat = monTop({ profileId, from, to, orderBy: "total_time", limit: 1000, includeSystem: true }).find((s: Any) => s.digest === digest);
+      const n = 24, step = (b - a) / n;
+      const points = Array.from({ length: n }, (_, i) => { const execs = Math.round((d.execs / n) * (1 + 0.3 * Math.sin(i / 3))); return { t: new Date(a + step * (i + 0.5)).toISOString(), execs, totalMs: Math.round((d.totalMs / d.execs) * execs), avgMs: Math.round((d.totalMs / d.execs) * 100) / 100 }; });
+      return { digest, text: d.text, schemas: [d.schema], stat, points, gaps: [] };
+    }),
+  Series: (req: Any) => cp(() => monSeries(req)),
+  Compare: (profileId: string, a: Any, b: Any) =>
+    cp(() => {
+      monRange(a.from, a.to); monRange(b.from, b.to);
+      const all = monTop({ profileId, from: b.from, to: b.to, orderBy: "total_time", limit: 1000, compare: true });
+      const gone = { digest: "gone1", schema: "pedidos", text: "SELECT * FROM legacy_orders WHERE status = ?", execs: 120, totalMs: 9000, avgMs: 75, maxObservedMs: 300, rowsExamined: 12_000, rowsSent: 120, noIndex: 120, tmpDisk: 0, errors: 0, prev: null, changePct: 0, isNew: false, regression: false, approx: false };
+      return { regressions: all.filter((s: Any) => s.regression), new: all.filter((s: Any) => s.isNew), gone: [gone] };
+    }),
+  Annotate: (profileId: string, at: string, text: string) =>
+    cp(() => {
+      if (!profileId) throw fail("VALIDATION", "Falta el perfil", "profileId");
+      if (!text || [...text].length > 200 || /[\u0000-\u001f\u007f]/.test(text)) throw fail("VALIDATION", "La nota debe tener entre 1 y 200 caracteres, sin caracteres de control", "text");
+      const a = { id: String(++monAnnSeq), profileId, at: at || new Date().toISOString(), text };
+      monAnn.push(a);
+      return { ...a };
+    }),
+  DeleteAnnotation: (id: string) =>
+    cp(() => {
+      if (!/^[1-9]\d*$/.test(id)) throw fail("VALIDATION", "Identificador de nota no válido", "id");
+      const i = monAnn.findIndex((x) => x.id === id);
+      if (i < 0) throw fail("NOT_FOUND", "La nota no existe");
+      monAnn.splice(i, 1);
+    }),
+  Purge: (profileId: string, before: string | null) =>
+    cp(() => {
+      if (!profileId) throw fail("VALIDATION", "Falta el perfil", "profileId");
+      if (!before && monActive(profileId)) throw fail("QUERY_FAILED", "Detén el monitoreo antes de borrar sus datos", "busy");
+      const cut = before ? Date.parse(before) : Infinity;
+      for (let i = monRuns.length - 1; i >= 0; i--) if (monRuns[i].profileId === profileId && monRuns[i].reason !== "running" && Date.parse(monRuns[i].startedAt) < cut) monRuns.splice(i, 1);
+      if (!before) {
+        for (let i = monAnn.length - 1; i >= 0; i--) if (monAnn[i].profileId === profileId || monAnn[i].profileId === "*") monAnn.splice(i, 1);
+        monPurged.add(profileId);
+      }
+    }),
+  CopyKill: (sessionId: string, processId: number, queryOnly: boolean) =>
+    cp(() => {
+      monSession(sessionId);
+      if (!(processId > 0)) throw fail("VALIDATION", "Identificador de proceso no válido", "processId");
+      return queryOnly ? `KILL QUERY ${processId};` : `KILL ${processId};`;
+    }),
+};
+
 export const PingService = { Hello: (name: string) => cp(() => `Hola, ${name}`), PickFile: () => cp(() => "") };
 
 /** Para que las pruebas lean el estado interno si lo necesitan. */
@@ -991,4 +1307,6 @@ export const PingService = { Hello: (name: string) => cp(() => `Hola, ${name}`),
     files: qFiles,
     touch(path: string, sql: string) { const f = qFiles.get(path); if (f) { f.sql = sql; f.ver = ++qVer; f.mtime = qNow(); } else qFiles.set(path, qFile(sql)); },
     remove(path: string) { qFiles.delete(path); },
-  }, forceConflict: "" as string, get settings() { return settings; } };
+  }, forceConflict: "" as string, get settings() { return settings; },
+  /** Monitor (spec 22): cambiar el escenario de permisos de un perfil y leer el estado interno. */
+  monitor: { scenarios: monScenarios, runs: monRuns, annotations: monAnn, watchers: monWatchers } };

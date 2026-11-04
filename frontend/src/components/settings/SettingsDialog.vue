@@ -27,6 +27,7 @@ function currentSettings(): Settings {
     theme: ui.theme, locale: ui.locale, maxRows: ui.maxRows, maxResultMemoryMiB: ui.maxResultMemoryMiB,
     historyRetention: ui.historyRetention, showSystemDatabases: ui.showSystemDatabases, confirmEdits: ui.confirmEdits,
     sidebarWidth: ui.sidebarWidth, splitRatio: ui.splitRatio, collapsedGroups: [...ui.collapsedGroups],
+    ...ui.monitor,
   };
 }
 watch(
@@ -81,6 +82,17 @@ async function save() {
           <BaseButton size="sm" type="button" @click="queryFiles.reveal('')">{{ t("queries.settings.reveal") }}</BaseButton>
         </div>
         <p class="text-xs text-muted">{{ t("queries.settings.hint") }}</p>
+      </fieldset>
+      <fieldset class="flex flex-col gap-2 rounded-md border border-border p-3" data-testid="settings-monitor">
+        <legend class="px-1 text-xs font-medium text-muted">{{ t("settings.monitor.title") }}</legend>
+        <div class="grid grid-cols-2 gap-3">
+          <BaseInput :model-value="draft.monitorIntervalSec" type="number" mono :label="t('settings.monitor.interval')" :error="errorFor('monitorIntervalSec')" data-testid="settings-monitor-interval" @update:model-value="draft.monitorIntervalSec = num($event)" />
+          <BaseInput :model-value="draft.monitorMaxMiB" type="number" mono :label="t('settings.monitor.maxMiB')" :error="errorFor('monitorMaxMiB')" data-testid="settings-monitor-maxmib" @update:model-value="draft.monitorMaxMiB = num($event)" />
+          <BaseInput :model-value="draft.monitorRawDays" type="number" mono :label="t('settings.monitor.rawDays')" :error="errorFor('monitorRawDays')" data-testid="settings-monitor-raw" @update:model-value="draft.monitorRawDays = num($event)" />
+          <BaseInput :model-value="draft.monitorHourlyDays" type="number" mono :label="t('settings.monitor.hourlyDays')" :error="errorFor('monitorHourlyDays')" data-testid="settings-monitor-hourly" @update:model-value="draft.monitorHourlyDays = num($event)" />
+          <BaseInput :model-value="draft.monitorDailyDays" type="number" mono :label="t('settings.monitor.dailyDays')" :error="errorFor('monitorDailyDays')" data-testid="settings-monitor-daily" @update:model-value="draft.monitorDailyDays = num($event)" />
+        </div>
+        <p class="text-xs text-muted">{{ t("settings.monitor.hint") }}</p>
       </fieldset>
       <p v-if="message && !field" class="text-xs text-danger" role="alert">{{ message }}</p>
     </form>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { nextTick, onMounted, onUnmounted, ref } from "vue";
 import BaseButton from "../components/ui/BaseButton.vue";
 import BaseCheckbox from "../components/ui/BaseCheckbox.vue";
 import BaseContextMenu, { type MenuItem } from "../components/ui/BaseContextMenu.vue";
@@ -16,7 +16,10 @@ import BaseToast from "../components/ui/BaseToast.vue";
 import BaseToggle from "../components/ui/BaseToggle.vue";
 import BaseTooltip from "../components/ui/BaseTooltip.vue";
 import ColorSwatches from "../components/ui/ColorSwatches.vue";
+import TimeSeriesChart from "../components/monitor/TimeSeriesChart.vue";
+import { monitorSeries } from "../api/monitor";
 import { useUiStore, type Theme } from "../stores/ui";
+import type { Series } from "../types";
 import { usePingStore } from "../stores/ping";
 
 const ui = useUiStore();
@@ -38,6 +41,25 @@ const menu: MenuItem[] = [
   { id: "del", label: "Eliminar", danger: true, separatorBefore: true },
 ];
 const themes: Theme[] = ["light", "dark", "system"];
+
+// Gráfica del Monitor (ADR-006): con el backend simulado (VITE_MOCK_API=1) pide 7 días sobre 5 000 muestras con huecos y
+// mide cuánto tarda Go (mock) en entregar ≤ 300 puntos y cuánto en pintarlos. Sin mock, la llamada falla y se muestra el error.
+const chart = ref<Series | null>(null);
+const chartInfo = ref("");
+async function loadChart(range: "6h" | "7d") {
+  const to = new Date();
+  const from = new Date(to.getTime() - (range === "7d" ? 7 * 86_400_000 : 6 * 3_600_000));
+  const t0 = performance.now();
+  try {
+    const [s] = await monitorSeries({ profileId: "p1", from: from.toISOString(), to: to.toISOString(), metrics: ["qps"], maxPoints: 300 });
+    const t1 = performance.now();
+    chart.value = s ?? null;
+    await nextTick();
+    chartInfo.value = `${s?.points?.length ?? 0} puntos, ${s?.gaps?.length ?? 0} huecos, ${s?.annotations?.length ?? 0} anotaciones · datos ${(t1 - t0).toFixed(0)} ms · pintado ${(performance.now() - t1).toFixed(0)} ms`;
+  } catch (e) {
+    chartInfo.value = `Error: ${(e as Error).message}`;
+  }
+}
 </script>
 
 <template>
@@ -104,6 +126,13 @@ const themes: Theme[] = ["light", "dark", "system"];
           <BaseSplitter orientation="vertical" @drag="(d) => (paneWidth = Math.max(80, paneWidth + d))" />
           <div class="grid flex-1 place-items-center text-sm text-muted">Arrastra o usa ← →</div>
         </div>
+      </section>
+
+      <section class="flex flex-col gap-2" data-testid="gallery-chart">
+        <h2 class="text-sm font-semibold text-muted">TimeSeriesChart (ADR-006, solo con backend simulado)</h2>
+        <div class="flex gap-2"><BaseButton @click="loadChart('6h')">6 h</BaseButton><BaseButton @click="loadChart('7d')">7 d (5 000 muestras)</BaseButton></div>
+        <p data-testid="chart-info" class="font-data text-xs">{{ chartInfo }}</p>
+        <TimeSeriesChart v-if="chart" :series="chart" label="Consultas por segundo" />
       </section>
 
       <section class="rounded-md border border-border"><BaseEmptyState title="Estado vacío" description="Descripción de apoyo." /></section>
