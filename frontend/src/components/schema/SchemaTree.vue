@@ -10,6 +10,7 @@ import { useConnectionsStore } from "../../stores/connections";
 import { useSchemaStore } from "../../stores/schema";
 import { useSessionsStore } from "../../stores/sessions";
 import { useUiStore } from "../../stores/ui";
+import { writeClipboard } from "../../composables/clipboard";
 import BaseContextMenu, { type MenuItem } from "../ui/BaseContextMenu.vue";
 import BaseSpinner from "../ui/BaseSpinner.vue";
 import VirtualList from "../ui/VirtualList.vue";
@@ -177,12 +178,8 @@ function menuFor(row: FlatRow): MenuItem[] {
 }
 
 async function copy(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    ui.toast("success", t("schema.copied"));
-  } catch {
-    ui.toast("error", t("schema.copied") + " ✗");
-  }
+  if (await writeClipboard(text)) ui.toast("success", t("schema.copied"));
+  else ui.toast("error", t("schema.copied") + " ✗");
 }
 
 async function onMenu(row: FlatRow, id: string) {

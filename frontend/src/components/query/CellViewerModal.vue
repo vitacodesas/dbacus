@@ -6,6 +6,7 @@ import { asAppError } from "../../api/errors";
 import { copyText } from "../../composables/gridModel";
 import { useUiStore } from "../../stores/ui";
 import type { Cell } from "../../types";
+import { writeClipboard } from "../../composables/clipboard";
 import BaseButton from "../ui/BaseButton.vue";
 import BaseModal from "../ui/BaseModal.vue";
 import BaseSpinner from "../ui/BaseSpinner.vue";
@@ -47,12 +48,8 @@ const pretty = computed(() => {
 });
 
 async function copy() {
-  try {
-    await navigator.clipboard.writeText(full.value ?? "");
-    ui.toast("success", t("query.copied"));
-  } catch {
-    ui.toast("error", t("query.cannotCopy"));
-  }
+  if (await writeClipboard(full.value ?? "")) ui.toast("success", t("query.copied"));
+  else ui.toast("error", t("query.cannotCopy"));
 }
 </script>
 

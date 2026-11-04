@@ -17,6 +17,7 @@ import { useRoutinesStore } from "../../stores/routines";
 import AlterModal from "./AlterModal.vue";
 import AlterReviewDialog from "./AlterReviewDialog.vue";
 import CodeEditor from "../ui/CodeEditor.vue";
+import { writeClipboard } from "../../composables/clipboard";
 import RoutineModal from "./RoutineModal.vue";
 import RoutineReviewDialog from "./RoutineReviewDialog.vue";
 import SchemaTree from "./SchemaTree.vue";
@@ -75,8 +76,8 @@ async function viewCreate(sessionId: string, db: string, table: string) {
   await schema.loadDetail(sessionId, db, table);
 }
 async function copyCreate() {
-  await navigator.clipboard.writeText(createSql.value);
-  ui.toast("success", t("schema.copied"));
+  if (await writeClipboard(createSql.value)) ui.toast("success", t("schema.copied"));
+  else ui.toast("error", t("schema.copied") + " ✗");
 }
 </script>
 

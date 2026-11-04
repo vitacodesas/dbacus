@@ -7,6 +7,7 @@ import { useUiStore } from "../../stores/ui";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Plus } from "lucide-vue-next";
 import ExportDialog from "../export/ExportDialog.vue";
 import BaseButton from "../ui/BaseButton.vue";
+import { writeClipboard } from "../../composables/clipboard";
 import BaseEmptyState from "../ui/BaseEmptyState.vue";
 import BaseSpinner from "../ui/BaseSpinner.vue";
 import ResultGrid from "./ResultGrid.vue";
@@ -130,12 +131,8 @@ const rangeText = computed(() => {
 
 const errorText = computed(() => [res.value.error?.message, res.value.error?.detail].filter(Boolean).join("\n"));
 async function copyError() {
-  try {
-    await navigator.clipboard.writeText(errorText.value);
-    ui.toast("success", t("query.copied"));
-  } catch {
-    ui.toast("error", t("query.cannotCopy"));
-  }
+  if (await writeClipboard(errorText.value)) ui.toast("success", t("query.copied"));
+  else ui.toast("error", t("query.cannotCopy"));
 }
 const summary = (i: number) => {
   const s = res.value.statements[i];

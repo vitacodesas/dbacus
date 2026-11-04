@@ -12,7 +12,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        # Por defecto solo macOS. Para volver a compilar Linux y Windows no hace falta tocar el código: crea la variable
+        # del repositorio BUILD_OS (Settings → Secrets and variables → Actions → Variables) con
+        #   ["macos-latest","ubuntu-latest","windows-latest"]
+        # y bórrala para volver a solo macOS. Los pasos de abajo ya contemplan los tres sistemas.
+        os: ${{ fromJSON(vars.BUILD_OS || '["macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:

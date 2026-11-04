@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoutinesStore } from "../../stores/routines";
 import { useUiStore } from "../../stores/ui";
+import { writeClipboard } from "../../composables/clipboard";
 import BaseButton from "../ui/BaseButton.vue";
 import BaseCheckbox from "../ui/BaseCheckbox.vue";
 import BaseModal from "../ui/BaseModal.vue";
@@ -24,12 +25,8 @@ const untouched = computed(() => !!failed.value && !failed.value.restored && !fa
 const wClass = (s: string) => (s === "danger" ? "border-danger text-danger" : s === "warning" ? "border-warning" : "border-border text-muted");
 
 async function copy(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    ui.toast("success", t("routines.copied"));
-  } catch {
-    ui.toast("error", t("routines.copied") + " ✗");
-  }
+  if (await writeClipboard(text)) ui.toast("success", t("routines.copied"));
+  else ui.toast("error", t("routines.copied") + " ✗");
 }
 </script>
 

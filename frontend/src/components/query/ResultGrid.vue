@@ -12,6 +12,7 @@ import { useEditsStore } from "../../stores/edits";
 import { MAX_COPY_ROWS, useResultsStore, WINDOW } from "../../stores/results";
 import { useUiStore } from "../../stores/ui";
 import type { Cell, ColumnMeta } from "../../types";
+import { writeClipboard } from "../../composables/clipboard";
 import BaseContextMenu, { type MenuItem } from "../ui/BaseContextMenu.vue";
 import CellEditorModal, { type CellEditTarget } from "./CellEditorModal.vue";
 import CellViewerModal from "./CellViewerModal.vue";
@@ -344,19 +345,15 @@ async function selectedRows() {
   return { b, rows };
 }
 
-async function writeClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    ui.toast("success", t("query.copied"));
-  } catch {
-    ui.toast("error", t("query.cannotCopy"));
-  }
+async function toClipboard(text: string) {
+  if (await writeClipboard(text)) ui.toast("success", t("query.copied"));
+  else ui.toast("error", t("query.cannotCopy"));
 }
 
 async function copy(withHeaders: boolean) {
   try {
     const s = await selectedRows();
-    if (s) await writeClipboard(toTSV(s.rows, props.columns, { c0: s.b.c0, c1: s.b.c1 }, withHeaders));
+    if (s) await toClipboard(toTSV(s.rows, props.columns, { c0: s.b.c0, c1: s.b.c1 }, withHeaders));
   } catch (e) {
     ui.toast("error", asAppError(e).message);
   }
@@ -367,7 +364,7 @@ async function copyInsert() {
   const b = selectionBounds(sel.value);
   try {
     // El SQL lo arma Go (escapado del driver); aquí solo se pide el rango.
-    await writeClipboard(await rowsAsInsert(props.queryId, props.stmtIndex, b.r0, Math.min(b.r1 - b.r0 + 1, 1000), ""));
+    await toClipboard(await rowsAsInsert(props.queryId, props.stmtIndex, b.r0, Math.min(b.r1 - b.r0 + 1, 1000), ""));
   } catch (e) {
     ui.toast("error", asAppError(e).message);
   }

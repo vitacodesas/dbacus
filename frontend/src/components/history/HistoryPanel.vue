@@ -12,6 +12,7 @@ import { useUiStore } from "../../stores/ui";
 import type { HistoryEntry } from "../../types";
 import { formatDuration, relativeTime } from "../../utils/time";
 import BaseButton from "../ui/BaseButton.vue";
+import { writeClipboard } from "../../composables/clipboard";
 import BaseDialogConfirm from "../ui/BaseDialogConfirm.vue";
 import BaseEmptyState from "../ui/BaseEmptyState.vue";
 import BaseSpinner from "../ui/BaseSpinner.vue";
@@ -62,12 +63,8 @@ function saveAsQuery(e: HistoryEntry) {
   queryFiles.openSaveDialog({ tabId: null, sql: e.sql, profileId: profileId.value, database: e.database });
 }
 async function copy(e: HistoryEntry) {
-  try {
-    await navigator.clipboard.writeText(e.sql);
-    ui.toast("success", t("history.copied"));
-  } catch {
-    ui.toast("error", t("history.cannotCopy"));
-  }
+  if (await writeClipboard(e.sql)) ui.toast("success", t("history.copied"));
+  else ui.toast("error", t("history.cannotCopy"));
 }
 async function remove(e: HistoryEntry) {
   try {
