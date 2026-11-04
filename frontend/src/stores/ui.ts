@@ -6,7 +6,7 @@ import { setLocale, type Locale } from "../i18n";
 import type { AppError, Settings } from "../types";
 import { NO_GROUP } from "../composables/connectionGroups";
 
-type MonitorSettings = Pick<Settings, "monitorRawDays" | "monitorHourlyDays" | "monitorDailyDays" | "monitorMaxMiB" | "monitorIntervalSec">;
+type MonitorSettings = Pick<Settings, "monitorRawDays" | "monitorHourlyDays" | "monitorDailyDays" | "monitorMaxMiB" | "monitorIntervalSec" | "monitorLiveAuto" | "monitorLiveIntervalSec">;
 
 export type Theme = "light" | "dark" | "system";
 export type MainView = "queries" | "monitor";
@@ -46,7 +46,7 @@ export const useUiStore = defineStore("ui", () => {
   const collapsedGroups = ref<string[]>([]);
   // Retención y muestreo del monitoreo (spec 22): los edita la sección de Ajustes del Monitor; aquí solo viajan de ida y
   // vuelta para que guardar otros ajustes no los pierda (Go valida el conjunto completo).
-  const monitor = ref<MonitorSettings>({ monitorRawDays: 7, monitorHourlyDays: 90, monitorDailyDays: 365, monitorMaxMiB: 500, monitorIntervalSec: 30 });
+  const monitor = ref<MonitorSettings>({ monitorRawDays: 7, monitorHourlyDays: 90, monitorDailyDays: 365, monitorMaxMiB: 500, monitorIntervalSec: 30, monitorLiveAuto: true, monitorLiveIntervalSec: 2 });
   let knownGroupIds: string[] | null = null;
   /** LIMIT automático para SELECT simples (0 = sin límite; el tope real es MaxRows de Go). */
   const autoLimit = ref(1000);
@@ -114,6 +114,7 @@ export const useUiStore = defineStore("ui", () => {
     monitor.value = {
       monitorRawDays: s.monitorRawDays, monitorHourlyDays: s.monitorHourlyDays, monitorDailyDays: s.monitorDailyDays,
       monitorMaxMiB: s.monitorMaxMiB, monitorIntervalSec: s.monitorIntervalSec,
+      monitorLiveAuto: s.monitorLiveAuto ?? true, monitorLiveIntervalSec: s.monitorLiveIntervalSec || 2,
     };
     prune();
   }

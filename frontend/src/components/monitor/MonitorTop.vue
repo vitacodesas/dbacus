@@ -3,6 +3,7 @@
 import { computed, watch } from "vue";
 import { Copy, TriangleAlert } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
+import { writeClipboard } from "../../composables/clipboard";
 import { digestSeries, formatCompact } from "../../composables/timeSeries";
 import { ORDER_KEYS, useMonitorStore, type OrderKey } from "../../stores/monitor";
 import { useUiStore } from "../../stores/ui";
@@ -46,8 +47,8 @@ const detailOpen = computed({ get: () => !!store.digestDetail || store.loadingDi
 
 const detailStat = computed(() => store.digestDetail?.stat ?? null);
 async function copyText(text: string) {
-  await navigator.clipboard.writeText(text);
-  ui.toast("success", t("monitor.copied"));
+  if (await writeClipboard(text)) ui.toast("success", t("monitor.copied"));
+  else ui.toast("error", t("monitor.cannotCopy"));
 }
 // La consulta pide al menos 150 px: con menos ancho la tabla se desplaza en horizontal en vez de cortar el texto a «SELECT…».
 const GRID = "grid grid-cols-[24px_minmax(150px,1fr)_72px_64px_68px_64px_96px_56px_60px_44px_92px] items-center gap-2 px-3";

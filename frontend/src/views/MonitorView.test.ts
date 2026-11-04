@@ -8,7 +8,7 @@ vi.mock("uplot", () => ({ default: class { static pxRatio = 1; destroy() {} setS
 const api = vi.hoisted(() => ({
   monitorCapabilities: vi.fn(), refreshMonitorCapabilities: vi.fn(), startMonitor: vi.fn(), stopMonitor: vi.fn(), monitorRuns: vi.fn(),
   watchProcesses: vi.fn(), unwatchProcesses: vi.fn(), monitorTop: vi.fn(), monitorDigest: vi.fn(), monitorSeries: vi.fn(), monitorCompare: vi.fn(),
-  annotateMonitor: vi.fn(), deleteMonitorAnnotation: vi.fn(), purgeMonitor: vi.fn(), monitorCopyKill: vi.fn(),
+  annotateMonitor: vi.fn(), deleteMonitorAnnotation: vi.fn(), purgeMonitor: vi.fn(), monitorCopyKill: vi.fn(), killProcess: vi.fn(),
 }));
 vi.mock("../api/monitor", () => api);
 
@@ -17,6 +17,7 @@ import MonitorView from "./MonitorView.vue";
 import { useMonitorStore } from "../stores/monitor";
 import { useSchemaStore } from "../stores/schema";
 import { useSessionsStore } from "../stores/sessions";
+import { useConnectionsStore } from "../stores/connections";
 import { useUiStore } from "../stores/ui";
 import type { MonitorCaps, ProcessSnapshot } from "../types";
 
@@ -26,7 +27,7 @@ const proc = (id: number, over = {}) => ({ id, user: "app", host: "h", db: "pedi
 const snap = (rows = [proc(1), proc(2, { timeSec: 45 })]): ProcessSnapshot => ({ at: "t", rows, summary: { total: rows.length, running: rows.length, sleeping: 0, waitingLock: 0, longestSec: 45, byCommand: null, byUser: null }, maxConnections: 151 });
 
 const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
-function mountView(withSession = true) {
+function mountView(withSession = true, readOnly = false) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const sessions = useSessionsStore();
@@ -34,6 +35,7 @@ function mountView(withSession = true) {
     sessions.byId = { s1: { sessionId: "s1", profileId: "p1", serverVersion: "8.0", currentDatabase: "" } };
     sessions.activeSessionId = "s1";
   }
+  useConnectionsStore().profiles = [{ id: "p1", name: "P", readOnly } as never];
   useSchemaStore().loadDatabases = vi.fn().mockResolvedValue(undefined);
   useUiStore().mainView = "monitor";
   const wrapper = mount(MonitorView, { global: { plugins: [pinia, i18n] } });
@@ -117,6 +119,54 @@ describe("MonitorView", () => {
     await flushPromises();
     expect(api.monitorCopyKill).toHaveBeenCalledWith("s1", 1, false);
     expect(clipboard.writeText).toHaveBeenCalledWith("KILL 1;");
+  });
+
+  it("«Terminar…» pide confirmación, por defecto cancela solo la consulta y manda id+usuario+host a Go", async () => {
+    api.killProcess.mockResolvedValue(undefined);
+    const { wrapper, m } = mountView();
+    await flushPromises();
+    m.handleProcesses({ sessionId: "s1", snapshot: snap() });
+    await flushPromises();
+    await wrapper.get("[data-testid=process-1] [data-testid=kill-open]").trigger("click");
+    await flushPromises();
+    expect(api.killProcess).not.toHaveBeenCalled();
+    const body = () => document.body;
+    expect((body().querySelector("[data-testid=kill-mode-query]") as HTMLInputElement).checked).toBe(true);
+    (body().querySelector("[data-testid=kill-confirm]") as HTMLButtonElement).click();
+    await flushPromises();
+    expect(api.killProcess).toHaveBeenCalledWith("s1", expect.objectContaining({ id: 1, user: "app", host: "h" }), true);
+  });
+
+  it("elegir «Cerrar la conexión» manda queryOnly=false; cancelar no manda nada", async () => {
+    api.killProcess.mockResolvedValue(undefined);
+    const { wrapper, m } = mountView();
+    await flushPromises();
+    m.handleProcesses({ sessionId: "s1", snapshot: snap() });
+    await flushPromises();
+    await wrapper.get("[data-testid=process-2] [data-testid=kill-open]").trigger("click");
+    await flushPromises();
+    (document.body.querySelector("[data-testid=kill-cancel]") as HTMLButtonElement).click();
+    await flushPromises();
+    expect(api.killProcess).not.toHaveBeenCalled();
+    await wrapper.get("[data-testid=process-2] [data-testid=kill-open]").trigger("click");
+    await flushPromises();
+    (document.body.querySelector("[data-testid=kill-mode-conn]") as HTMLInputElement).click();
+    await flushPromises();
+    (document.body.querySelector("[data-testid=kill-confirm]") as HTMLButtonElement).click();
+    await flushPromises();
+    expect(api.killProcess).toHaveBeenCalledWith("s1", expect.objectContaining({ id: 2 }), false);
+  });
+
+  it("en un perfil de solo lectura no se ofrece «Terminar…» pero sí copiar el KILL", async () => {
+    const { wrapper, m } = mountView(true, true);
+    await flushPromises();
+    m.handleProcesses({ sessionId: "s1", snapshot: snap() });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=kill-open]").exists()).toBe(false);
+    expect(wrapper.find("[data-testid=copy-kill]").exists()).toBe(true);
+    await wrapper.get("[data-testid=process-1]").trigger("click");
+    expect(wrapper.find("[data-testid=kill-readonly]").exists()).toBe(true);
+    expect(wrapper.find("[data-testid=kill-open-detail]").exists()).toBe(false);
   });
 
   it("clic en una fila muestra el INFO completo y KILL QUERY", async () => {

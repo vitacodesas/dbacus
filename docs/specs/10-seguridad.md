@@ -21,7 +21,7 @@
 - **Nunca se persiste** `INFORMATION_SCHEMA.PROCESSLIST.INFO` ni `QUERY_SAMPLE_TEXT` (traen literales, a veces credenciales). Lo histórico guarda `DIGEST_TEXT` normalizado, su hash y contadores; `INFO` vive en memoria, truncado a 2 KiB, solo en la vista En vivo.
 - El texto normalizado puede revelar nombres de tablas y columnas: se avisa en Ajustes y existe «Borrar datos de monitoreo» por conexión.
 - Retención por tiempo y tope de tamaño (spec 22 ⚑D10); borrar un perfil borra sus datos.
-- `KILL` no existe en v1: «Copiar KILL» solo arma texto.
+- `KILL` solo uno a uno desde la vista En vivo (spec 22 ⚑D8): rechazado en perfiles de solo lectura, con confirmación en la UI, identidad del proceso (id + usuario + host) comprobada en Go y el privilegio lo decide el servidor. «Copiar KILL» sigue armando solo texto.
 - Los digests de las sentencias fijas del propio monitor (`monitor.IsOwnStatement`) no se guardan: no ensucian el ranking ni aparecen como actividad del usuario. Límite conocido: otro cliente que ejecute exactamente la misma forma tampoco aparece.
 - Los logs del monitor llevan códigos y contadores, nunca SQL ni texto de digest.
 

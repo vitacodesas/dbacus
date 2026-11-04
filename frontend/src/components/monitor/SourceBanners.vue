@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { Copy, TriangleAlert } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
+import { writeClipboard } from "../../composables/clipboard";
 import { useMonitorStore } from "../../stores/monitor";
 import { useUiStore } from "../../stores/ui";
 import BaseButton from "../ui/BaseButton.vue";
@@ -20,8 +21,8 @@ const items = computed(() => {
 const reasonText = (reason: string) => (te(`monitor.reason.${reason}`) ? t(`monitor.reason.${reason}`) : t("monitor.reason.error"));
 
 async function copy(text: string) {
-  await navigator.clipboard.writeText(text);
-  ui.toast("success", t("monitor.copied"));
+  if (await writeClipboard(text)) ui.toast("success", t("monitor.copied"));
+  else ui.toast("error", t("monitor.cannotCopy"));
 }
 </script>
 

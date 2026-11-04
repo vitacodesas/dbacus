@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -457,4 +458,53 @@ func TestMonitorNoGoroutineLeaksOnShutdown(t *testing.T) {
 
 	m.sessions.CloseAll()
 	require.NoError(t, goleak.Find(before))
+}
+
+func TestMonitorKillProcess(t *testing.T) {
+	ctx := context.Background()
+	m := newMonitorEnv(t, true)
+	var killed []string
+	m.drv.OnProcesses = func(context.Context) ([]model.Process, error) {
+		return []model.Process{{ID: 42, User: "app", Host: "10.0.0.5:5000", Command: "Query", TimeSec: 99}}, nil
+	}
+	m.drv.OnKillProcess = func(id uint64, queryOnly bool) error {
+		killed = append(killed, fmt.Sprintf("%d/%v", id, queryOnly))
+		return nil
+	}
+
+	require.NoError(t, m.svc.KillProcess(ctx, m.sid, 42, "app", "10.0.0.5:5000", true))
+	require.NoError(t, m.svc.KillProcess(ctx, m.sid, 42, "app", "10.0.0.5:5000", false))
+	require.Equal(t, []string{"42/true", "42/false"}, killed)
+
+	// El id se reutilizó por otro usuario o por otra conexión: no se mata nada.
+	for _, c := range []struct{ user, host string }{{"otro", "10.0.0.5:5000"}, {"app", "10.0.0.9:1"}} {
+		err := m.svc.KillProcess(ctx, m.sid, 42, c.user, c.host, true)
+		require.Equal(t, apperr.NotFound, code(t, err))
+	}
+	require.Equal(t, apperr.NotFound, code(t, m.svc.KillProcess(ctx, m.sid, 7, "app", "10.0.0.5:5000", true)))
+	require.Len(t, killed, 2)
+
+	require.Equal(t, "processId", detail(t, m.svc.KillProcess(ctx, m.sid, 0, "app", "h", true)))
+	require.Equal(t, "user", detail(t, m.svc.KillProcess(ctx, m.sid, 42, "", "h", true)))
+	require.Equal(t, "host", detail(t, m.svc.KillProcess(ctx, m.sid, 42, "app", "", true)))
+	require.Equal(t, apperr.SessionClosed, code(t, m.svc.KillProcess(ctx, "no-existe", 42, "app", "h", true)))
+
+	// Un error del servidor (p. ej. sin privilegio) llega tipado.
+	m.drv.OnKillProcess = func(uint64, bool) error {
+		return apperr.New(apperr.QueryFailed, "sin privilegio").WithDetail("kill_denied")
+	}
+	require.Equal(t, "kill_denied", detail(t, m.svc.KillProcess(ctx, m.sid, 42, "app", "10.0.0.5:5000", false)))
+}
+
+func TestMonitorKillProcessRejectedInReadOnlyProfile(t *testing.T) {
+	m := newMonitorEnv(t, true, func(p *model.ConnectionProfile) { p.ReadOnly = true })
+	m.drv.OnProcesses = func(context.Context) ([]model.Process, error) {
+		return []model.Process{{ID: 42, User: "app", Host: "h"}}, nil
+	}
+	called := false
+	m.drv.OnKillProcess = func(uint64, bool) error { called = true; return nil }
+	err := m.svc.KillProcess(context.Background(), m.sid, 42, "app", "h", true)
+	require.Equal(t, apperr.QueryFailed, code(t, err))
+	require.Equal(t, "readonly", detail(t, err))
+	require.False(t, called, "en solo lectura el KILL ni se envía")
 }

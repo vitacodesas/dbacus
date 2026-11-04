@@ -756,6 +756,12 @@ export interface Settings {
     "monitorDailyDays": number;
     "monitorMaxMiB": number;
     "monitorIntervalSec": number;
+
+    /**
+     * Vista En vivo (no guarda nada): si arranca sola al abrir la pestaña y cada cuántos segundos lee los procesos.
+     */
+    "monitorLiveAuto": boolean;
+    "monitorLiveIntervalSec": number;
 }
 
 /**

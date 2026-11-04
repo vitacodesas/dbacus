@@ -91,7 +91,10 @@ async function save() {
           <BaseInput :model-value="draft.monitorRawDays" type="number" mono :label="t('settings.monitor.rawDays')" :error="errorFor('monitorRawDays')" data-testid="settings-monitor-raw" @update:model-value="draft.monitorRawDays = num($event)" />
           <BaseInput :model-value="draft.monitorHourlyDays" type="number" mono :label="t('settings.monitor.hourlyDays')" :error="errorFor('monitorHourlyDays')" data-testid="settings-monitor-hourly" @update:model-value="draft.monitorHourlyDays = num($event)" />
           <BaseInput :model-value="draft.monitorDailyDays" type="number" mono :label="t('settings.monitor.dailyDays')" :error="errorFor('monitorDailyDays')" data-testid="settings-monitor-daily" @update:model-value="draft.monitorDailyDays = num($event)" />
+          <BaseInput :model-value="draft.monitorLiveIntervalSec" type="number" mono :label="t('settings.monitor.liveInterval')" :error="errorFor('monitorLiveIntervalSec')" data-testid="settings-monitor-live-interval" @update:model-value="draft.monitorLiveIntervalSec = num($event)" />
         </div>
+        <BaseToggle v-model="draft.monitorLiveAuto" :label="t('settings.monitor.liveAuto')" data-testid="settings-monitor-live-auto" />
+        <p class="-mt-1 text-xs text-muted">{{ t("settings.monitor.liveHint") }}</p>
         <p class="text-xs text-muted">{{ t("settings.monitor.hint") }}</p>
       </fieldset>
       <p v-if="message && !field" class="text-xs text-danger" role="alert">{{ message }}</p>

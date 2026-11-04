@@ -54,7 +54,7 @@ const profiles: Any[] = (seed.profiles ?? []).map((p) => ({ ...blankProfile(), .
 const groups: Any[] = (seed.groups ?? []).map((g) => ({ id: "", name: "", color: "", createdAt: "", updatedAt: "", ...g }));
 const sessions: Any[] = (seed.sessions ?? []).map((x) => ({ sessionId: "", profileId: "", serverVersion: "8.0.36", currentDatabase: "", ...x }));
 const history: Any[] = [];
-let settings: Any = { theme: "light", locale: "es", maxRows: 100_000, maxResultMemoryMiB: 512, historyRetention: 5000, showSystemDatabases: false, confirmEdits: true, sidebarWidth: 300, splitRatio: 0.5, collapsedGroups: [], monitorRawDays: 7, monitorHourlyDays: 90, monitorDailyDays: 365, monitorMaxMiB: 500, monitorIntervalSec: 30 };
+let settings: Any = { theme: "light", locale: "es", maxRows: 100_000, maxResultMemoryMiB: 512, historyRetention: 5000, showSystemDatabases: false, confirmEdits: true, sidebarWidth: 300, splitRatio: 0.5, collapsedGroups: [], monitorRawDays: 7, monitorHourlyDays: 90, monitorDailyDays: 365, monitorMaxMiB: 500, monitorIntervalSec: 30, monitorLiveAuto: true, monitorLiveIntervalSec: 2 };
 let tabs: Any[] = [];
 
 function blankProfile(): Any {
@@ -1033,6 +1033,8 @@ const MON_SQL = [
   "SELECT * FROM products WHERE category_id = 7 ORDER BY price",
   "INSERT INTO audit_log (user_id, action) VALUES (42, 'login')",
 ];
+const monKilled = new Set<number>(); // KILL: la conexión desaparece
+const monCanceled = new Set<number>(); // KILL QUERY: queda en Sleep
 function monProcesses(sessionId: string) {
   const sess = monSession(sessionId);
   const own = monScenario(sess.profileId) === "own_only";
@@ -1048,6 +1050,7 @@ function monProcesses(sessionId: string) {
       info: info.length > 2048 ? info.slice(0, 2048) : info, infoTruncated: info.length > 2048,
     });
   }
+  rows = rows.filter((r) => !monKilled.has(r.id)).map((r) => (monCanceled.has(r.id) ? { ...r, command: "Sleep", state: "", info: "", infoTruncated: false } : r));
   if (own) rows = rows.filter((r) => r.user === "app_rw");
   rows.sort((a, b) => b.timeSec - a.timeSec || a.id - b.id);
   const by = (key: string) => rows.reduce((m: Any, r) => ((m[r[key]] = (m[r[key]] ?? 0) + 1), m), {});
@@ -1288,6 +1291,17 @@ export const MonitorService = {
         for (let i = monAnn.length - 1; i >= 0; i--) if (monAnn[i].profileId === profileId || monAnn[i].profileId === "*") monAnn.splice(i, 1);
         monPurged.add(profileId);
       }
+    }),
+  KillProcess: (sessionId: string, processId: number, user: string, host: string, queryOnly: boolean) =>
+    cp(() => {
+      const sess = monSession(sessionId);
+      if (!(processId > 0)) throw fail("VALIDATION", "Identificador de proceso no válido", "processId");
+      if (!user) throw fail("VALIDATION", "Falta el usuario del proceso", "user");
+      if (!host) throw fail("VALIDATION", "Falta el host del proceso", "host");
+      if (profileOf(sess.profileId)?.readOnly) throw fail("QUERY_FAILED", "Esta conexión es de solo lectura: no se pueden terminar procesos", "readonly");
+      const row = monProcesses(sessionId).rows.find((r: Any) => r.id === processId && r.user === user && r.host === host);
+      if (!row) throw fail("NOT_FOUND", "El proceso ya terminó o ahora es otro", "process_gone");
+      (queryOnly ? monCanceled : monKilled).add(processId);
     }),
   CopyKill: (sessionId: string, processId: number, queryOnly: boolean) =>
     cp(() => {

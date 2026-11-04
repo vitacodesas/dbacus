@@ -21,16 +21,29 @@ test.describe("monitor DBA", () => {
 
   test("iniciar y detener: estado, cronómetro y muestras en vivo", async ({ app: page }) => {
     await openMonitor(page);
-    await expect(page.getByTestId("monitor-run-state")).toContainText("Sin monitoreo activo");
+    await expect(page.getByTestId("monitor-run-state")).toContainText("Sin grabar");
+    await expect(page.getByTestId("live-badge")).toContainText("no se guarda");
     await page.getByTestId("monitor-start").click();
-    await expect(page.getByTestId("monitor-run-state")).toContainText("Monitoreando");
+    await expect(page.getByTestId("monitor-run-state")).toContainText("Grabando");
+    await expect(page.getByTestId("live-badge")).toContainText("se está grabando");
     await expect(page.getByTestId("monitor-elapsed")).toHaveText(/^\d\d:\d\d:\d\d$/);
     await expect(page.getByTestId("monitor-stop")).toBeVisible();
     await expect(page.getByTestId("card-qps")).toContainText(/\d{3}/); // llegó un monitor:sample
 
     await page.getByTestId("monitor-stop").click();
     await expect(page.getByTestId("monitor-start")).toBeVisible();
-    await expect(page.getByTestId("monitor-run-state")).toContainText("Sin monitoreo activo");
+    await expect(page.getByTestId("monitor-run-state")).toContainText("Sin grabar");
+  });
+
+  test("En vivo: Pausar y Reanudar controlan la lectura de procesos", async ({ app: page }) => {
+    await openMonitor(page);
+    await expect(page.getByTestId("process-list")).toBeVisible();
+    await page.getByTestId("live-pause").click();
+    await expect(page.getByTestId("live-paused")).toBeVisible();
+    await expect(page.getByTestId("live-resume")).toBeVisible();
+    await page.getByTestId("live-resume").click();
+    await expect(page.getByTestId("live-pause")).toBeVisible();
+    await expect(page.getByTestId("process-list")).toBeVisible();
   });
 
   test("En vivo: procesos, máximo de conexiones y «Copiar KILL»", async ({ app: page }) => {
@@ -47,6 +60,28 @@ test.describe("monitor DBA", () => {
     await expect(page.getByTestId("process-detail")).toBeVisible();
     await page.getByTestId("copy-kill-query").click();
     await expect.poll(() => readClipboard(page)).toMatch(/^KILL QUERY \d+;$/);
+  });
+
+  test("En vivo: «Terminar…» cancela la consulta o cierra la conexión tras confirmar", async ({ app: page }) => {
+    await openMonitor(page);
+    await expect(page.getByTestId("process-list")).toBeVisible();
+    const before = await page.getByTestId("kill-open").count();
+    expect(before).toBeGreaterThan(3);
+
+    // Cancelar no hace nada.
+    await page.getByTestId("kill-open").first().click();
+    await expect(page.getByTestId("kill-dialog")).toBeVisible();
+    await expect(page.getByTestId("kill-mode-query")).toBeChecked();
+    await page.getByTestId("kill-cancel").click();
+    await expect(page.getByTestId("kill-dialog")).toHaveCount(0);
+
+    // KILL (cierra la conexión): la fila desaparece de la vista en vivo.
+    const idText = await page.getByTestId("kill-open").first().evaluate((el) => el.closest("[data-testid^=process-]")!.getAttribute("data-testid"));
+    await page.getByTestId("kill-open").first().click();
+    await page.getByTestId("kill-mode-conn").check();
+    await page.getByTestId("kill-confirm").click();
+    await expect(page.getByTestId(idText!)).toHaveCount(0);
+    await expect(page.getByTestId("kill-open")).toHaveCount(before - 1);
   });
 
   test("Top queries: cambia de criterio y marca la regresión al comparar", async ({ app: page }) => {
@@ -167,7 +202,7 @@ test.describe("monitor DBA: perfil de solo lectura", () => {
   test("monitorear está permitido", async ({ app: page }) => {
     await openMonitor(page);
     await page.getByTestId("monitor-start").click();
-    await expect(page.getByTestId("monitor-run-state")).toContainText("Monitoreando");
+    await expect(page.getByTestId("monitor-run-state")).toContainText("Grabando");
     await expect(page.getByTestId("monitor-error")).toHaveCount(0);
     await page.getByTestId("monitor-stop").click();
     await expect(page.getByTestId("monitor-start")).toBeVisible();

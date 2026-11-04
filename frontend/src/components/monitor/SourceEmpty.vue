@@ -4,6 +4,7 @@
 import { computed } from "vue";
 import { Copy } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
+import { writeClipboard } from "../../composables/clipboard";
 import { useMonitorStore } from "../../stores/monitor";
 import { useUiStore } from "../../stores/ui";
 import BaseButton from "../ui/BaseButton.vue";
@@ -21,8 +22,8 @@ const reasonText = computed(() => {
 });
 
 async function copy(text: string) {
-  await navigator.clipboard.writeText(text);
-  ui.toast("success", t("monitor.copied"));
+  if (await writeClipboard(text)) ui.toast("success", t("monitor.copied"));
+  else ui.toast("error", t("monitor.cannotCopy"));
 }
 </script>
 

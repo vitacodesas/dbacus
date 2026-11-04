@@ -3,7 +3,8 @@ import { defineStore } from "pinia";
 import * as api from "../api/monitor";
 import { asAppError } from "../api/errors";
 import { i18n } from "../i18n";
-import type { Annotation, AppError, Comparison, DigestDetail, DigestStat, MonitorCaps, MonitorConfig, MonitorProcessesEvent, MonitorRun, MonitorSampleEvent, MonitorStateEvent, ProcessSnapshot, Series, TimeRange } from "../types";
+import type { Annotation, AppError, Comparison, DigestDetail, DigestStat, MonitorCaps, MonitorConfig, MonitorProcessesEvent, MonitorRun, MonitorSampleEvent, MonitorStateEvent, Process, ProcessSnapshot, Series, TimeRange } from "../types";
+import { useConnectionsStore } from "./connections";
 import { useSessionsStore } from "./sessions";
 import { useUiStore } from "./ui";
 
@@ -23,7 +24,6 @@ export type MetricKey = (typeof METRIC_KEYS)[number];
 
 /** Renovación del arrendamiento de la vista en vivo: Go lo suelta a los 30 s sin renovar (spec 22). */
 export const LEASE_RENEW_MS = 15_000;
-export const LIVE_INTERVAL_MS = 2_000;
 
 export interface SourceNotice {
   source: string;
@@ -72,6 +72,10 @@ export const useMonitorStore = defineStore("monitor", () => {
 
   // Vista en vivo: una sola a la vez, con arrendamiento que se renueva mientras está visible.
   const watching = ref<string | null>(null);
+  /** Pausa o reanudación manual de la vista en vivo; sin tocarla manda el ajuste «vista en vivo automática». No se guarda. */
+  const liveManual = ref<boolean | null>(null);
+  const liveEnabled = computed(() => liveManual.value ?? useUiStore().monitor.monitorLiveAuto);
+  const setLive = (on: boolean) => (liveManual.value = on);
   let renewTimer: ReturnType<typeof setInterval> | null = null;
 
   const sessionId = computed(() => {
@@ -81,6 +85,8 @@ export const useMonitorStore = defineStore("monitor", () => {
   });
   const session = computed(() => (sessionId.value ? (sessions.byId[sessionId.value] ?? null) : null));
   const profileId = computed(() => session.value?.profileId ?? null);
+  /** Perfil de solo lectura: Go rechaza el KILL y la UI ni lo ofrece. */
+  const readOnly = computed(() => !!(profileId.value && useConnectionsStore().byId.get(profileId.value)?.readOnly));
   const currentCaps = computed(() => (sessionId.value ? (caps.value[sessionId.value] ?? null) : null));
   const currentRun = computed(() => (profileId.value ? (run.value[profileId.value] ?? null) : null));
   const currentSample = computed(() => (profileId.value ? (lastSample.value[profileId.value] ?? null) : null));
@@ -99,8 +105,7 @@ export const useMonitorStore = defineStore("monitor", () => {
   };
 
   /** El periodo previo, de igual duración, justo antes del rango elegido (para comparar). */
-  const previousWindow = (): TimeRange => {
-    const cur = rangeWindow();
+  const previousWindow = (cur: TimeRange = rangeWindow()): TimeRange => {
     const span = Date.parse(cur.to) - Date.parse(cur.from);
     return { from: new Date(Date.parse(cur.from) - span).toISOString(), to: cur.from };
   };
@@ -177,7 +182,7 @@ export const useMonitorStore = defineStore("monitor", () => {
   // --- vista en vivo (arrendamiento) ---
   async function watch_(id: string) {
     try {
-      await api.watchProcesses(id, LIVE_INTERVAL_MS);
+      await api.watchProcesses(id, Math.max(1, useUiStore().monitor.monitorLiveIntervalSec) * 1000);
       return true;
     } catch (e) {
       fail(e);
@@ -239,6 +244,20 @@ export const useMonitorStore = defineStore("monitor", () => {
     }
   }
 
+  /** Termina un proceso. Devuelve true si Go lo ejecutó; si no, el toast ya muestra el motivo. */
+  async function killProcess(p: Process, queryOnly: boolean) {
+    const id = sessionId.value;
+    if (!id) return false;
+    try {
+      await api.killProcess(id, p, queryOnly);
+      useUiStore().toast("success", t(queryOnly ? "monitor.kill.doneQuery" : "monitor.kill.doneConn", { id: p.id }));
+      return true;
+    } catch (e) {
+      useUiStore().toast("error", fail(e).message);
+      return false;
+    }
+  }
+
   // --- lecturas históricas: esqueleto para T16.7 (Go calcula; aquí solo se guarda) ---
   async function loadTop(req: Partial<Parameters<typeof api.monitorTop>[0]> = {}) {
     const pid = profileId.value;
@@ -260,7 +279,8 @@ export const useMonitorStore = defineStore("monitor", () => {
     const pid = profileId.value;
     if (!pid) return;
     try {
-      comparison.value = await api.monitorCompare(pid, previousWindow(), rangeWindow());
+      const cur = rangeWindow();
+      comparison.value = await api.monitorCompare(pid, previousWindow(cur), cur);
     } catch (e) {
       fail(e);
     }
@@ -388,7 +408,7 @@ export const useMonitorStore = defineStore("monitor", () => {
 
   return {
     tab, selectedSessionId, schema, range, caps, processes, run, lastSample, notices, starting, error, loadingCaps,
-    top, series, runList, comparison, digestDetail, loadingTop, watching,
+    top, series, runList, comparison, digestDetail, loadingTop, watching, liveEnabled, setLive, readOnly, killProcess,
     topOrder, topCompare, topLoaded, loadingSeries, seriesLoaded, loadingRuns, runsLoaded, loadingDigest,
     sessionId, session, profileId, currentCaps, currentRun, currentSample, currentProcesses, currentNotices, running, canStart,
     rangeWindow, previousWindow, selectSession, loadCaps, start, stop, watch, unwatch, copyKill,

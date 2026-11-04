@@ -46,6 +46,8 @@ type Driver struct {
 
 	SchemaReader driver.SchemaReader // si es nil se usa un *Schema vacío
 	OnKill       func(connID string) // se llama en cada Conn.Kill
+	// OnKillProcess atiende driver.ProcessKiller; sin hook, el KILL se da por hecho.
+	OnKillProcess func(id uint64, queryOnly bool) error
 }
 
 func New(name string) *Driver { return &Driver{name: name, Version: "fake-1.0"} }
@@ -117,6 +119,15 @@ func (p *Pool) Probe(context.Context) (model.MonitorCaps, error) {
 	}
 	ok := model.SourceState{State: model.SourceOK, Reason: model.ReasonOK}
 	return model.MonitorCaps{ServerVersion: p.d.Version, ServerID: "fake", Processlist: ok, Digest: ok, Status: ok}, nil
+}
+
+var _ driver.ProcessKiller = (*Pool)(nil)
+
+func (p *Pool) KillProcess(_ context.Context, id uint64, queryOnly bool) error {
+	if p.d.OnKillProcess != nil {
+		return p.d.OnKillProcess(id, queryOnly)
+	}
+	return nil
 }
 
 func (p *Pool) Processes(ctx context.Context) ([]model.Process, error) {

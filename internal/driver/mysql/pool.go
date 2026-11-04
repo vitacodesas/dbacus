@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync"
 
+	gomysql "github.com/go-sql-driver/mysql"
 	"github.com/vitacodesas/dbacus/internal/apperr"
 	"github.com/vitacodesas/dbacus/internal/driver"
 	"github.com/vitacodesas/dbacus/internal/sqlsplit"
@@ -112,6 +113,28 @@ func (c *conn) Kill(ctx context.Context) error {
 		return fmt.Errorf("id de hilo inválido %q", c.id)
 	}
 	_, err := c.pool.aux.ExecContext(ctx, "KILL QUERY "+c.id)
+	return mapError(err)
+}
+
+var _ driver.ProcessKiller = (*pool)(nil)
+
+// KillProcess termina el hilo `id` por el pool auxiliar (nunca por la conexión de solo lectura del monitor). El id es un
+// entero: no hay texto externo en la sentencia. 1094 = el hilo ya no existe; 1095 = sin privilegio sobre ese hilo.
+func (p *pool) KillProcess(ctx context.Context, id uint64, queryOnly bool) error {
+	stmt := "KILL " + strconv.FormatUint(id, 10)
+	if queryOnly {
+		stmt = "KILL QUERY " + strconv.FormatUint(id, 10)
+	}
+	_, err := p.aux.ExecContext(ctx, stmt)
+	var me *gomysql.MySQLError
+	if errors.As(err, &me) {
+		switch me.Number {
+		case 1094:
+			return apperr.New(apperr.NotFound, "El proceso ya terminó").WithDetail("process_gone")
+		case 1095:
+			return apperr.New(apperr.QueryFailed, "El servidor no permite terminar ese proceso: falta el privilegio CONNECTION_ADMIN o SUPER").WithDetail("kill_denied")
+		}
+	}
 	return mapError(err)
 }
 

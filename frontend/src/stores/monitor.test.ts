@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from "pinia";
 const api = vi.hoisted(() => ({
   monitorCapabilities: vi.fn(), refreshMonitorCapabilities: vi.fn(), startMonitor: vi.fn(), stopMonitor: vi.fn(), monitorRuns: vi.fn(),
   watchProcesses: vi.fn(), unwatchProcesses: vi.fn(), monitorTop: vi.fn(), monitorDigest: vi.fn(), monitorSeries: vi.fn(), monitorCompare: vi.fn(),
-  annotateMonitor: vi.fn(), deleteMonitorAnnotation: vi.fn(), purgeMonitor: vi.fn(), monitorCopyKill: vi.fn(),
+  annotateMonitor: vi.fn(), deleteMonitorAnnotation: vi.fn(), purgeMonitor: vi.fn(), monitorCopyKill: vi.fn(), killProcess: vi.fn(),
 }));
 vi.mock("../api/monitor", () => api);
 
@@ -136,6 +136,26 @@ describe("monitor store · arrendamiento de la vista en vivo", () => {
     expect(api.watchProcesses).toHaveBeenCalledTimes(3);
   });
 
+  it("el intervalo de la vista en vivo sale de los ajustes", async () => {
+    const { m } = setup();
+    useUiStore().monitor.monitorLiveIntervalSec = 5;
+    await m.watch();
+    expect(api.watchProcesses).toHaveBeenCalledWith("s1", 5000);
+  });
+
+  it("liveEnabled sigue el ajuste automático hasta que el usuario pausa o reanuda", () => {
+    const { m } = setup();
+    const ui = useUiStore();
+    expect(m.liveEnabled).toBe(true);
+    ui.monitor.monitorLiveAuto = false;
+    expect(m.liveEnabled).toBe(false);
+    m.setLive(true);
+    expect(m.liveEnabled).toBe(true);
+    ui.monitor.monitorLiveAuto = true;
+    m.setLive(false);
+    expect(m.liveEnabled).toBe(false);
+  });
+
   it("watch repetido sobre la misma sesión no abre otro arrendamiento ni otro temporizador", async () => {
     const { m } = setup();
     await m.watch();
@@ -212,6 +232,23 @@ describe("monitor store · lecturas y KILL", () => {
     const { m } = setup();
     api.monitorCopyKill.mockRejectedValue(apiError("processId", "Identificador de proceso no válido", "VALIDATION"));
     expect(await m.copyKill(0, false)).toBeNull();
+    expect(useUiStore().toasts.some((t) => t.kind === "error")).toBe(true);
+  });
+
+  it("killProcess manda id, usuario y host a Go y avisa", async () => {
+    const { m } = setup();
+    api.killProcess.mockResolvedValue(undefined);
+    const p = { id: 9, user: "app", host: "h:1", db: "", command: "Query", timeSec: 1, state: "", info: "", infoTruncated: false };
+    expect(await m.killProcess(p, true)).toBe(true);
+    expect(api.killProcess).toHaveBeenCalledWith("s1", p, true);
+    expect(useUiStore().toasts.some((t) => t.kind === "success")).toBe(true);
+  });
+
+  it("killProcess con error de Go (p. ej. sin privilegio) muestra el motivo y devuelve false", async () => {
+    const { m } = setup();
+    api.killProcess.mockRejectedValue(apiError("kill_denied", "Falta el privilegio", "QUERY_FAILED"));
+    const p = { id: 9, user: "app", host: "h:1", db: "", command: "Query", timeSec: 1, state: "", info: "", infoTruncated: false };
+    expect(await m.killProcess(p, false)).toBe(false);
     expect(useUiStore().toasts.some((t) => t.kind === "error")).toBe(true);
   });
 

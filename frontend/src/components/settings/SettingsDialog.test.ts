@@ -89,6 +89,7 @@ describe("SettingsDialog", () => {
     expect(f("settings-monitor-hourly").value).toBe("90");
     expect(f("settings-monitor-daily").value).toBe("365");
     expect(f("settings-monitor-maxmib").value).toBe("500");
+    expect(f("settings-monitor-live-interval").value).toBe("2");
 
     f("settings-monitor-interval").value = "2";
     f("settings-monitor-interval").dispatchEvent(new Event("input"));

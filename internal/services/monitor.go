@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -538,6 +539,48 @@ func (s *MonitorService) CopyKill(sessionID string, processID int64, queryOnly b
 		return fmt.Sprintf("KILL QUERY %d;", processID), nil
 	}
 	return fmt.Sprintf("KILL %d;", processID), nil
+}
+
+// monKillTimeout acota la relectura de procesos y el KILL de KillProcess.
+const monKillTimeout = 5 * time.Second
+
+// KillProcess termina un proceso desde la vista En vivo (spec 22 ⚑D8). Las reglas viven aquí y no en la UI: solo lectura
+// lo rechaza, el proceso debe seguir siendo el mismo (id, usuario y host; los ids se reutilizan) y el permiso final lo
+// decide el servidor. Un proceso por llamada, nunca masivo.
+func (s *MonitorService) KillProcess(ctx context.Context, sessionID string, processID int64, user, host string, queryOnly bool) error {
+	sess, r, err := s.session(sessionID)
+	if err != nil {
+		return err
+	}
+	switch {
+	case processID <= 0:
+		return apperr.New(apperr.Validation, "Identificador de proceso no válido").WithDetail("processId")
+	case user == "":
+		return apperr.New(apperr.Validation, "Falta el usuario del proceso").WithDetail("user")
+	case host == "":
+		return apperr.New(apperr.Validation, "Falta el host del proceso").WithDetail("host")
+	}
+	if sessionReadOnly(ctx, s.d.Store, sess) {
+		return errReadOnly("Esta conexión es de solo lectura: no se pueden terminar procesos")
+	}
+	killer, ok := sess.Pool.(driver.ProcessKiller)
+	if !ok {
+		return apperr.New(apperr.Unsupported, "Este motor no permite terminar procesos")
+	}
+	pctx, cancel := context.WithTimeout(ctx, monKillTimeout)
+	defer cancel()
+	procs, err := r.Processes(pctx)
+	if err != nil {
+		return toAppErr(err)
+	}
+	if !slices.ContainsFunc(procs, func(p model.Process) bool { return p.ID == uint64(processID) && p.User == user && p.Host == host }) {
+		return apperr.New(apperr.NotFound, "El proceso ya terminó o ahora es otro").WithDetail("process_gone")
+	}
+	if err := killer.KillProcess(pctx, uint64(processID), queryOnly); err != nil {
+		return toAppErr(err)
+	}
+	slog.Info("proceso terminado desde el monitor", "queryOnly", queryOnly)
+	return nil
 }
 
 // autoStart arranca el monitoreo con los valores por defecto tras conectar un perfil con MonitorAutoStart. Es de mejor

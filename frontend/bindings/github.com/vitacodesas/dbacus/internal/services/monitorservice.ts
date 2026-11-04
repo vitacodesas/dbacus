@@ -50,6 +50,15 @@ export function Digest(profileID: string, digest: string, $from: string, to: str
 }
 
 /**
+ * KillProcess termina un proceso desde la vista En vivo (spec 22 ⚑D8). Las reglas viven aquí y no en la UI: solo lectura
+ * lo rechaza, el proceso debe seguir siendo el mismo (id, usuario y host; los ids se reutilizan) y el permiso final lo
+ * decide el servidor. Un proceso por llamada, nunca masivo.
+ */
+export function KillProcess(sessionID: string, processID: number, user: string, host: string, queryOnly: boolean): $CancellablePromise<void> {
+    return $Call.ByID(657385296, sessionID, processID, user, host, queryOnly);
+}
+
+/**
  * Purge borra datos del perfil (todo, o lo anterior a before). Borrarlo todo con una ejecución activa no se permite.
  */
 export function Purge(profileID: string, before: string | null): $CancellablePromise<void> {

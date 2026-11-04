@@ -72,6 +72,8 @@ func ValidateSettings(st model.Settings) *apperr.AppError {
 		return bad("monitorMaxMiB")
 	case st.MonitorIntervalSec < 5 || st.MonitorIntervalSec > 900:
 		return bad("monitorIntervalSec")
+	case st.MonitorLiveIntervalSec < 1 || st.MonitorLiveIntervalSec > 60:
+		return bad("monitorLiveIntervalSec")
 	case len(st.CollapsedGroups) > maxCollapsedGroups || slices.ContainsFunc(st.CollapsedGroups, func(id string) bool { return len(id) > 64 }):
 		return bad("collapsedGroups")
 	}

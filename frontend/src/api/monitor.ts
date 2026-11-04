@@ -19,5 +19,7 @@ export const monitorCompare = (profileId: string, a: TimeRange, b: TimeRange): P
 export const annotateMonitor = (profileId: string, at: string, text: string): Promise<Annotation> => wrap(MonitorService.Annotate(profileId, at, text));
 export const deleteMonitorAnnotation = (id: string): Promise<void> => wrap(MonitorService.DeleteAnnotation(id));
 export const purgeMonitor = (profileId: string, before: string | null): Promise<void> => wrap(MonitorService.Purge(profileId, before));
+/** Termina un proceso (spec 22 ⚑D8). Go rechaza solo lectura y comprueba que id+usuario+host sigan siendo los mismos. */
+export const killProcess = (sessionId: string, p: { id: number; user: string; host: string }, queryOnly: boolean): Promise<void> => wrap(MonitorService.KillProcess(sessionId, p.id, p.user, p.host, queryOnly));
 /** Go arma el texto (`KILL n;` o `KILL QUERY n;`); no ejecuta nada. */
 export const monitorCopyKill = (sessionId: string, processId: number, queryOnly: boolean): Promise<string> => wrap(MonitorService.CopyKill(sessionId, processId, queryOnly));

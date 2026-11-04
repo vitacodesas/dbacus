@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/vitacodesas/dbacus/internal/apperr"
 	"github.com/vitacodesas/dbacus/internal/driver"
 	"github.com/vitacodesas/dbacus/internal/model"
 	"github.com/vitacodesas/dbacus/internal/testutil/mysqlbox"
@@ -29,6 +30,7 @@ func TestMonitorIntegration(t *testing.T) {
 			t.Run("capacidades con privilegios parciales", func(t *testing.T) { testMonitorCapsPartial(t, in, maria) })
 			t.Run("consumidor del digest apagado", func(t *testing.T) { testMonitorConsumerOff(t, in, maria) })
 			t.Run("procesos", func(t *testing.T) { testProcesslist(t, in) })
+			t.Run("KILL de un proceso", func(t *testing.T) { testKillProcess(t, in) })
 			t.Run("estado global", func(t *testing.T) { testGlobalStatus(t, in) })
 			t.Run("digest", func(t *testing.T) { testDigests(t, in, maria) })
 			t.Run("la conexión del monitor es de solo lectura", func(t *testing.T) { testMonReadOnly(t, in) })
@@ -384,4 +386,97 @@ func testMonitorCost(t *testing.T, in mysqlbox.Instance) {
 		}
 	}()
 	measure(fmt.Sprintf("Processes con %d conexiones", len(held)), func() (int, error) { ps, err := act.Processes(ctx); return len(ps), err })
+}
+
+// KillProcess (spec 22 ⚑D8): KILL QUERY cancela la consulta y conserva la conexión; KILL la cierra; un id inexistente es
+// NOT_FOUND y un usuario sin privilegio sobre ese hilo recibe kill_denied.
+func testKillProcess(t *testing.T, in mysqlbox.Instance) {
+	ctx := context.Background()
+	admin := openPool(t, in, nil)
+	killer, ok := admin.(driver.ProcessKiller)
+	require.True(t, ok)
+
+	victim := func(t *testing.T) (driver.Conn, uint64, <-chan error) {
+		t.Helper()
+		c, err := openPool(t, in, nil).Acquire(ctx)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = c.Release() })
+		var id uint64
+		_, err = fmt.Sscan(c.ID(), &id)
+		require.NoError(t, err)
+		done := make(chan error, 1)
+		go func() {
+			r, err := c.Run(ctx, "SELECT SLEEP(30)")
+			if err == nil {
+				for r.Next() {
+				}
+				err = r.Err()
+				_ = r.Close()
+			}
+			done <- err
+		}()
+		require.Eventually(t, func() bool {
+			ps, err := activity(t, admin).Processes(ctx)
+			require.NoError(t, err)
+			for _, p := range ps {
+				if p.ID == id && strings.Contains(p.Info, "SLEEP") {
+					return true
+				}
+			}
+			return false
+		}, 10*time.Second, 100*time.Millisecond)
+		return c, id, done
+	}
+
+	t.Run("KILL QUERY cancela la consulta y la conexión sigue", func(t *testing.T) {
+		c, id, done := victim(t)
+		require.NoError(t, killer.KillProcess(ctx, id, true))
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("la consulta no terminó tras KILL QUERY")
+		}
+		r, err := c.Run(ctx, "SELECT 1")
+		require.NoError(t, err, "la conexión sobrevive a KILL QUERY")
+		require.NoError(t, r.Close())
+	})
+
+	t.Run("KILL cierra la conexión", func(t *testing.T) {
+		c, id, done := victim(t)
+		require.NoError(t, killer.KillProcess(ctx, id, false))
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("la consulta no terminó tras KILL")
+		}
+		require.Eventually(t, func() bool {
+			ps, _ := activity(t, admin).Processes(ctx)
+			for _, p := range ps {
+				if p.ID == id {
+					return false
+				}
+			}
+			return true
+		}, 10*time.Second, 100*time.Millisecond)
+		_, err := c.Run(ctx, "SELECT 1")
+		require.Error(t, err, "tras KILL la conexión ya no existe")
+	})
+
+	t.Run("id inexistente", func(t *testing.T) {
+		err := killer.KillProcess(ctx, 4_000_000_000, true)
+		require.Error(t, err)
+		require.Equal(t, "process_gone", apperr.From(err).Detail)
+		require.Equal(t, apperr.NotFound, apperr.From(err).Code)
+	})
+
+	t.Run("sin privilegio sobre ese hilo", func(t *testing.T) {
+		execAll(t, admin, "DROP USER IF EXISTS 'killer_lo'@'%'", "CREATE USER 'killer_lo'@'%' IDENTIFIED BY 'pw'", "GRANT SELECT ON *.* TO 'killer_lo'@'%'")
+		_, id, _ := victim(t)
+		lo := openPool(t, in, asUser("killer_lo"))
+		err := lo.(driver.ProcessKiller).KillProcess(ctx, id, true)
+		require.Error(t, err)
+		require.Equal(t, "kill_denied", apperr.From(err).Detail)
+		// Limpieza: la víctima sigue durmiendo; se cancela con el admin.
+		require.NoError(t, killer.KillProcess(ctx, id, true))
+	})
 }

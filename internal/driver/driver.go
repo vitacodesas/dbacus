@@ -128,6 +128,12 @@ type ActivityReader interface {
 	DigestTexts(ctx context.Context, digests []string) (map[string]string, error)
 }
 
+// ProcessKiller es opcional (spec 22 ⚑D8): lo implementa el Pool. Termina el hilo `id` del servidor: queryOnly=true cancela
+// su consulta y conserva la conexión (KILL QUERY); false cierra la conexión (KILL). El permiso lo decide el servidor.
+type ProcessKiller interface {
+	KillProcess(ctx context.Context, id uint64, queryOnly bool) error
+}
+
 // RoutineReader es opcional (spec 21): lo implementa el SchemaReader de un motor con procedimientos y funciones.
 // Routines lista sin cuerpos (una base puede tener cientos); DescribeRoutine lee el CREATE completo, sin caché.
 type RoutineReader interface {

@@ -90,6 +90,9 @@ type Settings struct {
 	MonitorDailyDays   int `json:"monitorDailyDays"`
 	MonitorMaxMiB      int `json:"monitorMaxMiB"`
 	MonitorIntervalSec int `json:"monitorIntervalSec"`
+	// Vista En vivo (no guarda nada): si arranca sola al abrir la pestaña y cada cuántos segundos lee los procesos.
+	MonitorLiveAuto        bool `json:"monitorLiveAuto"`
+	MonitorLiveIntervalSec int  `json:"monitorLiveIntervalSec"`
 }
 
 func DefaultSettings() Settings {
@@ -104,11 +107,13 @@ func DefaultSettings() Settings {
 		SplitRatio:         0.5,
 		CollapsedGroups:    []string{},
 
-		MonitorRawDays:     7,
-		MonitorHourlyDays:  90,
-		MonitorDailyDays:   365,
-		MonitorMaxMiB:      500,
-		MonitorIntervalSec: 30,
+		MonitorRawDays:         7,
+		MonitorHourlyDays:      90,
+		MonitorDailyDays:       365,
+		MonitorMaxMiB:          500,
+		MonitorIntervalSec:     30,
+		MonitorLiveAuto:        true,
+		MonitorLiveIntervalSec: 2,
 	}
 }
 

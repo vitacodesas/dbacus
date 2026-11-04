@@ -57,7 +57,7 @@ describe("ui store", () => {
     const saved: Settings = {
       theme: "dark", locale: "en", maxRows: 5000, maxResultMemoryMiB: 128, historyRetention: 100,
       showSystemDatabases: true, confirmEdits: false, sidebarWidth: 280, splitRatio: 0.4, collapsedGroups: ["g1"],
-      monitorRawDays: 7, monitorHourlyDays: 90, monitorDailyDays: 365, monitorMaxMiB: 500, monitorIntervalSec: 30,
+      monitorRawDays: 7, monitorHourlyDays: 90, monitorDailyDays: 365, monitorMaxMiB: 500, monitorIntervalSec: 30, monitorLiveAuto: true, monitorLiveIntervalSec: 2,
     };
     beforeEach(() => Object.values(api).forEach((f) => f.mockReset()));
 

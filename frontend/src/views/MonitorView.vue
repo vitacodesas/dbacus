@@ -32,7 +32,7 @@ const tabs = computed(() => (["live", "top", "metrics", "runs"] as MonitorTab[])
 // El monitor se queda montado al volver a consultas (v-show): la vigilancia solo corre mientras se ve la pestaña En vivo.
 const visible = computed(() => ui.mainView === "monitor");
 // Solo se pide arrendamiento cuando Capabilities ya dijo que la lista de procesos se puede leer: lo contrario sería una llamada inútil.
-const live = computed(() => visible.value && store.tab === "live" && !!store.sessionId && !!store.currentCaps && store.currentCaps.processlist.state !== "unavailable");
+const live = computed(() => visible.value && store.tab === "live" && store.liveEnabled && !!store.sessionId && !!store.currentCaps && store.currentCaps.processlist.state !== "unavailable");
 watch([live, () => store.sessionId], ([on, sid]) => void (on && sid ? store.watch(sid) : store.unwatch()), { immediate: true });
 watch(() => store.sessionId, (sid) => {
   if (!sid) return;

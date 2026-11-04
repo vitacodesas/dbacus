@@ -14,3 +14,10 @@ export const Events = {
     queueMicrotask(() => handlers.get(name)?.forEach((h) => h({ name, data })));
   },
 };
+
+// Sin ventana nativa no hay portapapeles de Wails: falla para que el código use su alternativa.
+export const Clipboard = {
+  SetText(): Promise<void> {
+    return Promise.reject(new Error("sin runtime de Wails"));
+  },
+};

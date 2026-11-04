@@ -381,11 +381,12 @@ func TestPurgeMonitorDataBefore(t *testing.T) {
 func TestMonitorSettingsValidation(t *testing.T) {
 	require.Nil(t, ValidateSettings(model.DefaultSettings()))
 	bad := map[string]func(*model.Settings){
-		"monitorRawDays":     func(s *model.Settings) { s.MonitorRawDays = 0 },
-		"monitorHourlyDays":  func(s *model.Settings) { s.MonitorHourlyDays = s.MonitorRawDays - 1 },
-		"monitorDailyDays":   func(s *model.Settings) { s.MonitorDailyDays = s.MonitorHourlyDays - 1 },
-		"monitorMaxMiB":      func(s *model.Settings) { s.MonitorMaxMiB = 1 },
-		"monitorIntervalSec": func(s *model.Settings) { s.MonitorIntervalSec = 1 },
+		"monitorRawDays":         func(s *model.Settings) { s.MonitorRawDays = 0 },
+		"monitorHourlyDays":      func(s *model.Settings) { s.MonitorHourlyDays = s.MonitorRawDays - 1 },
+		"monitorDailyDays":       func(s *model.Settings) { s.MonitorDailyDays = s.MonitorHourlyDays - 1 },
+		"monitorMaxMiB":          func(s *model.Settings) { s.MonitorMaxMiB = 1 },
+		"monitorIntervalSec":     func(s *model.Settings) { s.MonitorIntervalSec = 1 },
+		"monitorLiveIntervalSec": func(s *model.Settings) { s.MonitorLiveIntervalSec = 0 },
 	}
 	for field, mut := range bad {
 		st := model.DefaultSettings()
@@ -394,7 +395,13 @@ func TestMonitorSettingsValidation(t *testing.T) {
 		require.NotNil(t, ae, field)
 		require.Equal(t, field, ae.Detail)
 	}
+	hi := model.DefaultSettings()
+	hi.MonitorLiveIntervalSec = 61
+	require.Equal(t, "monitorLiveIntervalSec", ValidateSettings(hi).Detail)
+	// Ajustes guardados antes de existir la vista en vivo: conservan los valores por defecto (automática, 2 s).
 	d := model.DefaultSettings()
+	require.True(t, d.MonitorLiveAuto)
+	require.Equal(t, 2, d.MonitorLiveIntervalSec)
 	require.Equal(t, MonitorRetention{RawDays: 7, HourlyDays: 90, DailyDays: 365, MaxBytes: 500 << 20}, MonitorRetentionFromSettings(d))
 }
 
