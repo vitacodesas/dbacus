@@ -275,6 +275,17 @@ export interface Database {
 }
 
 /**
+ * DigestActor es un usuario y host (sin puerto) vistos ejecutando un digest; Seen cuenta las muestras en que se vio y
+ * LastSeen es la última vez, en milisegundos desde epoch.
+ */
+export interface DigestActor {
+    "user": string;
+    "host": string;
+    "seen": number;
+    "lastSeen": number;
+}
+
+/**
  * DigestDetail es el detalle de un digest en un rango: totales, serie de ejecuciones/media y huecos del muestreo.
  * Schema va vacío si el mismo digest aparece en varias bases (Schemas las lista todas).
  */
@@ -285,6 +296,11 @@ export interface DigestDetail {
     "stat": DigestStat;
     "points": DigestPoint[] | null;
     "gaps": TimeGap[] | null;
+
+    /**
+     * todos los vistos, por muestras descendente (spec 22 ⚑D17)
+     */
+    "actors": DigestActor[] | null;
 }
 
 /**
@@ -319,6 +335,13 @@ export interface DigestStat {
      */
     "regression": boolean;
     "approx": boolean;
+
+    /**
+     * Actors: quién se vio ejecutando el digest (los 3 con más muestras) y ActorCount el total. Aproximado: viene del
+     * muestreo del processlist, no del digest (spec 22 ⚑D17).
+     */
+    "actors": DigestActor[] | null;
+    "actorCount": number;
 }
 
 export interface FKSpec {
@@ -409,6 +432,12 @@ export interface MonitorCaps {
     "processlist": SourceState;
     "digest": SourceState;
     "status": SourceState;
+
+    /**
+     * ProcessDigest dice si el processlist puede traer el hash del digest de cada consulta en curso (STATEMENT_DIGEST, MySQL 8.0+):
+     * de él sale el «quién» de Top queries (spec 22 ⚑D17).
+     */
+    "processDigest": SourceState;
 }
 
 export interface MonitorConfig {
@@ -461,6 +490,12 @@ export interface Process {
      */
     "info": string;
     "infoTruncated": boolean;
+
+    /**
+     * Digest es STATEMENT_DIGEST(INFO), calculado en el servidor sobre el INFO completo; vacío si el servidor no lo ofrece
+     * o el hilo no ejecuta nada. Es un hash: no revela el SQL (spec 22 ⚑D17).
+     */
+    "digest": string;
 }
 
 /**

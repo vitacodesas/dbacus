@@ -39,6 +39,9 @@ type MonitorCaps struct {
 	Processlist   SourceState `json:"processlist"`
 	Digest        SourceState `json:"digest"`
 	Status        SourceState `json:"status"`
+	// ProcessDigest dice si el processlist puede traer el hash del digest de cada consulta en curso (STATEMENT_DIGEST, MySQL 8.0+):
+	// de él sale el «quién» de Top queries (spec 22 ⚑D17).
+	ProcessDigest SourceState `json:"processDigest"`
 }
 
 // Process es una fila de INFORMATION_SCHEMA.PROCESSLIST. Info solo vive en memoria (spec 22 ⚑D7): nunca se persiste.
@@ -52,6 +55,9 @@ type Process struct {
 	State         string `json:"state"`
 	Info          string `json:"info"` // truncado a 2 KiB
 	InfoTruncated bool   `json:"infoTruncated"`
+	// Digest es STATEMENT_DIGEST(INFO), calculado en el servidor sobre el INFO completo; vacío si el servidor no lo ofrece
+	// o el hilo no ejecuta nada. Es un hash: no revela el SQL (spec 22 ⚑D17).
+	Digest string `json:"digest"`
 }
 
 // DigestCounters son los contadores acumulados de un digest (sin texto). Se leen como uint64: SUM_TIMER_WAIT (picosegundos)
@@ -125,6 +131,19 @@ type DigestStat struct {
 	IsNew         bool        `json:"isNew"`
 	Regression    bool        `json:"regression"` // ChangePct ≥ RegressionMinPct con ≥ RegressionMinExecs ejecuciones en ambos periodos (spec 22 ⚑D14)
 	Approx        bool        `json:"approx"`
+	// Actors: quién se vio ejecutando el digest (los 3 con más muestras) y ActorCount el total. Aproximado: viene del
+	// muestreo del processlist, no del digest (spec 22 ⚑D17).
+	Actors     []DigestActor `json:"actors"`
+	ActorCount int           `json:"actorCount"`
+}
+
+// DigestActor es un usuario y host (sin puerto) vistos ejecutando un digest; Seen cuenta las muestras en que se vio y
+// LastSeen es la última vez, en milisegundos desde epoch.
+type DigestActor struct {
+	User     string `json:"user"`
+	Host     string `json:"host"`
+	Seen     uint64 `json:"seen"`
+	LastSeen int64  `json:"lastSeen"`
 }
 
 type TopRequest struct {

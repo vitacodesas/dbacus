@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	gomysql "github.com/go-sql-driver/mysql"
 	"github.com/vitacodesas/dbacus/internal/apperr"
@@ -24,6 +25,8 @@ type pool struct {
 	mon     *sql.DB
 	monMu   sync.Mutex
 	monKind int // 0 sin detectar, 1 MySQL, 2 MariaDB (decide max_execution_time o max_statement_time)
+	// procDigest: 0 sin saber, 1 el servidor ofrece STATEMENT_DIGEST, -1 no lo ofrece (spec 22 ⚑D17). Lo fija Probe o el primer Processes.
+	procDigest atomic.Int32
 	// readOnly: cada conexión dedicada arranca en una transacción de solo lectura (spec 10).
 	readOnly bool
 	schema   driver.SchemaReader

@@ -93,6 +93,25 @@ func TestMonitorEndToEndIntegration(t *testing.T) {
 			}()
 			t.Cleanup(func() { stopLoad(); loadWG.Wait() })
 
+			// Una consulta larga y con marca, para que el muestreo la vea en el processlist (spec 22 ⚑D17) y su digest se
+			// acumule al terminar, dentro de las tres muestras de la prueba.
+			const actorMarker = "SELECT SLEEP(7) AS dbacus_actor_marker"
+			var actorWG sync.WaitGroup
+			actorWG.Add(1)
+			go func() {
+				defer actorWG.Done()
+				c, err := sess.AcquireConn(ctx, "actor")
+				if err != nil {
+					return
+				}
+				if r, err := c.Run(ctx, actorMarker); err == nil {
+					for r.Next() {
+					}
+					_ = r.Close()
+				}
+			}()
+			t.Cleanup(actorWG.Wait)
+
 			started := time.Now()
 			run, err := svc.Start(ctx, sess.ID, model.MonitorConfig{IntervalSec: 5})
 			require.NoError(t, err)
@@ -143,6 +162,30 @@ func TestMonitorEndToEndIntegration(t *testing.T) {
 				require.NoError(t, err)
 				require.NotEmpty(t, d.Points)
 				t.Logf("%s: %d digests; la de carga: %d ejecuciones, %.1f ms en total", image, len(top), found.Execs, found.TotalMs)
+
+				// ⚑D17: quién ejecutó el digest, visto por muestreo del processlist (solo MySQL 8.0+ con STATEMENT_DIGEST).
+				var marked *model.DigestStat
+				for i := range top {
+					if strings.Contains(strings.ToLower(top[i].Text), "dbacus_actor_marker") {
+						marked = &top[i]
+					}
+				}
+				if caps.ProcessDigest.State == model.SourceOK {
+					require.NotNil(t, marked, "la consulta con marca aparece en el ranking")
+					require.NotEmpty(t, marked.Actors, "el muestreo la vio ejecutándose")
+					require.Equal(t, mysqlbox.User, marked.Actors[0].User)
+					require.NotEmpty(t, marked.Actors[0].Host)
+					require.NotContains(t, marked.Actors[0].Host, ":", "el host va sin puerto")
+					md, err := svc.Digest(ctx, prof.ID, marked.Digest, from, to)
+					require.NoError(t, err)
+					require.NotEmpty(t, md.Actors)
+					t.Logf("%s: la consulta marcada la ejecutó %s@%s (%d veces visto)", image, marked.Actors[0].User, marked.Actors[0].Host, marked.Actors[0].Seen)
+				} else {
+					t.Logf("%s: processDigest %s/%s: sin «quién»", image, caps.ProcessDigest.State, caps.ProcessDigest.Reason)
+					if marked != nil {
+						require.Empty(t, marked.Actors)
+					}
+				}
 			}
 
 			// Perfil de solo lectura: el monitor funciona igual y la conexión del monitor no puede escribir (spec 22 ⚑D8).

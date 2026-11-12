@@ -21,6 +21,8 @@ const ui = useUiStore();
 // El Monitor se monta la primera vez que se abre y luego se queda (su estado y gráficas no se pierden al volver a consultas).
 const monitorSeen = ref(false);
 watch(() => ui.mainView, (v) => { if (v === "monitor") monitorSeen.value = true; }, { immediate: true });
+// Abrir o activar una consulta (sidebar, historial, ⌘T…) con el Monitor delante la dejaba oculta: se vuelve a las consultas (spec 22 ⚑D12).
+watch(() => queryTabs.focusSeq, () => { ui.mainView = "queries"; });
 
 // Arranque: perfiles, sesiones vivas en Go y suscripción a eventos.
 let stopEvents: (() => void) | null = null;

@@ -81,7 +81,11 @@ type SampleInput struct {
 	Metrics   map[string]float64 // claves de MonitorMetrics; ausente = NULL
 	ProcJSON  string             // top por usuario/base; nunca INFO (spec 22 ⚑D7)
 	Digests   []DigestDelta
+	Actors    []ActorSeen // quién ejecutaba cada digest en esta muestra (sin repetidos; spec 22 ⚑D17)
 }
+
+// ActorSeen es un usuario y host (sin puerto) vistos ejecutando un digest en una muestra.
+type ActorSeen struct{ Digest, User, Host string }
 
 // MonitorAnnotation es una nota del usuario sobre la línea de tiempo.
 type MonitorAnnotation struct {
@@ -207,8 +211,8 @@ func (s *Store) insertSamples(ctx context.Context, ins []SampleInput) ([]int64, 
 }
 
 type sampleWriter struct {
-	ctx                            context.Context
-	sample, dict, dictRef, digests *sql.Stmt
+	ctx                                    context.Context
+	sample, dict, dictRef, digests, actors *sql.Stmt
 }
 
 func newSampleWriter(ctx context.Context, tx *sql.Tx) (*sampleWriter, error) {
@@ -238,11 +242,17 @@ func newSampleWriter(ctx context.Context, tx *sql.Tx) (*sampleWriter, error) {
 		w.close()
 		return nil, err
 	}
+	if w.actors, err = tx.PrepareContext(ctx, `
+		INSERT INTO monitor_digest_actor (profile_id, digest, user, host, hour_ts, seen, last_ts) VALUES (?, ?, ?, ?, ?, 1, ?)
+		ON CONFLICT (profile_id, digest, user, host, hour_ts) DO UPDATE SET seen = seen + 1, last_ts = MAX(last_ts, excluded.last_ts)`); err != nil {
+		w.close()
+		return nil, err
+	}
 	return w, nil
 }
 
 func (w *sampleWriter) close() {
-	for _, st := range []*sql.Stmt{w.sample, w.dict, w.digests} {
+	for _, st := range []*sql.Stmt{w.sample, w.dict, w.digests, w.actors} {
 		if st != nil {
 			_ = st.Close()
 		}
@@ -275,6 +285,11 @@ func (w *sampleWriter) write(in SampleInput) (int64, error) {
 			return 0, err
 		}
 		if _, err := w.digests.ExecContext(w.ctx, sampleID, digestID, ts, d.Execs, d.TotalUs, d.MaxObservedUs, d.RowsExamined, d.RowsSent, d.NoIndex, d.TmpDisk, d.Errors); err != nil {
+			return 0, err
+		}
+	}
+	for _, a := range in.Actors {
+		if _, err := w.actors.ExecContext(w.ctx, in.ProfileID, a.Digest, a.User, a.Host, ts/hourMs*hourMs, ts); err != nil {
 			return 0, err
 		}
 	}
@@ -378,6 +393,7 @@ func (s *Store) PurgeMonitorData(ctx context.Context, profileID string, before *
 			`DELETE FROM monitor_rollup_day WHERE profile_id = ?`,
 			`DELETE FROM monitor_digest WHERE profile_id = ?`,
 			`DELETE FROM monitor_annotation WHERE profile_id = ?`,
+			`DELETE FROM monitor_digest_actor WHERE profile_id = ?`,
 		} {
 			if _, err := tx.ExecContext(ctx, q, profileID); err != nil {
 				return err
@@ -391,6 +407,7 @@ func (s *Store) PurgeMonitorData(ctx context.Context, profileID string, before *
 		`DELETE FROM monitor_rollup_hour WHERE profile_id = ? AND hour_ts + ` + fmt.Sprint(hourMs) + ` <= ?`,
 		`DELETE FROM monitor_rollup_day WHERE profile_id = ? AND day_ts + ` + fmt.Sprint(dayMs) + ` <= ?`,
 		`DELETE FROM monitor_annotation WHERE profile_id = ? AND at < ?`,
+		`DELETE FROM monitor_digest_actor WHERE profile_id = ? AND hour_ts + ` + fmt.Sprint(hourMs) + ` <= ?`,
 		`DELETE FROM monitor_run WHERE profile_id = ? AND ended_at IS NOT NULL AND ended_at < ? AND NOT EXISTS (SELECT 1 FROM monitor_sample WHERE run_id = monitor_run.id)`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, profileID, b); err != nil {
@@ -460,6 +477,10 @@ func (s *Store) PurgeMonitor(ctx context.Context, now time.Time, r MonitorRetent
 		if err := pause(ctx); err != nil {
 			return res, err
 		}
+	}
+	// Los actores (⚑D17) tienen la retención del nivel por hora.
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM monitor_digest_actor WHERE hour_ts + ? <= ?`, hourMs, nowMs-int64(r.HourlyDays)*dayMs); err != nil {
+		return res, err
 	}
 	n, err := s.deleteOldDays(ctx, nowMs-int64(r.DailyDays)*dayMs)
 	if err != nil {

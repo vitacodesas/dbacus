@@ -14,9 +14,9 @@ import { useUiStore } from "./ui";
 import type { MonitorCaps, MonitorRun, ProcessSnapshot } from "../types";
 
 const ok = { state: "ok", reason: "ok", hint: "" };
-const caps = (over: Partial<MonitorCaps> = {}): MonitorCaps => ({ serverVersion: "8.0", isMariaDB: false, serverId: "u", processlist: ok, digest: ok, status: ok, ...over });
+const caps = (over: Partial<MonitorCaps> = {}): MonitorCaps => ({ serverVersion: "8.0", isMariaDB: false, serverId: "u", processlist: ok, digest: ok, status: ok, processDigest: ok, ...over });
 const runOf = (over: Partial<MonitorRun> = {}): MonitorRun => ({ id: "7", profileId: "p1", startedAt: new Date().toISOString(), endedAt: null, reason: "running", intervalSec: 30, serverVersion: "8.0", serverId: "u", samples: 0, gaps: 0, ...over });
-const snap = (n = 1): ProcessSnapshot => ({ at: "2026-11-04T12:00:00Z", rows: Array.from({ length: n }, (_, i) => ({ id: i + 1, user: "u", host: "h", db: "d", command: "Query", timeSec: i, state: "", info: "", infoTruncated: false })), summary: { total: n, running: n, sleeping: 0, waitingLock: 0, longestSec: 0, byCommand: null, byUser: null }, maxConnections: 151 });
+const snap = (n = 1): ProcessSnapshot => ({ at: "2026-11-04T12:00:00Z", rows: Array.from({ length: n }, (_, i) => ({ id: i + 1, user: "u", host: "h", db: "d", command: "Query", timeSec: i, state: "", info: "", infoTruncated: false, digest: "" })), summary: { total: n, running: n, sleeping: 0, waitingLock: 0, longestSec: 0, byCommand: null, byUser: null }, maxConnections: 151 });
 const apiError = (detail: string, message = "x", code = "QUERY_FAILED") => Object.assign(new Error(message), { cause: JSON.stringify({ code, message, detail, retryable: false }) });
 
 function setup() {
@@ -238,7 +238,7 @@ describe("monitor store · lecturas y KILL", () => {
   it("killProcess manda id, usuario y host a Go y avisa", async () => {
     const { m } = setup();
     api.killProcess.mockResolvedValue(undefined);
-    const p = { id: 9, user: "app", host: "h:1", db: "", command: "Query", timeSec: 1, state: "", info: "", infoTruncated: false };
+    const p = { id: 9, user: "app", host: "h:1", db: "", command: "Query", timeSec: 1, state: "", info: "", infoTruncated: false, digest: "" };
     expect(await m.killProcess(p, true)).toBe(true);
     expect(api.killProcess).toHaveBeenCalledWith("s1", p, true);
     expect(useUiStore().toasts.some((t) => t.kind === "success")).toBe(true);
@@ -247,7 +247,7 @@ describe("monitor store · lecturas y KILL", () => {
   it("killProcess con error de Go (p. ej. sin privilegio) muestra el motivo y devuelve false", async () => {
     const { m } = setup();
     api.killProcess.mockRejectedValue(apiError("kill_denied", "Falta el privilegio", "QUERY_FAILED"));
-    const p = { id: 9, user: "app", host: "h:1", db: "", command: "Query", timeSec: 1, state: "", info: "", infoTruncated: false };
+    const p = { id: 9, user: "app", host: "h:1", db: "", command: "Query", timeSec: 1, state: "", info: "", infoTruncated: false, digest: "" };
     expect(await m.killProcess(p, false)).toBe(false);
     expect(useUiStore().toasts.some((t) => t.kind === "error")).toBe(true);
   });

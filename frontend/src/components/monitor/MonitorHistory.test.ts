@@ -32,10 +32,10 @@ import MonitorRuns from "./MonitorRuns.vue";
 import MonitorTop from "./MonitorTop.vue";
 
 const ok = { state: "ok", reason: "ok", hint: "" };
-const caps = (over: Partial<MonitorCaps> = {}): MonitorCaps => ({ serverVersion: "8.0", isMariaDB: false, serverId: "u", processlist: ok, digest: ok, status: ok, ...over });
+const caps = (over: Partial<MonitorCaps> = {}): MonitorCaps => ({ serverVersion: "8.0", isMariaDB: false, serverId: "u", processlist: ok, digest: ok, status: ok, processDigest: ok, ...over });
 const stat = (digest: string, over: Partial<DigestStat> = {}): DigestStat => ({
   digest, schema: "pedidos", text: `SELECT ${digest} FROM t WHERE a = ?`, execs: 1000, totalMs: 5000, avgMs: 5, maxObservedMs: 40, rowsExamined: 2000, rowsSent: 1000,
-  noIndex: 0, tmpDisk: 0, errors: 0, prev: null, changePct: 0, isNew: false, regression: false, approx: false, ...over,
+  noIndex: 0, tmpDisk: 0, errors: 0, prev: null, changePct: 0, isNew: false, regression: false, approx: false, actors: [], actorCount: 0, ...over,
 });
 const runOf = (id: string, over: Partial<MonitorRun> = {}): MonitorRun => ({ id, profileId: "p1", startedAt: "2026-11-04T10:00:00Z", endedAt: "2026-11-04T11:00:00Z", reason: "stopped", intervalSec: 30, serverVersion: "8.0", serverId: "u", samples: 120, gaps: 0, ...over });
 const at = (min: number) => new Date(Date.UTC(2026, 10, 4, 12, min)).toISOString();
@@ -180,7 +180,7 @@ describe("Top queries", () => {
   it("clic en una fila abre el detalle con el texto normalizado y «Copiar texto»", async () => {
     const { pinia } = setup();
     api.monitorTop.mockResolvedValue([stat("a")]);
-    const detail: DigestDetail = { digest: "a", text: "SELECT a FROM t WHERE a = ?", schemas: ["pedidos"], stat: stat("a"), points: [{ t: at(0), execs: 10, totalMs: 50, avgMs: 5 }, { t: at(1), execs: 20, totalMs: 100, avgMs: 5 }], gaps: [] };
+    const detail: DigestDetail = { digest: "a", text: "SELECT a FROM t WHERE a = ?", schemas: ["pedidos"], stat: stat("a"), points: [{ t: at(0), execs: 10, totalMs: 50, avgMs: 5 }, { t: at(1), execs: 20, totalMs: 100, avgMs: 5 }], gaps: [], actors: [] };
     api.monitorDigest.mockResolvedValue(detail);
     const wrap = mountTab(MonitorTop, pinia);
     await flushPromises();
@@ -192,6 +192,59 @@ describe("Top queries", () => {
     q("[data-testid=digest-copy]")!.click();
     await flushPromises();
     expect(clipboard.writeText).toHaveBeenCalledWith("SELECT a FROM t WHERE a = ?");
+  });
+});
+
+describe("Top queries: quién la ejecutó (spec 22 ⚑D17)", () => {
+  const actor = (user: string, host: string, seen: number) => ({ user, host, seen, lastSeen: Date.UTC(2026, 10, 4, 12, 0) });
+
+  it("la columna «Quién» muestra el principal con «+N», o «—» sin datos, y no ordena ni agrega nada", async () => {
+    const { pinia } = setup();
+    api.monitorTop.mockResolvedValue([
+      stat("a", { actors: [actor("app", "10.0.0.4", 9), actor("etl", "10.0.0.9", 2), actor("bi", "10.0.0.7", 1)], actorCount: 4 }),
+      stat("b", { actors: [actor("report", "10.0.0.9", 3)], actorCount: 1 }),
+      stat("c"),
+    ]);
+    const wrap = mountTab(MonitorTop, pinia);
+    await flushPromises();
+    expect(wrap.get("[data-testid=top-who-header]").text()).toBe("Quién");
+    const cells = wrap.findAll("[data-testid=top-actors]");
+    expect(cells.map((c) => c.text().replace(/\s+/g, " "))).toEqual(["app · 10.0.0.4 +3", "report · 10.0.0.9", "—"]);
+    // El tooltip lista a los recibidos y recuerda que es por muestreo; sin datos explica por qué.
+    expect(cells[0]!.attributes("title")).toContain("etl · 10.0.0.9 · visto en 2 muestras");
+    expect(cells[0]!.attributes("title")).toContain("Visto por muestreo");
+    expect(cells[2]!.attributes("title")).toContain("Sin datos");
+  });
+
+  it("si el servidor no ofrece STATEMENT_DIGEST lo dice en el tooltip y en el detalle", async () => {
+    const { pinia } = setup(caps({ processDigest: { state: "unavailable", reason: "unsupported", hint: "" } }));
+    api.monitorTop.mockResolvedValue([stat("a")]);
+    api.monitorDigest.mockResolvedValue({ digest: "a", text: "SELECT ?", schemas: ["pedidos"], stat: stat("a"), points: [], gaps: [], actors: [] } satisfies DigestDetail);
+    const wrap = mountTab(MonitorTop, pinia);
+    await flushPromises();
+    expect(wrap.get("[data-testid=top-actors]").attributes("title")).toContain("STATEMENT_DIGEST");
+    await wrap.get("[data-testid=top-row-a]").trigger("click");
+    await flushPromises();
+    expect(q("[data-testid=digest-actors-empty]")!.textContent).toContain("STATEMENT_DIGEST");
+  });
+
+  it("el detalle lista a todos con las muestras y deja la nota de que es aproximado", async () => {
+    const { pinia } = setup();
+    api.monitorTop.mockResolvedValue([stat("a", { actors: [actor("app", "10.0.0.4", 9)], actorCount: 2 })]);
+    api.monitorDigest.mockResolvedValue({
+      digest: "a", text: "SELECT ?", schemas: ["pedidos"], stat: stat("a"), points: [], gaps: [],
+      actors: [actor("app", "10.0.0.4", 9), actor("etl", "10.0.0.9", 2)],
+    } satisfies DigestDetail);
+    const wrap = mountTab(MonitorTop, pinia);
+    await flushPromises();
+    await wrap.get("[data-testid=top-row-a]").trigger("click");
+    await flushPromises();
+    const items = Array.from(body().querySelectorAll("[data-testid=digest-actor]")).map((li) => li.textContent!.replace(/\s+/g, " ").trim());
+    expect(items).toHaveLength(2);
+    expect(items[0]).toContain("app · 10.0.0.4");
+    expect(items[0]).toContain("visto en 9 muestras");
+    expect(items[1]).toContain("etl · 10.0.0.9");
+    expect(q("[data-testid=digest-actors]")!.textContent).toContain("aproximado");
   });
 });
 

@@ -296,3 +296,64 @@ func TestMonitorNeverPersistsInfo(t *testing.T) {
 		t.Fatal("el texto normalizado del digest sí debe guardarse")
 	}
 }
+
+// Cada muestra anota quién ejecutaba cada digest (⚑D17): sin repetidos, sin hilos internos ni procesos sin digest, y sin INFO.
+func TestRunnerRecordsActors(t *testing.T) {
+	const secret = "SELECT * FROM users WHERE token = 'abc123'"
+	parent, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	clk, st, ev := newClock(), newStore(), &events{}
+	rd := &fakeReader{
+		statusFn: func(n int) (map[string]uint64, error) { return statusVals(n), nil },
+		procsFn: func(int) ([]model.Process, error) {
+			return []model.Process{
+				{ID: 1, User: "app", Host: "10.0.0.5:5001", Command: "Query", TimeSec: 1, Info: secret, Digest: "d1"},
+				{ID: 2, User: "app", Host: "10.0.0.5:5002", Command: "Query", TimeSec: 2, Info: secret, Digest: "d1"},
+				{ID: 3, User: "ana", Host: "10.0.0.7:5003", Command: "Query", TimeSec: 3, Digest: "d2"},
+				{ID: 4, User: "app", Host: "10.0.0.5:5004", Command: "Sleep"},
+				{ID: 5, User: "system user", Host: "", Command: "Daemon", Digest: "d3"},
+			}, nil
+		},
+		digestFn: func(n int) ([]model.DigestCounters, error) {
+			return []model.DigestCounters{dc("d", "d1", uint64(n), uint64(n))}, nil
+		},
+		textsFn: func([]string) (map[string]string, error) { return map[string]string{"d1": "SELECT ?"}, nil },
+	}
+	cancelAfter(clk, cancel, 2)
+	waitDone(t, startRunner(t, parent, rd, st, clk, ev, allSources))
+
+	s := st.snapshot()
+	if len(s) == 0 {
+		t.Fatal("sin muestras")
+	}
+	want := []store.ActorSeen{{Digest: "d1", User: "app", Host: "10.0.0.5"}, {Digest: "d2", User: "ana", Host: "10.0.0.7"}}
+	for i, in := range s {
+		if fmt.Sprint(in.Actors) != fmt.Sprint(want) {
+			t.Fatalf("muestra %d: actores = %+v, quiero %+v", i, in.Actors, want)
+		}
+	}
+	if dump := fmt.Sprintf("%+v", s); strings.Contains(dump, "abc123") {
+		t.Fatalf("INFO llegó a las muestras:\n%s", dump)
+	}
+}
+
+// Sin Digest en el processlist (MariaDB, 5.7) no hay actores y el resto de la muestra sigue igual.
+func TestRunnerWithoutProcessDigestRecordsNoActors(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	clk, st, ev := newClock(), newStore(), &events{}
+	rd := &fakeReader{
+		statusFn: func(n int) (map[string]uint64, error) { return statusVals(n), nil },
+		procsFn: func(int) ([]model.Process, error) {
+			return []model.Process{{ID: 1, User: "app", Host: "10.0.0.5:5001", Command: "Query", TimeSec: 1, Info: "SELECT 1"}}, nil
+		},
+		digestFn: func(n int) ([]model.DigestCounters, error) { return nil, nil },
+	}
+	cancelAfter(clk, cancel, 2)
+	waitDone(t, startRunner(t, parent, rd, st, clk, ev, allSources))
+	for _, in := range st.snapshot() {
+		if len(in.Actors) != 0 {
+			t.Fatalf("no debería haber actores: %+v", in.Actors)
+		}
+	}
+}

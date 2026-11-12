@@ -32,7 +32,10 @@ const (
 
 // Sentencias fijas del monitor. TestMonitorSQLIsReadOnlySafe comprueba que todas pasan sqlsplit.IsReadOnlySafe.
 const (
-	sqlProcesslist         = `SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO FROM INFORMATION_SCHEMA.PROCESSLIST WHERE ID <> CONNECTION_ID()`
+	sqlProcesslist = `SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO FROM INFORMATION_SCHEMA.PROCESSLIST WHERE ID <> CONNECTION_ID()`
+	// Con el hash del digest de cada consulta en curso (MySQL 8.0+). Se calcula en el servidor sobre el INFO completo y solo sale el hash.
+	sqlProcesslistDigest   = `SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO, STATEMENT_DIGEST(INFO) FROM INFORMATION_SCHEMA.PROCESSLIST WHERE ID <> CONNECTION_ID()`
+	sqlProcessDigestProbe  = `SELECT STATEMENT_DIGEST('SELECT 1')`
 	sqlProcesslistFallback = `SHOW FULL PROCESSLIST`
 	sqlConnectionID        = `SELECT CONNECTION_ID()`
 	sqlMaxConnections      = `SELECT @@global.max_connections`
@@ -187,9 +190,31 @@ func (p *pool) Probe(ctx context.Context) (model.MonitorCaps, error) {
 		caps.Status = probeStatus(ctx, c, target)
 		caps.Processlist = probeProcesslist(ctx, c, cur, target)
 		caps.Digest = probeDigest(ctx, c, target)
+		caps.ProcessDigest = p.probeProcessDigest(ctx, c)
 		return nil
 	})
 	return caps, err
+}
+
+// probeProcessDigest comprueba STATEMENT_DIGEST (MySQL 8.0+; MariaDB y 5.7 no la tienen) y lo recuerda para Processes.
+func (p *pool) probeProcessDigest(ctx context.Context, c *sql.Conn) model.SourceState {
+	var d sql.NullString
+	err := c.QueryRowContext(ctx, sqlProcessDigestProbe).Scan(&d)
+	if err == nil && d.Valid {
+		p.procDigest.Store(1)
+		return model.SourceState{State: model.SourceOK, Reason: model.ReasonOK}
+	}
+	if err == nil || isMissingFunction(err) {
+		p.procDigest.Store(-1)
+		return unavailable(model.ReasonUnsupported, "Este servidor no tiene STATEMENT_DIGEST (MySQL 8.0+): el ranking no podrá mostrar quién ejecutó cada consulta.")
+	}
+	return unavailable(model.ReasonError, "")
+}
+
+// isMissingFunction: la función o la sintaxis no existen en este servidor (1305 FUNCTION does not exist, 1064 sintaxis, 1630).
+func isMissingFunction(err error) bool {
+	var me *gomysql.MySQLError
+	return errors.As(err, &me) && (me.Number == 1305 || me.Number == 1064 || me.Number == 1630)
 }
 
 func serverID(ctx context.Context, c *sql.Conn) string {
@@ -278,9 +303,27 @@ func probeDigest(ctx context.Context, c *sql.Conn, target string) model.SourceSt
 func (p *pool) Processes(ctx context.Context) ([]model.Process, error) {
 	var out []model.Process
 	err := p.withMon(ctx, func(ctx context.Context, c *sql.Conn) error {
+		tryDigest := p.procDigest.Load() >= 0
+		if tryDigest {
+			rows, err := c.QueryContext(ctx, sqlProcesslistDigest)
+			if err == nil {
+				out, err = scanProcesses(rows, 0, true)
+			}
+			if err == nil {
+				p.procDigest.Store(1)
+				return nil
+			}
+			if ctx.Err() != nil {
+				return mapError(err)
+			}
+			// Solo se recuerda «no existe» si el servidor lo dice; un tiempo agotado u otro fallo pasajero reintenta la próxima vez.
+			if isMissingFunction(err) {
+				p.procDigest.Store(-1)
+			}
+		}
 		rows, err := c.QueryContext(ctx, sqlProcesslist)
 		if err == nil {
-			out, err = scanProcesses(rows, 0)
+			out, err = scanProcesses(rows, 0, false)
 		}
 		if err == nil {
 			return nil
@@ -298,7 +341,7 @@ func (p *pool) Processes(ctx context.Context) ([]model.Process, error) {
 		if e != nil {
 			return mapError(e)
 		}
-		out, e = scanProcesses(rows, self)
+		out, e = scanProcesses(rows, self, false)
 		return mapError(e)
 	})
 	if err != nil {
@@ -313,7 +356,7 @@ func (p *pool) Processes(ctx context.Context) ([]model.Process, error) {
 	return out, nil
 }
 
-func scanProcesses(rows *sql.Rows, skipID uint64) ([]model.Process, error) {
+func scanProcesses(rows *sql.Rows, skipID uint64, withDigest bool) ([]model.Process, error) {
 	defer rows.Close()
 	cols, err := rows.Columns()
 	if err != nil {
@@ -324,9 +367,13 @@ func scanProcesses(rows *sql.Rows, skipID uint64) ([]model.Process, error) {
 		var (
 			p                                model.Process
 			user, host, db, cmd, state, info sql.NullString
+			digest                           sql.NullString
 			t                                sql.NullInt64
 		)
 		dest := []any{&p.ID, &user, &host, &db, &cmd, &t, &state, &info}
+		if withDigest {
+			dest = append(dest, &digest)
+		}
 		// SHOW FULL PROCESSLIST de MariaDB añade una novena columna (Progress); se ignora.
 		for len(dest) < len(cols) {
 			dest = append(dest, new(sql.RawBytes))
@@ -339,6 +386,7 @@ func scanProcesses(rows *sql.Rows, skipID uint64) ([]model.Process, error) {
 		}
 		p.User, p.Host, p.DB, p.Command, p.State = user.String, host.String, db.String, cmd.String, state.String
 		p.TimeSec = t.Int64
+		p.Digest = digest.String
 		p.Info, p.InfoTruncated = truncateUTF8(info.String, infoMaxBytes)
 		out = append(out, p)
 	}

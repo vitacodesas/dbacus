@@ -256,6 +256,21 @@ func (s *Store) TopDigests(ctx context.Context, req model.TopRequest) ([]model.D
 		}
 		out = append(out, st)
 	}
+	digests := make([]string, 0, len(out))
+	for _, st := range out {
+		if !isAggregateDigest(st.Digest) {
+			digests = append(digests, st.Digest)
+		}
+	}
+	actors, err := s.digestActors(ctx, req.ProfileID, digests, from, to)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		all := actors[out[i].Digest]
+		out[i].ActorCount = len(all)
+		out[i].Actors = append([]model.DigestActor{}, all[:min(len(all), topActors)]...)
+	}
 	return out, nil
 }
 
@@ -328,6 +343,57 @@ type detailBucket struct {
 }
 
 // DigestDetail devuelve los totales de un digest en [from, to) y su serie (≤ 300 puntos), sumando las bases en que aparece.
+// digestActors devuelve, por digest, todos los usuarios y hosts vistos en [from, to), por muestras descendente. Una sola
+// consulta por tanda de digests (sin N+1). Rango > retención por hora: solo lo que siga guardado.
+func (s *Store) digestActors(ctx context.Context, profileID string, digests []string, fromMs, toMs int64) (map[string][]model.DigestActor, error) {
+	out := make(map[string][]model.DigestActor, len(digests))
+	const chunk = 400
+	for i := 0; i < len(digests); i += chunk {
+		part := digests[i:min(i+chunk, len(digests))]
+		args := make([]any, 0, len(part)+3)
+		args = append(args, profileID, fromMs-fromMs%hourMs, toMs)
+		for _, d := range part {
+			args = append(args, d)
+		}
+		rows, err := s.db.QueryContext(ctx, `
+			SELECT digest, user, host, SUM(seen), MAX(last_ts) FROM monitor_digest_actor
+			WHERE profile_id = ? AND hour_ts >= ? AND hour_ts < ? AND digest IN (`+placeholders(len(part))+`)
+			GROUP BY digest, user, host`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var (
+				d string
+				a model.DigestActor
+			)
+			if err := rows.Scan(&d, &a.User, &a.Host, &a.Seen, &a.LastSeen); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			out[d] = append(out[d], a)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+	}
+	for _, list := range out {
+		sort.Slice(list, func(i, j int) bool {
+			if list[i].Seen != list[j].Seen {
+				return list[i].Seen > list[j].Seen
+			}
+			if list[i].User != list[j].User {
+				return list[i].User < list[j].User
+			}
+			return list[i].Host < list[j].Host
+		})
+	}
+	return out, nil
+}
+
+// topActors es el máximo de actores que lleva cada fila del ranking; el resto se cuenta en ActorCount y se ve en el detalle.
+const topActors = 3
+
 func (s *Store) DigestDetail(ctx context.Context, profileID, digest string, from, to time.Time) (model.DigestDetail, error) {
 	fromMs, toMs, err := checkRange(from, to)
 	if err != nil {
@@ -448,6 +514,11 @@ func (s *Store) DigestDetail(ctx context.Context, profileID, digest string, from
 	if detail.Gaps, err = s.monitorGaps(ctx, profileID, fromMs, toMs); err != nil {
 		return model.DigestDetail{}, err
 	}
+	actors, err := s.digestActors(ctx, profileID, []string{digest}, fromMs, toMs)
+	if err != nil {
+		return model.DigestDetail{}, err
+	}
+	detail.Actors = append([]model.DigestActor{}, actors[digest]...)
 	return detail, nil
 }
 

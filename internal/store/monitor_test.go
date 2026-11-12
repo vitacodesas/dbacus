@@ -43,7 +43,7 @@ func count(t *testing.T, s *Store, table string) int {
 
 func monitorTables() []string {
 	return []string{"monitor_run", "monitor_sample", "monitor_digest", "monitor_digest_sample", "monitor_rollup_hour", "monitor_rollup_hour_digest",
-		"monitor_rollup_day", "monitor_rollup_day_digest", "monitor_annotation"}
+		"monitor_rollup_day", "monitor_rollup_day_digest", "monitor_annotation", "monitor_digest_actor"}
 }
 
 // totals suma ejecuciones, tiempo y muestras de todos los niveles: lo que no puede cambiar al agregar o recortar.
@@ -216,7 +216,8 @@ func fill(t *testing.T, s *Store, pid string, run int64, from, to time.Time, ste
 				Execs: int64(1 + d), TotalUs: int64(100 * (1 + d)), MaxObservedUs: int64(i%50 + d), RowsExamined: 10, RowsSent: 1, NoIndex: int64(d % 2), TmpDisk: 0, Errors: 0})
 		}
 		ds = append(ds, DigestDelta{Digest: OtherDigest, Execs: 3, TotalUs: 30})
-		ins = append(ins, SampleInput{RunID: run, ProfileID: pid, At: at, SpanMs: step.Milliseconds(), Metrics: allMetrics(float64(i%100) + 1), ProcJSON: `{"u":{"app":3,"report":1}}`, Digests: ds})
+		actors := []ActorSeen{{Digest: ds[0].Digest, User: "app", Host: "10.0.0.5"}, {Digest: ds[0].Digest, User: "ana", Host: "10.0.0.7"}}
+		ins = append(ins, SampleInput{RunID: run, ProfileID: pid, At: at, SpanMs: step.Milliseconds(), Metrics: allMetrics(float64(i%100) + 1), ProcJSON: `{"u":{"app":3,"report":1}}`, Digests: ds, Actors: actors})
 		i++
 	}
 	_, err := s.insertSamples(context.Background(), ins)

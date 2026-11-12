@@ -15,6 +15,7 @@ func IsOwnStatement(text string) bool {
 		"setsessionmax_execution_time=?",
 		"setsessionmax_statement_time=?",
 		"selectconnection_id()",
+		"selectstatement_digest(?)", // sonda de ProcessDigest (spec 22 ⚑D17)
 		"select@@global.max_connections":
 		return true
 	}

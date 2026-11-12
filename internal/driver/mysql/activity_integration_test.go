@@ -31,6 +31,7 @@ func TestMonitorIntegration(t *testing.T) {
 			t.Run("consumidor del digest apagado", func(t *testing.T) { testMonitorConsumerOff(t, in, maria) })
 			t.Run("procesos", func(t *testing.T) { testProcesslist(t, in) })
 			t.Run("KILL de un proceso", func(t *testing.T) { testKillProcess(t, in) })
+			t.Run("digest de los procesos (quién)", func(t *testing.T) { testProcessDigest(t, in, maria) })
 			t.Run("estado global", func(t *testing.T) { testGlobalStatus(t, in) })
 			t.Run("digest", func(t *testing.T) { testDigests(t, in, maria) })
 			t.Run("la conexión del monitor es de solo lectura", func(t *testing.T) { testMonReadOnly(t, in) })
@@ -197,7 +198,7 @@ func testProcesslist(t *testing.T, in mysqlbox.Instance) {
 			require.NoError(t, c.QueryRowContext(ctx, sqlConnectionID).Scan(&self))
 			rows, err := c.QueryContext(ctx, sqlProcesslistFallback)
 			require.NoError(t, err)
-			out, err = scanProcesses(rows, self)
+			out, err = scanProcesses(rows, self, false)
 			return err
 		}))
 		var seen bool
@@ -479,4 +480,84 @@ func testKillProcess(t *testing.T, in mysqlbox.Instance) {
 		// Limpieza: la víctima sigue durmiendo; se cancela con el admin.
 		require.NoError(t, killer.KillProcess(ctx, id, true))
 	})
+}
+
+// Spec 22 ⚑D17: el hash de STATEMENT_DIGEST(INFO) del processlist es el mismo DIGEST que acumula performance_schema, así que
+// sirve para saber quién ejecutaba cada digest. MariaDB no tiene la función: la capacidad lo dice y Digest queda vacío.
+func testProcessDigest(t *testing.T, in mysqlbox.Instance, maria bool) {
+	p := openPool(t, in, nil)
+	act := activity(t, p)
+	ctx := context.Background()
+	caps, err := act.Probe(ctx)
+	require.NoError(t, err)
+	if maria {
+		require.Equal(t, model.SourceUnavailable, caps.ProcessDigest.State)
+		require.Equal(t, model.ReasonUnsupported, caps.ProcessDigest.Reason)
+		busy, err := p.Acquire(ctx)
+		require.NoError(t, err)
+		defer busy.Release()
+		go func() {
+			if r, err := busy.Run(ctx, "SELECT SLEEP(2) AS dbacus_digest_marker"); err == nil {
+				_ = r.Close()
+			}
+		}()
+		var ps []model.Process
+		require.Eventually(t, func() bool {
+			ps, err = act.Processes(ctx)
+			require.NoError(t, err)
+			for _, x := range ps {
+				if strings.Contains(x.Info, "dbacus_digest_marker") {
+					return true
+				}
+			}
+			return false
+		}, 3*time.Second, 100*time.Millisecond)
+		for _, x := range ps {
+			require.Empty(t, x.Digest)
+		}
+		return
+	}
+	require.Equal(t, model.SourceOK, caps.ProcessDigest.State)
+
+	busy, err := p.Acquire(ctx)
+	require.NoError(t, err)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if r, err := busy.Run(ctx, "SELECT SLEEP(2) AS dbacus_digest_marker"); err == nil {
+			_ = r.Close()
+		}
+	}()
+	defer func() { <-done; _ = busy.Release() }()
+
+	var got string
+	require.Eventually(t, func() bool {
+		ps, err := act.Processes(ctx)
+		require.NoError(t, err)
+		for _, x := range ps {
+			if strings.Contains(x.Info, "dbacus_digest_marker") {
+				got = x.Digest
+				return true
+			}
+		}
+		return false
+	}, 3*time.Second, 100*time.Millisecond)
+	require.Len(t, got, 64, "SHA-256 en hexadecimal")
+	<-done
+
+	ds, err := act.Digests(ctx)
+	require.NoError(t, err)
+	var seen bool
+	for _, d := range ds {
+		seen = seen || d.Digest == got
+	}
+	require.True(t, seen, "STATEMENT_DIGEST(INFO) debe coincidir con el DIGEST de performance_schema")
+
+	// Un servidor que no conozca la función se recuerda y Processes sigue funcionando sin Digest.
+	p.(*pool).procDigest.Store(-1)
+	ps, err := act.Processes(ctx)
+	require.NoError(t, err)
+	for _, x := range ps {
+		require.Empty(t, x.Digest)
+	}
 }

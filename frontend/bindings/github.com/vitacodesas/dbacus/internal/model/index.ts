@@ -20,6 +20,7 @@ export type {
     ConnectionGroup,
     ConnectionProfile,
     Database,
+    DigestActor,
     DigestDetail,
     DigestPoint,
     DigestStat,

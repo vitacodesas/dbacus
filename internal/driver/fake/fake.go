@@ -118,7 +118,7 @@ func (p *Pool) Probe(context.Context) (model.MonitorCaps, error) {
 		return *c, nil
 	}
 	ok := model.SourceState{State: model.SourceOK, Reason: model.ReasonOK}
-	return model.MonitorCaps{ServerVersion: p.d.Version, ServerID: "fake", Processlist: ok, Digest: ok, Status: ok}, nil
+	return model.MonitorCaps{ServerVersion: p.d.Version, ServerID: "fake", Processlist: ok, Digest: ok, Status: ok, ProcessDigest: ok}, nil
 }
 
 var _ driver.ProcessKiller = (*Pool)(nil)

@@ -1015,7 +1015,8 @@ const monSession = (id: string) => {
 function monCaps(sessionId: string) {
   const sess = monSession(sessionId);
   const sc = monScenario(sess.profileId);
-  const caps: Any = { serverVersion: sess.serverVersion, isMariaDB: false, serverId: "mock-server-uuid", processlist: monOK(), digest: monOK(), status: monOK() };
+  const caps: Any = { serverVersion: sess.serverVersion, isMariaDB: false, serverId: "mock-server-uuid", processlist: monOK(), digest: monOK(), status: monOK(), processDigest: monOK() };
+  if (sc === "no_process_digest") caps.processDigest = { state: "unavailable", reason: "unsupported", hint: "Este servidor no tiene STATEMENT_DIGEST (MySQL 8.0+): el ranking no podrá mostrar quién ejecutó cada consulta." };
   if (sc === "own_only") caps.processlist = { state: "degraded", reason: "own_only", hint: "GRANT PROCESS ON *.* TO 'app'@'%';" };
   if (sc === "no_privilege") caps.digest = { state: "unavailable", reason: "no_privilege", hint: "GRANT SELECT ON performance_schema.* TO 'app'@'%';" };
   if (sc === "perf_schema_off") caps.digest = { state: "unavailable", reason: "perf_schema_off", hint: "" };
@@ -1047,10 +1048,10 @@ function monProcesses(sessionId: string) {
     rows.push({
       id: 9000 + i, user: MON_USERS[i % MON_USERS.length], host: `10.0.0.${(i % 200) + 1}:5${String(i).padStart(4, "0")}`, db: MON_DBS[i % MON_DBS.length],
       command: sleeping ? "Sleep" : "Query", timeSec, state: sleeping ? "" : i % 5 === 0 ? "Waiting for table metadata lock" : "executing",
-      info: info.length > 2048 ? info.slice(0, 2048) : info, infoTruncated: info.length > 2048,
+      info: info.length > 2048 ? info.slice(0, 2048) : info, infoTruncated: info.length > 2048, digest: sleeping ? "" : `d${(i % 5) + 1}`,
     });
   }
-  rows = rows.filter((r) => !monKilled.has(r.id)).map((r) => (monCanceled.has(r.id) ? { ...r, command: "Sleep", state: "", info: "", infoTruncated: false } : r));
+  rows = rows.filter((r) => !monKilled.has(r.id)).map((r) => (monCanceled.has(r.id) ? { ...r, command: "Sleep", state: "", info: "", infoTruncated: false, digest: "" } : r));
   if (own) rows = rows.filter((r) => r.user === "app_rw");
   rows.sort((a, b) => b.timeSec - a.timeSec || a.id - b.id);
   const by = (key: string) => rows.reduce((m: Any, r) => ((m[r[key]] = (m[r[key]] ?? 0) + 1), m), {});
@@ -1151,6 +1152,18 @@ const MON_DIGESTS: Any[] = [
   { digest: "d6", schema: "staging", text: "INSERT INTO audit_log ( user_id , action ) VALUES (...)", execs: 800_000, totalMs: 400_000, rowsExamined: 0, rowsSent: 0, noIndex: 0, tmpDisk: 0, errors: 3, trend: 1.1 },
   { digest: "d7", schema: "information_schema", text: "SELECT SCHEMA_NAME FROM information_schema . SCHEMATA", execs: 5_000, totalMs: 60_000, rowsExamined: 50_000, rowsSent: 50_000, noIndex: 5_000, tmpDisk: 0, errors: 0, trend: 1.0 },
 ];
+/** Quién se vio ejecutando cada digest (muestreo del processlist, spec 22 ⚑D17): d4 y d7 sin datos, para ver el «—». */
+const MON_ACTORS: Record<string, { user: string; host: string; seen: number; lastSeen: string }[]> = {
+  d1: [
+    { user: "app_rw", host: "10.0.0.4", seen: 120, lastSeen: "2026-11-04T11:58:00Z" }, { user: "report", host: "10.0.0.9", seen: 14, lastSeen: "2026-11-04T11:20:00Z" },
+    { user: "etl", host: "10.0.0.12", seen: 8, lastSeen: "2026-11-04T09:05:00Z" }, { user: "bi", host: "10.0.0.30", seen: 2, lastSeen: "2026-11-03T22:40:00Z" },
+  ],
+  d2: [{ user: "report", host: "10.0.0.9", seen: 6, lastSeen: "2026-11-04T08:00:00Z" }],
+  d3: [{ user: "app_rw", host: "10.0.0.4", seen: 240, lastSeen: "2026-11-04T11:59:00Z" }, { user: "app_rw", host: "10.0.0.5", seen: 180, lastSeen: "2026-11-04T11:59:00Z" }],
+  d5: [{ user: "ana", host: "192.168.1.20", seen: 3, lastSeen: "2026-11-04T10:10:00Z" }],
+  d6: [{ user: "app_rw", host: "10.0.0.4", seen: 31, lastSeen: "2026-11-04T11:57:00Z" }],
+};
+const monActors = (profileId: string, digest: string) => (monScenario(profileId) === "no_process_digest" ? [] : (MON_ACTORS[digest] ?? []));
 function monTop(req: Any) {
   if (!req.profileId) throw fail("VALIDATION", "Falta el perfil", "profileId");
   const [a, b] = monRange(req.from, req.to);
@@ -1162,7 +1175,8 @@ function monTop(req: Any) {
   const scale = (b - a) / 86_400_000;
   const stat = (d: Any, k: number): Any => {
     const execs = Math.round(d.execs * k), totalMs = Math.round(d.totalMs * k);
-    return { digest: d.digest, schema: d.schema, text: d.text, execs, totalMs, avgMs: execs ? Math.round((totalMs / execs) * 100) / 100 : 0, maxObservedMs: Math.round(totalMs / Math.max(1, execs) * 40), rowsExamined: Math.round(d.rowsExamined * k), rowsSent: Math.round(d.rowsSent * k), noIndex: Math.round(d.noIndex * k), tmpDisk: Math.round(d.tmpDisk * k), errors: Math.round(d.errors * k), prev: null, changePct: 0, isNew: false, regression: false, approx: false };
+    const actors = monActors(req.profileId, d.digest);
+    return { actors: actors.slice(0, 3), actorCount: actors.length, digest: d.digest, schema: d.schema, text: d.text, execs, totalMs, avgMs: execs ? Math.round((totalMs / execs) * 100) / 100 : 0, maxObservedMs: Math.round(totalMs / Math.max(1, execs) * 40), rowsExamined: Math.round(d.rowsExamined * k), rowsSent: Math.round(d.rowsSent * k), noIndex: Math.round(d.noIndex * k), tmpDisk: Math.round(d.tmpDisk * k), errors: Math.round(d.errors * k), prev: null, changePct: 0, isNew: false, regression: false, approx: false };
   };
   const key: Record<string, (s: Any) => number> = {
     total_time: (s) => s.totalMs, execs: (s) => s.execs, avg_time: (s) => s.avgMs, rows_ratio: (s) => (s.rowsExamined ? s.rowsExamined / Math.max(1, s.rowsSent) : 0),
@@ -1256,14 +1270,14 @@ export const MonitorService = {
       const stat = monTop({ profileId, from, to, orderBy: "total_time", limit: 1000, includeSystem: true }).find((s: Any) => s.digest === digest);
       const n = 24, step = (b - a) / n;
       const points = Array.from({ length: n }, (_, i) => { const execs = Math.round((d.execs / n) * (1 + 0.3 * Math.sin(i / 3))); return { t: new Date(a + step * (i + 0.5)).toISOString(), execs, totalMs: Math.round((d.totalMs / d.execs) * execs), avgMs: Math.round((d.totalMs / d.execs) * 100) / 100 }; });
-      return { digest, text: d.text, schemas: [d.schema], stat, points, gaps: [] };
+      return { digest, text: d.text, schemas: [d.schema], stat, points, gaps: [], actors: monActors(profileId, digest) };
     }),
   Series: (req: Any) => cp(() => monSeries(req)),
   Compare: (profileId: string, a: Any, b: Any) =>
     cp(() => {
       monRange(a.from, a.to); monRange(b.from, b.to);
       const all = monTop({ profileId, from: b.from, to: b.to, orderBy: "total_time", limit: 1000, compare: true });
-      const gone = { digest: "gone1", schema: "pedidos", text: "SELECT * FROM legacy_orders WHERE status = ?", execs: 120, totalMs: 9000, avgMs: 75, maxObservedMs: 300, rowsExamined: 12_000, rowsSent: 120, noIndex: 120, tmpDisk: 0, errors: 0, prev: null, changePct: 0, isNew: false, regression: false, approx: false };
+      const gone = { digest: "gone1", schema: "pedidos", text: "SELECT * FROM legacy_orders WHERE status = ?", execs: 120, totalMs: 9000, avgMs: 75, maxObservedMs: 300, rowsExamined: 12_000, rowsSent: 120, noIndex: 120, tmpDisk: 0, errors: 0, prev: null, changePct: 0, isNew: false, regression: false, approx: false, actors: [], actorCount: 0 };
       return { regressions: all.filter((s: Any) => s.regression), new: all.filter((s: Any) => s.isNew), gone: [gone] };
     }),
   Annotate: (profileId: string, at: string, text: string) =>

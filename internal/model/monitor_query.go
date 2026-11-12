@@ -36,6 +36,7 @@ type DigestDetail struct {
 	Stat    DigestStat    `json:"stat"`
 	Points  []DigestPoint `json:"points"`
 	Gaps    []TimeGap     `json:"gaps"`
+	Actors  []DigestActor `json:"actors"` // todos los vistos, por muestras descendente (spec 22 ⚑D17)
 }
 
 // Comparison es el resultado de comparar un periodo base (A) con uno actual (B): consultas que empeoraron,

@@ -46,12 +46,20 @@ const openDigest = (s: DigestStat) => void store.loadDigest(s.digest);
 const detailOpen = computed({ get: () => !!store.digestDetail || store.loadingDigest, set: (v: boolean) => !v && store.closeDigest() });
 
 const detailStat = computed(() => store.digestDetail?.stat ?? null);
+const detailActors = computed(() => store.digestDetail?.actors ?? []);
 async function copyText(text: string) {
   if (await writeClipboard(text)) ui.toast("success", t("monitor.copied"));
   else ui.toast("error", t("monitor.cannotCopy"));
 }
 // La consulta pide al menos 150 px: con menos ancho la tabla se desplaza en horizontal en vez de cortar el texto a «SELECT…».
-const GRID = "grid grid-cols-[24px_minmax(150px,1fr)_72px_64px_68px_64px_96px_56px_60px_44px_92px] items-center gap-2 px-3";
+const GRID = "grid grid-cols-[24px_minmax(150px,1fr)_72px_64px_68px_64px_96px_56px_60px_44px_92px_minmax(110px,150px)] items-center gap-2 px-3";
+
+// «Quién» (spec 22 ⚑D17): lo calcula Go (los 3 más vistos y el total); aquí solo se escribe. Va con « · » y no con «@», que vue-i18n lee como sintaxis.
+const who = (a: { user: string; host: string }) => `${a.user} · ${a.host}`;
+const actorsOf = (s: DigestStat) => s.actors ?? [];
+const actorsTitle = (s: DigestStat) => (actorsOf(s).length ? [...actorsOf(s).map((a) => t("monitor.top.whoLine", { who: who(a), n: a.seen })), t("monitor.top.whoHint")].join("\n") : noActorsReason.value);
+const noActorsReason = computed(() => (store.currentCaps?.processDigest?.state === "unavailable" ? t("monitor.top.whoNoneUnsupported") : t("monitor.top.whoNone")));
+const when = (ms: number) => new Date(ms).toLocaleString(locale.value);
 const selectedOrder = computed({ get: () => store.topOrder, set: (v: string) => (store.topOrder = v as OrderKey) });
 const regressionCount = computed(() => store.comparison?.regressions?.length ?? 0);
 const newCount = computed(() => store.comparison?.new?.length ?? 0);
@@ -91,12 +99,13 @@ const goneList = computed(() => store.comparison?.gone ?? []);
       <div v-if="!store.topLoaded && store.loadingTop" class="flex items-center justify-center gap-2 py-10 text-sm text-muted" data-testid="top-loading"><BaseSpinner /> {{ t("monitor.top.loading") }}</div>
       <BaseEmptyState v-else-if="store.topLoaded && !store.top.length" :title="t('monitor.top.empty')" :description="t('monitor.top.emptyHint')" data-testid="top-empty" />
       <div v-else-if="store.top.length" class="min-h-0 overflow-x-auto rounded-md border border-border" :aria-busy="store.loadingTop || undefined">
-        <div class="flex min-w-[894px] flex-col">
+        <div class="flex min-w-[1062px] flex-col">
           <div class="border-b border-border py-1.5 text-xs text-muted" :class="GRID" role="row">
             <span>#</span><span>{{ t("monitor.top.query") }}</span><span>{{ t("monitor.live.db") }}</span><span class="text-right">{{ t("monitor.top.execs") }}</span>
             <span class="text-right">{{ t("monitor.top.total") }}</span><span class="text-right">{{ t("monitor.top.avg") }}</span><span class="text-right">{{ t("monitor.top.rows") }}</span>
             <span class="text-right">{{ t("monitor.top.noIndex") }}</span><span class="text-right">{{ t("monitor.top.tmpDisk") }}</span><span class="text-right">{{ t("monitor.top.errors") }}</span>
             <span class="text-right">{{ t("monitor.top.change") }}</span>
+            <span :title="t('monitor.top.whoHint')" data-testid="top-who-header">{{ t("monitor.top.who") }}</span>
           </div>
           <div class="min-h-0 overflow-auto" :class="store.loadingTop && 'opacity-60'" data-testid="top-list">
             <div
@@ -121,6 +130,12 @@ const goneList = computed(() => store.comparison?.gone ?? []);
                 </template>
                 <span v-else class="text-muted">—</span>
               </span>
+              <span class="truncate text-xs" :title="actorsTitle(s)" data-testid="top-actors">
+                <template v-if="actorsOf(s).length">
+                  {{ who(actorsOf(s)[0]) }}<span v-if="s.actorCount > 1" class="text-muted">{{ " " + t("monitor.top.whoMore", { n: s.actorCount - 1 }) }}</span>
+                </template>
+                <span v-else class="text-muted">—</span>
+              </span>
             </div>
           </div>
           <p v-if="anyApprox" class="border-t border-border px-3 py-1.5 text-xs text-muted" data-testid="top-approx">{{ t("monitor.top.approxNote") }}</p>
@@ -142,6 +157,17 @@ const goneList = computed(() => store.comparison?.gone ?? []);
           <div><dt class="text-xs text-muted">{{ t("monitor.top.avg") }}</dt><dd>{{ ms(detailStat.avgMs) }}</dd></div>
           <div><dt class="text-xs text-muted">{{ t("monitor.top.maxObserved") }}</dt><dd>{{ ms(detailStat.maxObservedMs) }}</dd></div>
         </dl>
+        <section class="flex flex-col gap-1" data-testid="digest-actors">
+          <h3 class="text-xs font-semibold text-muted">{{ t("monitor.top.actorsTitle") }}</h3>
+          <ul v-if="detailActors.length" class="flex flex-col gap-0.5 text-sm">
+            <li v-for="a in detailActors" :key="a.user + '|' + a.host" class="flex flex-wrap items-baseline gap-x-3" data-testid="digest-actor">
+              <span class="font-data">{{ who(a) }}</span>
+              <span class="text-xs text-muted">{{ t("monitor.top.actorSeen", { n: a.seen }) }} · {{ t("monitor.top.actorLast", { when: when(a.lastSeen) }) }}</span>
+            </li>
+          </ul>
+          <p v-else class="text-sm text-muted" data-testid="digest-actors-empty">{{ store.currentCaps?.processDigest?.state === "unavailable" ? t("monitor.top.whoNoneUnsupported") : t("monitor.top.actorsEmpty") }}</p>
+          <p class="text-xs text-muted">{{ t("monitor.top.actorsNote") }}</p>
+        </section>
         <TimeSeriesChart :series="digestSeries(store.digestDetail, 'execs')" :label="t('monitor.top.execs')" :height="140" />
         <TimeSeriesChart :series="digestSeries(store.digestDetail, 'avgMs')" :label="t('monitor.top.avg')" unit="ms" :height="140" />
       </div>

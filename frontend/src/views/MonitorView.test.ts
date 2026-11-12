@@ -22,8 +22,8 @@ import { useUiStore } from "../stores/ui";
 import type { MonitorCaps, ProcessSnapshot } from "../types";
 
 const ok = { state: "ok", reason: "ok", hint: "" };
-const caps = (over: Partial<MonitorCaps> = {}): MonitorCaps => ({ serverVersion: "8.0", isMariaDB: false, serverId: "u", processlist: ok, digest: ok, status: ok, ...over });
-const proc = (id: number, over = {}) => ({ id, user: "app", host: "h", db: "pedidos", command: "Query", timeSec: 3, state: "", info: `SELECT ${id}`, infoTruncated: false, ...over });
+const caps = (over: Partial<MonitorCaps> = {}): MonitorCaps => ({ serverVersion: "8.0", isMariaDB: false, serverId: "u", processlist: ok, digest: ok, status: ok, processDigest: ok, ...over });
+const proc = (id: number, over = {}) => ({ id, user: "app", host: "h", db: "pedidos", command: "Query", timeSec: 3, state: "", info: `SELECT ${id}`, infoTruncated: false, digest: "", ...over });
 const snap = (rows = [proc(1), proc(2, { timeSec: 45 })]): ProcessSnapshot => ({ at: "t", rows, summary: { total: rows.length, running: rows.length, sleeping: 0, waitingLock: 0, longestSec: 45, byCommand: null, byUser: null }, maxConnections: 151 });
 
 const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };

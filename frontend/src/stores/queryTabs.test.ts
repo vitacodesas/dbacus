@@ -30,6 +30,19 @@ describe("queryTabs store", () => {
     expect(s.byId(s.openTab({ profileId: "p1" }))?.title).toBe("Consulta 1");
   });
 
+  it("focusSeq sube al abrir o activar una pestaña, también la ya activa, y no al restaurar ni con un id desconocido", async () => {
+    api.loadTabs.mockResolvedValue([{ id: "a", profileId: "p1", title: "A", sql: "", database: "", order: 0 }]);
+    const s = useQueryTabsStore();
+    await s.restore();
+    expect(s.focusSeq).toBe(0);
+    const b = s.openTab({ profileId: "p1" });
+    expect(s.focusSeq).toBe(1);
+    s.setActive(b); // ya activa: aun así el usuario pidió verla
+    expect(s.focusSeq).toBe(2);
+    s.setActive("nope");
+    expect(s.focusSeq).toBe(2);
+  });
+
   it("restaura las pestañas guardadas en orden y activa la primera", async () => {
     api.loadTabs.mockResolvedValue([
       { id: "b", sessionProfileId: "p", title: "B", sql: "SELECT 2", database: "", order: 1 },

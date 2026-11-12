@@ -6,6 +6,7 @@ import MonitorLive from "../components/monitor/MonitorLive.vue";
 import MonitorMetrics from "../components/monitor/MonitorMetrics.vue";
 import MonitorRuns from "../components/monitor/MonitorRuns.vue";
 import MonitorTop from "../components/monitor/MonitorTop.vue";
+import MonitorBackBar from "../components/monitor/MonitorBackBar.vue";
 import SourceBanners from "../components/monitor/SourceBanners.vue";
 import BaseButton from "../components/ui/BaseButton.vue";
 import BaseEmptyState from "../components/ui/BaseEmptyState.vue";
@@ -61,6 +62,7 @@ const tabModel = computed({ get: () => store.tab, set: (v: string) => (store.tab
 
 <template>
   <section class="flex min-h-0 flex-col gap-3 p-4" :aria-label="t('monitor.title')" data-testid="monitor-view">
+    <MonitorBackBar />
     <BaseEmptyState v-if="!sessions.list.length" :title="t('monitor.noSession.title')" :description="t('monitor.noSession.description')">
       <template #icon><Activity class="size-8" /></template>
     </BaseEmptyState>

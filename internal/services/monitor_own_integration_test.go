@@ -72,7 +72,8 @@ func TestMonitorOwnStatementsMatchServerDigestsIntegration(t *testing.T) {
 					fromMonitor := strings.HasPrefix(u, "SET SESSION") || strings.HasPrefix(u, "SHOW GLOBAL STATUS WHERE") ||
 						strings.HasPrefix(u, "SELECT ID ,") || strings.HasPrefix(u, "SELECT SCHEMA_NAME ,") ||
 						strings.HasPrefix(u, "SELECT DIGEST ,") || strings.HasPrefix(u, "SELECT CONNECTION_ID") ||
-						strings.HasPrefix(u, "SELECT @@GLOBAL") || strings.HasPrefix(u, "SELECT ? FROM PERFORMANCE_SCHEMA")
+						strings.HasPrefix(u, "SELECT @@GLOBAL") || strings.HasPrefix(u, "SELECT ? FROM PERFORMANCE_SCHEMA") ||
+						strings.HasPrefix(u, "SELECT STATEMENT_DIGEST") // sonda de ProcessDigest (⚑D17)
 					if fromMonitor {
 						own = append(own, tx)
 						require.True(t, monitor.IsOwnStatement(tx), "el servidor guardó %q y IsOwnStatement no lo reconoce", tx)

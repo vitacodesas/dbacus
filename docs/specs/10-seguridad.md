@@ -24,6 +24,7 @@
 - `KILL` solo uno a uno desde la vista En vivo (spec 22 ⚑D8): rechazado en perfiles de solo lectura, con confirmación en la UI, identidad del proceso (id + usuario + host) comprobada en Go y el privilegio lo decide el servidor. «Copiar KILL» sigue armando solo texto.
 - Los digests de las sentencias fijas del propio monitor (`monitor.IsOwnStatement`) no se guardan: no ensucian el ranking ni aparecen como actividad del usuario. Límite conocido: otro cliente que ejecute exactamente la misma forma tampoco aparece.
 - Los logs del monitor llevan códigos y contadores, nunca SQL ni texto de digest.
+- **Usuario y host por digest (⚑D17)**: se guardan en SQLite (`monitor_digest_actor`, host sin puerto) como dato personal de la retención horaria (90 d); no son secretos pero identifican a quien consulta. Se borran con «Borrar datos de monitoreo» y al borrar el perfil. `INFO` sigue sin persistirse: del processlist solo sale el hash `STATEMENT_DIGEST`, calculado en el servidor.
 
 ## Logs y telemetría
 - `slog` con redacción: claves `password|passphrase|secret|token` → `***`; el SQL se registra solo en nivel debug y truncado a 200 chars.

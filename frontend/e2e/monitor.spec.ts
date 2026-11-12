@@ -110,6 +110,21 @@ test.describe("monitor DBA", () => {
     await expect.poll(() => readClipboard(page)).toContain("orders");
   });
 
+  test("Top queries: la columna «Quién» y el detalle muestran quién se vio ejecutándola", async ({ app: page }) => {
+    await openMonitor(page);
+    await tab(page, "Top queries");
+    await expect(page.getByTestId("top-who-header")).toHaveText("Quién");
+    const actors = (digest: string) => page.getByTestId(`top-row-${digest}`).getByTestId("top-actors");
+    await expect(actors("d1")).toContainText("app_rw · 10.0.0.4");
+    await expect(actors("d1")).toContainText("+3");
+    await expect(actors("d4")).toHaveText("—"); // sin datos: nunca se inventa un usuario
+
+    await page.getByTestId("top-row-d1").click();
+    await expect(page.getByTestId("digest-actor")).toHaveCount(4);
+    await expect(page.getByTestId("digest-actors")).toContainText("report · 10.0.0.9");
+    await expect(page.getByTestId("digest-actors")).toContainText("aproximado");
+  });
+
   test("Métricas: los huecos se rotulan y las anotaciones se añaden y se borran", async ({ app: page }) => {
     await openMonitor(page);
     await tab(page, "Métricas");
@@ -139,6 +154,34 @@ test.describe("monitor DBA", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Borrar datos" }).click();
     await expect(page.getByText("Datos de monitoreo borrados")).toBeVisible();
     await expect(page.getByTestId("runs-empty")).toBeVisible();
+  });
+
+  test("el Monitor devuelve a las consultas al abrir una pestaña y la franja lleva a cada una", async ({ app: page }) => {
+    await connect(page);
+    await page.keyboard.press(`${mod}+t`);
+    await page.keyboard.press(`${mod}+t`);
+    await page.getByTestId("open-monitor").click();
+    await expect(monitor(page)).toBeVisible();
+
+    // La franja lista las pestañas abiertas y un chip activa esa consulta y vuelve a ellas.
+    await expect(page.getByTestId("monitor-back-btn")).toContainText("(2)");
+    const chips = page.locator('[data-testid^="monitor-back-tab-"]');
+    await expect(chips).toHaveCount(2);
+    await chips.first().click();
+    await expect(monitor(page)).toBeHidden();
+    await expect(page.getByTestId("queries-area")).toBeVisible();
+
+    // Una pestaña nueva con el Monitor delante también vuelve a las consultas (antes se creaba detrás sin verse).
+    await page.getByTestId("open-monitor").click();
+    await expect(monitor(page)).toBeVisible();
+    await page.keyboard.press(`${mod}+t`);
+    await expect(monitor(page)).toBeHidden();
+    await expect(page.locator(".monaco-editor").first()).toBeVisible();
+
+    // «Consultas (N)» vuelve sin tocar nada.
+    await page.getByTestId("open-monitor").click();
+    await page.getByTestId("monitor-back-btn").click();
+    await expect(monitor(page)).toBeHidden();
   });
 
   test("el Monitor no desmonta las pestañas de consulta", async ({ app: page }) => {
@@ -184,6 +227,19 @@ test.describe("monitor DBA: fuentes no disponibles", () => {
       await expect(page.getByTestId("source-empty-hint")).toContainText("GRANT SELECT ON performance_schema.*");
       await page.getByTestId("source-empty-copy").click();
       await expect.poll(() => readClipboard(page)).toContain("GRANT SELECT ON performance_schema.*");
+    });
+  });
+
+  test.describe("sin STATEMENT_DIGEST", () => {
+    test.use({ seed: { profiles: [SAKILA], monitor: { caps: "no_process_digest" } } });
+    test("el ranking sigue y «Quién» explica que el servidor no lo ofrece", async ({ app: page }) => {
+      await openMonitor(page);
+      await tab(page, "Top queries");
+      await expect(page.getByTestId("top-list")).toBeVisible();
+      await expect(page.getByTestId("top-row-d1").getByTestId("top-actors")).toHaveText("—");
+      await expect(page.getByTestId("top-row-d1").getByTestId("top-actors")).toHaveAttribute("title", /STATEMENT_DIGEST/);
+      await page.getByTestId("top-row-d1").click();
+      await expect(page.getByTestId("digest-actors-empty")).toContainText("STATEMENT_DIGEST");
     });
   });
 

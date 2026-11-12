@@ -18,7 +18,7 @@ func TestMonitorSQLIsReadOnlySafe(t *testing.T) {
 	status, err := statusQuery([]string{"Uptime", "Threads_running", "Com_select"})
 	require.NoError(t, err)
 	stmts := []string{
-		sqlProcesslist, sqlProcesslistFallback, sqlConnectionID, sqlMaxConnections, sqlDigests, sqlVersion, sqlCurrentUser, sqlServerUUID,
+		sqlProcesslist, sqlProcesslistDigest, sqlProcessDigestProbe, sqlProcesslistFallback, sqlConnectionID, sqlMaxConnections, sqlDigests, sqlVersion, sqlCurrentUser, sqlServerUUID,
 		sqlServerID, sqlStatusProbe, sqlDistinctUsers, sqlHasProcessPriv, sqlPerfSchemaOn, sqlDigestProbe, sqlDigestConsumer,
 		status, digestTextsQuery(1), digestTextsQuery(digestTextBatch),
 	}
@@ -34,6 +34,9 @@ func TestProcesslistQueryUsesExplicitColumns(t *testing.T) {
 	require.NotContains(t, sqlProcesslist, "*")
 	require.Contains(t, sqlProcesslist, "INFORMATION_SCHEMA.PROCESSLIST")
 	require.Contains(t, sqlProcesslist, "ID <> CONNECTION_ID()")
+	require.NotContains(t, sqlProcesslistDigest, "*")
+	require.Contains(t, sqlProcesslistDigest, "STATEMENT_DIGEST(INFO)")
+	require.Contains(t, sqlProcesslistDigest, "ID <> CONNECTION_ID()")
 	require.NotContains(t, sqlDigests, "DIGEST_TEXT", "el texto se pide aparte")
 	require.NotContains(t, sqlDigests, "*")
 }

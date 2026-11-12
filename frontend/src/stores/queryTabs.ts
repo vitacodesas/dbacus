@@ -33,6 +33,8 @@ export const useQueryTabsStore = defineStore("queryTabs", () => {
   const tabs = ref<QueryTab[]>([]);
   const activeTabId = ref<string | null>(null);
   const restored = ref(false);
+  /** Sube cada vez que el usuario abre o activa una pestaña (también la ya activa): `App.vue` vuelve de otras vistas a las consultas. */
+  const focusSeq = ref(0);
   const lastError = ref<string | null>(null);
 
   const active = computed(() => tabs.value.find((t) => t.id === activeTabId.value) ?? null);
@@ -91,6 +93,7 @@ export const useQueryTabsStore = defineStore("queryTabs", () => {
     };
     tabs.value.push(tab);
     activeTabId.value = tab.id;
+    focusSeq.value++;
     schedulePersist();
     return tab.id;
   }
@@ -127,7 +130,9 @@ export const useQueryTabsStore = defineStore("queryTabs", () => {
   }
 
   function setActive(id: string) {
-    if (byId(id)) activeTabId.value = id;
+    if (!byId(id)) return;
+    activeTabId.value = id;
+    focusSeq.value++;
   }
   function setSql(id: string, sql: string) {
     const t = byId(id);
@@ -208,7 +213,7 @@ export const useQueryTabsStore = defineStore("queryTabs", () => {
   }
 
   return {
-    tabs, activeTabId, active, restored, lastError, closePrompt, unsaved, byId, isDirty, restore, openTab, closeTab, setActive, setSql, setDatabase, setProfile, rename, move, persistNow,
+    tabs, activeTabId, focusSeq, active, restored, lastError, closePrompt, unsaved, byId, isDirty, restore, openTab, closeTab, setActive, setSql, setDatabase, setProfile, rename, move, persistNow,
     bindFile, replaceFromDisk, rebase, setDiskState, applyPathChanges,
   };
 });

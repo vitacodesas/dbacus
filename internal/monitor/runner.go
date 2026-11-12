@@ -318,6 +318,7 @@ func (r *Runner) sample(now time.Time) {
 				in.Metrics[k] = v
 			}
 			in.ProcJSON = ProcJSON(rows, long)
+			in.Actors = ActorsOf(rows)
 			longest = sum.LongestSec
 			collected = true
 		}
