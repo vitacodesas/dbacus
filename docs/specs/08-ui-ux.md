@@ -11,6 +11,7 @@
 │ StatusBar: sesión · BD · filas · tiempo · estado                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
+- **Migrar schema** (spec 23): acción del menú contextual de una base; abre un asistente modal de 4 pasos (destino, contenido, plan, progreso/resultado). No usa `TabState`.
 - **Monitor** (spec 22): ítem de la `ActivityBar` que cambia el **área principal** a `MonitorView` (`ui.mainView = 'monitor'`) sin desmontar las pestañas de consulta; sus sub-pestañas son En vivo, Top queries, Métricas y Ejecuciones. No usa el sidebar ni `TabState`. Abrir o activar una pestaña de consulta con el Monitor activo vuelve a `queries`, y el Monitor lleva una franja «← Consultas (N)» con las pestañas abiertas (T16.9). En Top queries, columna «Quién» con usuario e IP vistos por muestreo (⚑D17).
 - Sin sesión activa: pantalla de bienvenida con lista de conexiones y CTA "Nueva conexión".
 - Sidebar redimensionable (240–480 px) y colapsable (`⌘/Ctrl+B`); splitter editor/resultados persistido.

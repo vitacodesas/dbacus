@@ -6,6 +6,7 @@ import * as ConnectionService from "./connectionservice.js";
 import * as EditService from "./editservice.js";
 import * as ExportService from "./exportservice.js";
 import * as HistoryService from "./historyservice.js";
+import * as MigrationService from "./migrationservice.js";
 import * as MonitorService from "./monitorservice.js";
 import * as PingService from "./pingservice.js";
 import * as QueryFilesService from "./queryfilesservice.js";
@@ -19,6 +20,7 @@ export {
     EditService,
     ExportService,
     HistoryService,
+    MigrationService,
     MonitorService,
     PingService,
     QueryFilesService,
@@ -43,6 +45,10 @@ export type {
     HistoryAdded,
     HistoryPage,
     HistoryQuery,
+    MigrateDoneEvent,
+    MigrateProgressEvent,
+    MigrateStateEvent,
+    MigrateTableProgress,
     MonitorProcessesEvent,
     MonitorSampleEvent,
     MonitorStateEvent,

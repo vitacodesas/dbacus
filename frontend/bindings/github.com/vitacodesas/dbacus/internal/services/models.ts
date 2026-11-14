@@ -154,6 +154,40 @@ export interface HistoryQuery {
     "cursor": string;
 }
 
+export interface MigrateDoneEvent {
+    "jobId": string;
+    "state": string;
+    "failed": number;
+    "elapsedMs": number;
+}
+
+export interface MigrateProgressEvent {
+    "jobId": string;
+    "phase": string;
+    "rows": number;
+    "estRows": number;
+    "bytes": number;
+    "elapsedMs": number;
+    "tablesDone": number;
+    "tablesTotal": number;
+    "perTable": MigrateTableProgress[] | null;
+}
+
+export interface MigrateStateEvent {
+    "jobId": string;
+    "state": string;
+    "phase": string;
+}
+
+export interface MigrateTableProgress {
+    "name": string;
+    "state": string;
+    "rowsDone": number;
+    "rowsEst": number;
+    "chunksDone": number;
+    "chunksAll": number;
+}
+
 export interface MonitorProcessesEvent {
     "sessionId": string;
     "snapshot": model$0.ProcessSnapshot;

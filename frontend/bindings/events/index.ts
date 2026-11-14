@@ -29,6 +29,21 @@ export const ExportProgress = "export:progress";
 export const HistoryAdded = "history:added";
 
 /**
+ * Name of the custom event "migrate:done".
+ */
+export const MigrateDone = "migrate:done";
+
+/**
+ * Name of the custom event "migrate:progress".
+ */
+export const MigrateProgress = "migrate:progress";
+
+/**
+ * Name of the custom event "migrate:state".
+ */
+export const MigrateState = "migrate:state";
+
+/**
  * Name of the custom event "monitor:processes".
  */
 export const MonitorProcesses = "monitor:processes";

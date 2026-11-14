@@ -107,6 +107,9 @@ func Run(assets fs.FS) error {
 	monitorBG := services.BackgroundOf(monitorSvc)
 	lc.Go(monitorBG.RunMaintenance)
 
+	migrationSvc := services.NewMigrationService(services.MigrationDeps{Sessions: sessions, Schema: schemaSvc, Store: st, History: history, Emit: emit})
+	lc.OnShutdown("migration", migrationSvc.ServiceShutdown) // después de sessions en el registro: se cierra antes (LIFO)
+
 	svcs := []application.Service{
 		application.NewService(&services.PingService{}),
 		application.NewService(services.NewConnectionService(services.ConnectionDeps{
@@ -125,6 +128,7 @@ func Run(assets fs.FS) error {
 		application.NewService(services.NewRoutineService(services.RoutineDeps{Sessions: sessions, Schema: schemaSvc, Store: st, History: history})),
 		application.NewService(queryFiles),
 		application.NewService(monitorSvc),
+		application.NewService(migrationSvc),
 		application.NewService(services.NewSettingsService(st)),
 	}
 

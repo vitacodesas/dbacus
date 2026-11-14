@@ -16,6 +16,9 @@ declare module "@wailsio/runtime" {
             "export:done": services$0.ExportDone;
             "export:progress": services$0.ExportProgress;
             "history:added": services$0.HistoryAdded;
+            "migrate:done": services$0.MigrateDoneEvent;
+            "migrate:progress": services$0.MigrateProgressEvent;
+            "migrate:state": services$0.MigrateStateEvent;
             "monitor:processes": services$0.MonitorProcessesEvent;
             "monitor:sample": services$0.MonitorSampleEvent;
             "monitor:state": services$0.MonitorStateEvent;

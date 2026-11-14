@@ -26,6 +26,12 @@
 - Los logs del monitor llevan códigos y contadores, nunca SQL ni texto de digest.
 - **Usuario y host por digest (⚑D17)**: se guardan en SQLite (`monitor_digest_actor`, host sin puerto) como dato personal de la retención horaria (90 d); no son secretos pero identifican a quien consulta. Se borran con «Borrar datos de monitoreo» y al borrar el perfil. `INFO` sigue sin persistirse: del processlist solo sale el hash `STATEMENT_DIGEST`, calculado en el servidor.
 
+## Migración de schema (spec 23)
+- Solo copia: el origen **no recibe ninguna escritura de dbacus (regla mandatoria, spec 23 ⚑D19)**: ruta por Go con conexiones `READ ONLY` impuestas por MySQL, ruta en el servidor con un `WriteGuard` que rechaza toda sentencia que no escriba en el destino, y detección de origen = destino aunque difieran en mayúsculas. El destino de un perfil de solo lectura se rechaza en Go; el origen puede ser de solo lectura.
+- Las conexiones de la migración (`mig`) fijan `foreign_key_checks=0` **solo en su propia sesión**; nunca se tocan variables globales del servidor ni `sql_log_bin`. Con las foráneas apagadas no se validan filas: la verificación opcional lo cubre y dbacus no gestiona la consistencia del origen frente a otros escritores (procedimental).
+- Los **datos** de las filas pasan solo por memoria y no se registran ni persisten; los logs llevan códigos y contadores, nunca SQL, valores ni nombres de columnas. Al historial va una entrada resumen.
+- Los identificadores generados se escapan con `QuoteIdent`; los schemas del sistema no pueden ser origen ni destino; «Limpiar destino» borra solo lo que creó el job y pide escribir el nombre del schema.
+
 ## Logs y telemetría
 - `slog` con redacción: claves `password|passphrase|secret|token` → `***`; el SQL se registra solo en nivel debug y truncado a 200 chars.
 - Sin telemetría ni llamadas de red salvo las del usuario.

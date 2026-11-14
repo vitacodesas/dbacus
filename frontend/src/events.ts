@@ -1,7 +1,8 @@
-import { onEditApplied, onExportDone, onExportProgress, onHistoryAdded, onMonitorProcesses, onMonitorSample, onMonitorState, onQueryDone, onQueryError, onQueryProgress, onQueryStarted, onQueryStatement, onSchemaInvalidated, onSessionClosed } from "./api/events";
+import { onEditApplied, onExportDone, onExportProgress, onHistoryAdded, onMigrateDone, onMigrateProgress, onMigrateState, onMonitorProcesses, onMonitorSample, onMonitorState, onQueryDone, onQueryError, onQueryProgress, onQueryStarted, onQueryStatement, onSchemaInvalidated, onSessionClosed } from "./api/events";
 import { useEditsStore } from "./stores/edits";
 import { useExportsStore } from "./stores/exports";
 import { useHistoryStore } from "./stores/history";
+import { useMigrationStore } from "./stores/migration";
 import { useMonitorStore } from "./stores/monitor";
 import { useResultsStore } from "./stores/results";
 import { useSchemaStore } from "./stores/schema";
@@ -16,6 +17,7 @@ export function startEventDispatch(): () => void {
   const exports = useExportsStore();
   const edits = useEditsStore();
   const monitor = useMonitorStore();
+  const migration = useMigrationStore();
   const offs = [onSessionClosed((ev) => sessions.handleClosed(ev)), onSchemaInvalidated((ev) => schema.handleInvalidated(ev)),
     onQueryStarted((ev) => results.handleStarted(ev)),
     onQueryStatement((ev) => results.handleStatement(ev)),
@@ -29,6 +31,9 @@ export function startEventDispatch(): () => void {
     onMonitorSample((ev) => monitor.handleSample(ev)),
     onMonitorState((ev) => monitor.handleState(ev)),
     onMonitorProcesses((ev) => monitor.handleProcesses(ev)),
+    onMigrateProgress((ev) => migration.handleProgress(ev)),
+    onMigrateState((ev) => migration.handleState(ev)),
+    onMigrateDone((ev) => migration.handleDone(ev)),
   ];
   return () => offs.forEach((off) => off());
 }

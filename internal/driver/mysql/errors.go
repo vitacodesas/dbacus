@@ -41,6 +41,8 @@ func mapError(err error) error {
 			return apperr.Wrap(apperr.QueryCanceled, "La consulta fue cancelada", err).WithDetail(detail)
 		case 3024, 1205:
 			return apperr.Wrap(apperr.Timeout, me.Message, err).WithDetail(detail).AsRetryable()
+		case 1213: // deadlock: el servidor revirtió la transacción y se puede repetir
+			return apperr.Wrap(apperr.QueryFailed, me.Message, err).WithDetail(detail).AsRetryable()
 		default:
 			return apperr.Wrap(apperr.QueryFailed, me.Message, err).WithDetail(detail)
 		}

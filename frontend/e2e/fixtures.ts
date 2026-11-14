@@ -12,6 +12,8 @@ export interface MockSeed {
   routines?: number;
   /** Monitor DBA (spec 22): escenario de permisos (`ok|own_only|no_privilege|perf_schema_off|consumer_off`) y cadencia de las muestras simuladas. */
   monitor?: { caps?: string | Record<string, string>; processes?: number; sampleMs?: number };
+  /** Migración de schema (spec 23): escenario (`ok|partial|exists|orphans`) y cadencia de la copia simulada. */
+  migration?: { scenario?: string; tickMs?: number };
 }
 
 /** Conexión de ejemplo ya guardada (el backend simulado empieza vacío en cada carga). */

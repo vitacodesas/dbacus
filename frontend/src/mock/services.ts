@@ -26,6 +26,11 @@ interface Seed {
    * cientos se prueba la lista virtualizada) y `sampleMs` cada cuánto emite una muestra (por defecto, el intervalo).
    */
   monitor?: { caps?: string | Record<string, string>; processes?: number; sampleMs?: number };
+  /**
+   * Migración de schema (spec 23): `scenario` = ok | partial (una tabla falla hasta el Retry) | exists (el destino ya tiene objetos) |
+   * orphans (la verificación encuentra una fila huérfana); `tickMs` cada cuánto avanza la copia simulada (por defecto 120).
+   */
+  migration?: { scenario?: string; tickMs?: number };
 }
 const seed: Seed = (window as Any).__MOCK_SEED__ ?? {};
 const latency = seed.latencyMs ?? 20;
@@ -1322,6 +1327,260 @@ export const MonitorService = {
       monSession(sessionId);
       if (!(processId > 0)) throw fail("VALIDATION", "Identificador de proceso no válido", "processId");
       return queryOnly ? `KILL QUERY ${processId};` : `KILL ${processId};`;
+    }),
+};
+
+// ---- migración de schema (spec 23) ----------------------------------------------------------------------------------------
+// Imita MigrationService: mismas validaciones y errores que Go, un schema de ejemplo (claves, una tabla sin índice, vistas, rutinas,
+// triggers) y una copia que avanza con el tiempo emitiendo migrate:progress|state|done.
+const MIG_TABLES = [
+  { name: "actor", estRows: 200, key: "pk", chunks: 1 },
+  { name: "film", estRows: 1000, key: "pk", chunks: 1 },
+  { name: "customer", estRows: 599, key: "pk", chunks: 1 },
+  { name: "rental", estRows: 16044, key: "pk", chunks: 2 },
+  { name: "payment", estRows: 16049, key: "pk", chunks: 2 },
+  { name: "audit_log", estRows: 5000, key: "none", chunks: 1 },
+];
+const MIG_VIEWS = ["customer_list"];
+const MIG_ROUTINES = [{ name: "film_in_stock", kind: "function" }, { name: "rewards_report", kind: "procedure" }];
+const MIG_TRIGGERS = [{ name: "ins_film", table: "film" }];
+const migScenario = () => seed.migration?.scenario ?? "ok";
+const migTick = () => seed.migration?.tickMs ?? 120;
+const migHash = (v: unknown) => {
+  const str = JSON.stringify(v);
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16).padStart(8, "0").repeat(8);
+};
+const MIG_SYSTEM = new Set(["mysql", "sys", "information_schema", "performance_schema"]);
+
+function migPlan(req: Any): Any {
+  const session = (id: string, field: string) => {
+    if (!id) throw fail("VALIDATION", field === "source" ? "Falta la conexión de origen" : "Falta la conexión de destino", field);
+    const x = sessions.find((s) => s.sessionId === id);
+    if (!x) throw fail("SESSION_CLOSED", "La sesión ya no está activa");
+    return x;
+  };
+  const src = session(req.source?.sessionId, "source");
+  const tgt = session(req.target?.sessionId, "target");
+  if (profileOf(tgt.profileId)?.readOnly) throw fail("QUERY_FAILED", "La conexión de destino es de solo lectura: no se puede migrar a ella", "readonly");
+  const sdb = req.source.database, tdb = (req.target.database ?? "").trim();
+  const bad = (n: string) => !n || [...n].length > 64 || /[/\\.\u0000]/.test(n) || n.endsWith(" ");
+  if (bad(sdb) || bad(tdb)) throw fail("VALIDATION", "El nombre de la base debe tener entre 1 y 64 caracteres y no llevar «/», «\\» ni «.»", "database");
+  if (MIG_SYSTEM.has(sdb.toLowerCase()) || MIG_SYSTEM.has(tdb.toLowerCase())) throw fail("VALIDATION", "Los schemas del sistema no pueden ser origen ni destino", "system_schema");
+  const same = src.sessionId === tgt.sessionId;
+  if (same && sdb === tdb) throw fail("VALIDATION", "El origen y el destino son el mismo schema", "same_schema");
+  const o = req.options ?? {};
+  if (o.workers < 0 || o.workers > 16) throw fail("VALIDATION", "Los workers deben estar entre 1 y 16", "workers");
+  if (o.chunkRows && (o.chunkRows < 1000 || o.chunkRows > 1_000_000)) throw fail("VALIDATION", "El tamaño de trozo debe ser 0 o estar entre 1000 y 1000000 filas", "chunkRows");
+  const clash = migScenario() === "exists" ? ["actor"] : [];
+  // Vistas, rutinas y triggers que el destino ya tiene, y cómo sale la comparación de su código (spec 23 ⚑D21).
+  const objExists: Record<string, string> = migScenario() === "exists" ? { "function:film_in_stock": "same", "view:customer_list": "different" } : {};
+  if (clash.length && !o.skipExisting) throw fail("QUERY_FAILED", `El schema destino ya tiene objetos (tablas que chocan: ${clash.join(", ")}) (vistas, rutinas o triggers que chocan: ${Object.keys(objExists).map((k) => k.split(":")[1]).join(", ")}). Elige un schema vacío o marca «omitir lo que ya existe»`, "exists");
+  const pick = (all: string[], want: string[] | null | undefined) => {
+    if (want == null) return all;
+    for (const n of want) if (!all.includes(n)) throw fail("VALIDATION", `«${n}» no existe en el origen`, "objects");
+    return all.filter((n) => want.includes(n));
+  };
+  const tnames = pick(MIG_TABLES.map((x) => x.name), req.objects?.tables);
+  const empty: string[] = req.objects?.structureOnly ?? [];
+  for (const n of empty) if (!tnames.includes(n)) throw fail("VALIDATION", `La tabla «${n}» está marcada como solo estructura pero no está entre las que se migran`, "objects");
+  const vnames = pick(MIG_VIEWS, req.objects?.views);
+  const tr = pick(MIG_TRIGGERS.map((x) => x.name), req.objects?.triggers);
+  const rkeys = req.objects?.routines == null ? MIG_ROUTINES.map((r) => `${r.kind}:${r.name}`) : req.objects.routines.map((r: Any) => `${r.kind}:${r.name}`);
+  const warnings: Any[] = [{ code: same ? "route_server" : "route_go", level: "info", object: "", message: same ? "La copia se hace dentro del servidor (INSERT … SELECT): los datos no pasan por la app y el origen solo se lee" : "Los datos pasan por la app: las conexiones que leen el origen son de solo lectura" }];
+  const tables = MIG_TABLES.filter((x) => tnames.includes(x.name) || clash.includes(x.name)).map((x) => {
+    const skipped = clash.includes(x.name);
+    if (x.key === "none" && !skipped && !empty.includes(x.name)) warnings.push({ code: "no_index", level: "warning", object: x.name, message: "No tiene ningún índice: se copia en un solo trozo, sin paralelismo y sin progreso intermedio" });
+    const so = empty.includes(x.name);
+    return { name: x.name, estRows: so ? 0 : x.estRows, estBytes: so ? 0 : x.estRows * 120, chunks: so ? 0 : x.chunks, chunkKey: x.key, columns: 5, skippedColumns: [], skipped, structureOnly: so, warnings: skipped ? ["exists"] : [] };
+  }).filter((x) => !x.skipped ? tnames.includes(x.name) : true);
+  // Escenario «unreadable»: el usuario no puede leer el cuerpo de las rutinas (solo EXECUTE): salen marcadas y no se pueden elegir.
+  const unreadable = migScenario() === "unreadable" ? new Set(["function:film_in_stock", "procedure:rewards_report"]) : new Set<string>();
+  const mark = (o: Any) => {
+    if (unreadable.has(`${o.kind}:${o.name}`)) {
+      warnings.push({ code: "unreadable_code", level: "warning", object: o.name, message: "No se puede leer su código: EXECUTE no basta. Hace falta ser su definer, o tener SHOW_ROUTINE global (MySQL 8.0.20+) o SELECT sobre mysql.proc (MariaDB); para vistas, SHOW VIEW. Se omite" });
+      return { ...o, skipped: true, compare: "unreadable" };
+    }
+    const c = objExists[`${o.kind}:${o.name}`];
+    if (!c) return { ...o, skipped: false, compare: "" };
+    warnings.push({ code: `object_exists_${c}`, level: c === "same" ? "info" : "warning", object: o.name, message: c === "same" ? "Ya existe en el destino con el mismo código: se omite" : "Ya existe en el destino y su código es distinto: se omite y NO se reemplaza (el del destino queda como está)" });
+    return { ...o, skipped: true, compare: c };
+  };
+  const routines = MIG_ROUTINES.filter((r) => rkeys.includes(`${r.kind}:${r.name}`)).map((r) => mark({ name: r.name, kind: r.kind, table: "" }));
+  routines.filter((r) => r.kind === "procedure" && !r.skipped).forEach((r) => warnings.push({ code: "definer_foreign", level: "warning", object: r.name, message: "Se creará a nombre del usuario que migra; el original era `admin`@`%`" }));
+  const triggers = MIG_TRIGGERS.filter((x) => tr.includes(x.name) && tnames.includes(x.table)).map((x) => mark({ name: x.name, kind: "trigger", table: x.table }));
+  const views = vnames.map((n) => mark({ name: n, kind: "view", table: "" }));
+  const statements = [
+    `CREATE DATABASE \`${tdb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;`,
+    ...tables.filter((x) => !x.skipped).map((x) => `CREATE TABLE \`${x.name}\` (\n  \`id\` int NOT NULL AUTO_INCREMENT,\n  PRIMARY KEY (\`id\`)\n) ENGINE=InnoDB;`),
+    ...routines.filter((r) => !r.skipped).map((r) => `CREATE ${r.kind.toUpperCase()} \`${r.name}\` ...;`),
+    ...views.filter((v) => !v.skipped).map((v) => `CREATE VIEW \`${v.name}\` AS select * from \`${tdb}\`.\`customer\`;`),
+    ...triggers.filter((x) => !x.skipped).map((x) => `CREATE TRIGGER \`${x.name}\` BEFORE INSERT ON \`${x.table}\` FOR EACH ROW SET NEW.last_update = NOW();`),
+  ];
+  const workers = Math.min(o.workers || 4, 16);
+  const plan = {
+    planHash: migHash({ sdb, tdb, same, tnames, empty, vnames, tr, rkeys, skip: !!o.skipExisting, objExists }), route: same ? "server" : "go", tables, views,
+    routines, triggers, workers, warnings, statements, serverCaps: { maxConnections: 151, freeConnections: 120 }, targetNew: true,
+  };
+  return { plan, sdb, tdb, srcId: src.sessionId, tgtId: tgt.sessionId, tnames, same };
+}
+
+interface MigJob {
+  job: Any; failed: Any[]; created: Any[]; verification: Any; plan: Any; tdb: string; srcId: string; tgtId: string;
+  timer: ReturnType<typeof setInterval> | null; step: number; cancel: boolean; failTables: Set<string>; todo: string[];
+}
+const migJobs = new Map<string, MigJob>();
+let migSeq = 0;
+const migBusy = new Set<string>();
+
+function migSnapshot(m: MigJob): Any {
+  const j = m.job;
+  return { ...j, elapsedMs: Date.now() - Date.parse(j.startedAt), tables: j.tables.map((x: Any) => ({ ...x })), objects: j.objects.map((x: Any) => ({ ...x })) };
+}
+function migEmitProgress(m: MigJob) {
+  const j = migSnapshot(m);
+  Events.Emit("migrate:progress", { jobId: j.id, phase: j.phase, rows: j.rows, estRows: j.estRows, bytes: j.bytes, elapsedMs: j.elapsedMs, tablesDone: j.tablesDone, tablesTotal: j.tablesAll, perTable: j.tables.map((x: Any) => ({ name: x.name, state: x.state, rowsDone: x.rowsDone, rowsEst: x.rowsEst, chunksDone: x.chunksDone, chunksAll: x.chunksAll })) });
+}
+function migSetState(m: MigJob, state: string, phase: string) {
+  m.job.state = state;
+  m.job.phase = phase;
+  Events.Emit("migrate:state", { jobId: m.job.id, state, phase });
+}
+function migFinish(m: MigJob) {
+  if (m.timer) clearInterval(m.timer);
+  m.timer = null;
+  migBusy.delete(m.srcId);
+  migBusy.delete(m.tgtId);
+  const j = m.job;
+  const anyDone = j.tables.some((x: Any) => x.state === "done");
+  const state = m.cancel ? "canceled" : m.failed.length === 0 ? "done" : anyDone ? "partial" : "failed";
+  j.tablesDone = j.tables.filter((x: Any) => x.state === "done").length;
+  j.elapsedMs = Date.now() - Date.parse(j.startedAt);
+  migSetState(m, state, j.phase);
+  migEmitProgress(m);
+  Events.Emit("migrate:done", { jobId: j.id, state, failed: m.failed.length, elapsedMs: j.elapsedMs });
+}
+function migRun(m: MigJob) {
+  m.step = 0;
+  migBusy.add(m.srcId);
+  migBusy.add(m.tgtId);
+  migSetState(m, "running", "schema");
+  const rowsPerTick = 2500;
+  m.timer = setInterval(() => {
+    const j = m.job;
+    if (m.cancel) {
+      if (j.state !== "cancelling") migSetState(m, "cancelling", j.phase);
+      return migFinish(m);
+    }
+    m.step++;
+    if (m.step === 1) {
+      j.phase = "tables";
+      m.todo.forEach((n) => { const t = j.tables.find((x: Any) => x.name === n); if (t) { t.state = "pending"; if (!m.created.some((c) => c.kind === "table" && c.name === n)) m.created.push({ name: n, kind: "table" }); } });
+      j.tables.filter((x: Any) => x.structureOnly).forEach((t: Any) => { t.state = "done"; m.created.push({ name: t.name, kind: "table" }); }); // sin datos que copiar
+      return migSetState(m, "running", "tables");
+    }
+    if (j.phase === "tables") {
+      m.todo.forEach((n) => { const t = j.tables.find((x: Any) => x.name === n); if (t) t.state = "copying"; });
+      return migSetState(m, "running", "data");
+    }
+    if (j.phase === "data") {
+      let working = false;
+      for (const n of m.todo) {
+        const t = j.tables.find((x: Any) => x.name === n);
+        if (!t || t.state !== "copying") continue;
+        if (m.failTables.has(n) && t.rowsDone >= t.rowsEst / 2) {
+          t.state = "failed";
+          t.error = "Deadlock found when trying to get lock (ERROR 1213)";
+          m.failed.push({ object: n, kind: "table", error: t.error });
+          continue;
+        }
+        const add = Math.min(rowsPerTick, t.rowsEst - t.rowsDone);
+        t.rowsDone += add;
+        j.rows += add;
+        j.bytes += add * 120;
+        t.chunksDone = Math.min(t.chunksAll, Math.ceil((t.rowsDone / Math.max(1, t.rowsEst)) * t.chunksAll));
+        if (t.rowsDone >= t.rowsEst) t.state = "done";
+        else working = true;
+      }
+      j.tablesDone = j.tables.filter((x: Any) => x.state === "done").length;
+      migEmitProgress(m);
+      if (working) return;
+      return migSetState(m, "running", "keys");
+    }
+    const order = ["keys", "routines", "views", "triggers"];
+    const at = order.indexOf(j.phase);
+    if (at >= 0 && at < order.length - 1) {
+      return migSetState(m, "running", order[at + 1]);
+    }
+    j.objects.forEach((x: Any) => { if (x.state === "pending") { x.state = "done"; m.created.push({ name: x.name, kind: x.kind }); } });
+    migFinish(m);
+  }, migTick());
+}
+
+export const MigrationService = {
+  Plan: (req: Any) => cp(() => migPlan(req).plan),
+  Start: (req: Any, planHash: string) =>
+    cp(() => {
+      const p = migPlan(req);
+      if (!planHash || p.plan.planHash !== planHash) throw fail("VALIDATION", "El origen o el destino cambiaron desde que se calculó el plan: vuelve a revisarlo", "stale_plan");
+      if (migBusy.has(p.srcId) || migBusy.has(p.tgtId)) throw fail("QUERY_FAILED", "Ya hay una migración en curso con esta conexión", "busy");
+      const id = `mig-${++migSeq}`;
+      const tables = p.plan.tables.filter((x: Any) => !x.skipped).map((x: Any) => ({ name: x.name, state: "pending", structureOnly: !!x.structureOnly, rowsDone: 0, rowsEst: x.estRows, chunksDone: 0, chunksAll: x.chunks, error: "" }));
+      const skipped = p.plan.tables.filter((x: Any) => x.skipped).map((x: Any) => ({ name: x.name, state: "skipped", structureOnly: false, rowsDone: 0, rowsEst: 0, chunksDone: 0, chunksAll: 0, error: "" }));
+      const objects = [...p.plan.routines, ...p.plan.views, ...p.plan.triggers].filter((o: Any) => !o.skipped).map((o: Any) => ({ name: o.name, kind: o.kind, state: "pending", error: "" }));
+      const m: MigJob = {
+        job: { id, state: "planning", phase: "", route: p.plan.route, startedAt: new Date().toISOString(), elapsedMs: 0, rows: 0, estRows: tables.reduce((a: number, x: Any) => a + x.rowsEst, 0), bytes: 0, tablesDone: 0, tablesAll: tables.length, tables: [...tables, ...skipped], objects, error: "" },
+        failed: [], created: [{ name: p.tdb, kind: "database" }], verification: null, plan: p.plan, tdb: p.tdb, srcId: p.srcId, tgtId: p.tgtId, timer: null, step: 0, cancel: false,
+        failTables: new Set(migScenario() === "partial" ? ["payment"] : []), todo: tables.filter((x: Any) => !x.structureOnly).map((x: Any) => x.name),
+      };
+      migJobs.set(id, m);
+      migRun(m);
+      return migSnapshot(m);
+    }),
+  Cancel: (jobId: string) =>
+    cp(() => {
+      const m = migJobs.get(jobId);
+      if (!m) throw fail("NOT_FOUND", "La migración ya no está en memoria");
+      m.cancel = true;
+      if (m.job.state === "running") migSetState(m, "cancelling", m.job.phase);
+    }),
+  Job: (jobId: string) =>
+    cp(() => {
+      const m = migJobs.get(jobId);
+      if (!m) throw fail("NOT_FOUND", "La migración ya no está en memoria");
+      return { job: migSnapshot(m), failed: [...m.failed], created: [...m.created], warnings: m.plan.warnings, verification: m.verification };
+    }),
+  Retry: (jobId: string) =>
+    cp(() => {
+      const m = migJobs.get(jobId);
+      if (!m) throw fail("NOT_FOUND", "La migración ya no está en memoria");
+      if (m.timer) throw fail("QUERY_FAILED", "La migración sigue en curso", "busy");
+      m.failTables.clear();
+      m.todo = m.job.tables.filter((x: Any) => x.state === "failed").map((x: Any) => x.name);
+      m.job.tables.filter((x: Any) => x.state === "failed").forEach((x: Any) => { x.state = "copying"; x.rowsDone = 0; x.chunksDone = 0; x.error = ""; });
+      m.failed = [];
+      m.cancel = false;
+      migRun(m);
+      return migSnapshot(m);
+    }),
+  Verify: (jobId: string, opts: Any) =>
+    cp(() => {
+      const m = migJobs.get(jobId);
+      if (!m) throw fail("NOT_FOUND", "La migración ya no está en memoria");
+      if (!opts?.foreignKeys && !opts?.rowCounts && !opts?.objects) throw fail("VALIDATION", "Elige qué verificar", "objects");
+      const orphans = migScenario() === "orphans" && opts.foreignKeys ? [{ foreignKey: "fk_payment_rental", table: "payment", count: 3, atLeast: false }] : [];
+      const created = opts.objects ? m.job.objects.filter((x: Any) => x.state === "done") : [];
+      const objects = created.map((x: Any) => ({ kind: x.kind, name: x.name, status: migScenario() === "orphans" && x.name === "rewards_report" ? "different" : "same" }));
+      m.verification = { orphans, rowCounts: [], objects, objectsChecked: created.length, checked: true };
+      return m.verification;
+    }),
+  Cleanup: (jobId: string, confirmName: string) =>
+    cp(() => {
+      const m = migJobs.get(jobId);
+      if (!m) throw fail("NOT_FOUND", "La migración ya no está en memoria");
+      if (confirmName !== m.tdb) throw fail("VALIDATION", "Escribe el nombre del schema destino para confirmar", "confirm");
+      m.created = [];
     }),
 };
 

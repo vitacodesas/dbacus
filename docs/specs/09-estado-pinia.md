@@ -14,6 +14,7 @@ Go es la fuente de verdad de datos; Pinia guarda **proyecciones** para pintar y 
 | `queryFiles` | `tree`, `root`, `search`, `unsaved` (derivado de `queryTabs`), `lastFolder` | `load`, `open`, `save`, `saveAs`, `move`, `remove`, `pickRoot`; aplica `PathChange` a `queryTabs` | `QueryFilesService` (spec 20) |
 | `history` | `entries[]`, `cursor`, `search` | `load`, `delete`, `clear` | `HistoryService` |
 | `monitor` | por sesión: `caps`, `run`, `processes` (último `ProcessSnapshot`), `live` (arrendamiento activo), `tab`; por vista: `topRequest`, `top[]`, `series[]`, `runs[]` (todo lo calcula Go: el store **no agrega, ordena ni filtra**) | `start`, `stop`, `watch`/`unwatch` (renueva el arrendamiento cada 15 s y lo suelta al ocultar la vista), `loadTop`, `loadSeries`, `compare`, `annotate`, `purge`, `copyKill` | `MonitorService` (spec 22) + eventos `monitor:*` |
+| `migration` | por job: `plan`, `job` (estado, fase, tablas, filas, bytes), `result`; paso del asistente y opciones elegidas (Go calcula plan, trozos y progreso: el store **no agrega ni ordena**) | `plan`, `start`, `cancel`, `retry`, `verify`, `cleanup` | `MigrationService` (spec 23) + eventos `migrate:*` |
 | `ui` | `theme`, `sidebarWidth`, `splitRatio`, `sidebarView`, `mainView` (`queries`\|`monitor`), `locale`, `collapsedGroups[]`, `toasts[]` | setters; persistencia en Go (`ui_state`) | local + `SettingsService` |
 
 ## Reglas

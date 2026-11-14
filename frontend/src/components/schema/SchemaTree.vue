@@ -15,7 +15,7 @@ import BaseContextMenu, { type MenuItem } from "../ui/BaseContextMenu.vue";
 import BaseSpinner from "../ui/BaseSpinner.vue";
 import VirtualList from "../ui/VirtualList.vue";
 
-const emit = defineEmits<{ openTable: [sessionId: string, db: string, table: string]; viewCreate: [sessionId: string, db: string, table: string]; editStructure: [sessionId: string, db: string, table: string]; viewRoutine: [sessionId: string, db: string, kind: RoutineKind, name: string, edit: boolean]; newRoutine: [sessionId: string, db: string, kind: RoutineKind]; deleteRoutine: [sessionId: string, db: string, kind: RoutineKind, name: string]; refresh: [sessionId: string, db: string]; disconnect: [sessionId: string] }>();
+const emit = defineEmits<{ openTable: [sessionId: string, db: string, table: string]; viewCreate: [sessionId: string, db: string, table: string]; editStructure: [sessionId: string, db: string, table: string]; viewRoutine: [sessionId: string, db: string, kind: RoutineKind, name: string, edit: boolean]; newRoutine: [sessionId: string, db: string, kind: RoutineKind]; deleteRoutine: [sessionId: string, db: string, kind: RoutineKind, name: string]; refresh: [sessionId: string, db: string]; disconnect: [sessionId: string]; migrateSchema: [sessionId: string, db: string] }>();
 
 const { t } = useI18n();
 const schema = useSchemaStore();
@@ -167,6 +167,14 @@ function menuFor(row: FlatRow): MenuItem[] {
     ];
   }
   const isTable = row.kind === "table" || row.kind === "view";
+  // Migrar un schema (spec 23): desde una base de usuario; el origen puede ser de solo lectura, el destino lo valida Go.
+  if (row.kind === "database" && !row.flags.system) {
+    return [
+      { id: "copyName", label: t("schema.menu.copyName") },
+      { id: "migrate", label: t("schema.menu.migrate"), separatorBefore: true },
+      { id: "refresh", label: t("schema.menu.refresh") },
+    ];
+  }
   // «Editar estructura» solo en tablas; en perfiles de solo lectura sale deshabilitado (Go también lo rechaza, spec 19).
   const readOnly = !!connections.byId.get(sessions.byId[row.sessionId]?.profileId ?? "")?.readOnly;
   return [
@@ -187,6 +195,7 @@ async function onMenu(row: FlatRow, id: string) {
   try {
     if (id === "disconnect") emit("disconnect", row.sessionId);
     else if (id === "refresh") emit("refresh", row.sessionId, row.db ?? "");
+    else if (id === "migrate" && row.db) emit("migrateSchema", row.sessionId, row.db);
     else if (!row.db) return;
     else if (id === "copyName") await copy(row.routine ?? row.table ?? row.db);
     else if (id === "copyCall" && row.routine && row.routineKind) await copy(await routineCallStatement(row.sessionId, row.db, row.routineKind, row.routine));

@@ -13,6 +13,7 @@ import BaseButton from "../ui/BaseButton.vue";
 import BaseEmptyState from "../ui/BaseEmptyState.vue";
 import BaseModal from "../ui/BaseModal.vue";
 import { useAlterStore } from "../../stores/alter";
+import { useMigrationStore } from "../../stores/migration";
 import { useRoutinesStore } from "../../stores/routines";
 import AlterModal from "./AlterModal.vue";
 import AlterReviewDialog from "./AlterReviewDialog.vue";
@@ -29,6 +30,7 @@ const ui = useUiStore();
 const { openTable } = useQueryActions();
 const alter = useAlterStore();
 const routines = useRoutinesStore();
+const migration = useMigrationStore();
 
 async function openRoutine(sessionId: string, db: string, kind: "procedure" | "function", name: string, edit: boolean) {
   await routines.open({ sessionId, db, kind, name });
@@ -109,7 +111,7 @@ async function copyCreate() {
           class="h-8 w-full rounded-md border border-border bg-bg px-2.5 text-sm placeholder:text-muted/70"
         >
       </div>
-      <SchemaTree class="min-h-0 flex-1" @open-table="openTable" @view-create="viewCreate" @edit-structure="(sessionId, db, table) => alter.open({ sessionId, db, table })" @view-routine="openRoutine" @new-routine="(sessionId, db, kind) => routines.open({ sessionId, db, kind, name: null })" @delete-routine="(sessionId, db, kind, name) => routines.requestDelete({ sessionId, db, kind, name })" @refresh="refresh" @disconnect="disconnect" />
+      <SchemaTree class="min-h-0 flex-1" @open-table="openTable" @view-create="viewCreate" @edit-structure="(sessionId, db, table) => alter.open({ sessionId, db, table })" @view-routine="openRoutine" @new-routine="(sessionId, db, kind) => routines.open({ sessionId, db, kind, name: null })" @delete-routine="(sessionId, db, kind, name) => routines.requestDelete({ sessionId, db, kind, name })" @migrate-schema="(sessionId, db) => migration.openFor(sessionId, db)" @refresh="refresh" @disconnect="disconnect" />
     </template>
 
     <AlterModal />

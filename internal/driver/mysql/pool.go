@@ -29,7 +29,9 @@ type pool struct {
 	procDigest atomic.Int32
 	// readOnly: cada conexión dedicada arranca en una transacción de solo lectura (spec 10).
 	readOnly bool
-	schema   driver.SchemaReader
+	// cfg es la configuración con la que se abrió el pool: la migración (spec 23) abre su propio pool `mig` a partir de ella.
+	cfg    *gomysql.Config
+	schema driver.SchemaReader
 }
 
 func (p *pool) Ping(ctx context.Context) error { return mapError(p.db.PingContext(ctx)) }

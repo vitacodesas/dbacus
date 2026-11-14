@@ -421,6 +421,159 @@ export interface IndexSpec {
     "columns": IndexColumn[] | null;
 }
 
+export interface MigrationCreated {
+    "name": string;
+
+    /**
+     * database | table | view | procedure | function | trigger
+     */
+    "kind": string;
+}
+
+export interface MigrationEndpoint {
+    "sessionId": string;
+    "database": string;
+}
+
+export interface MigrationFailure {
+    "object": string;
+
+    /**
+     * table | foreignKey | view | routine | trigger | schema
+     */
+    "kind": string;
+    "error": string;
+}
+
+export interface MigrationJob {
+    "id": string;
+    "state": string;
+    "phase": string;
+    "route": string;
+    "startedAt": string;
+    "elapsedMs": number;
+    "rows": number;
+    "estRows": number;
+    "bytes": number;
+    "tablesDone": number;
+    "tablesAll": number;
+    "tables": MigrationTableState[] | null;
+    "objects": MigrationObjectState[] | null;
+    "error"?: string;
+}
+
+export interface MigrationObjectState {
+    "name": string;
+    "kind": string;
+
+    /**
+     * pending | done | failed | skipped
+     */
+    "state": string;
+    "error"?: string;
+}
+
+/**
+ * MigrationObjects elige qué se migra. Un campo nil/ausente = todos los de su tipo; un slice vacío no nulo = ninguno.
+ */
+export interface MigrationObjects {
+    "tables": string[] | null;
+
+    /**
+     * StructureOnly son tablas de `Tables` que se crean vacías: sin copiar sus filas (spec 23 ⚑D20).
+     */
+    "structureOnly": string[] | null;
+    "views": string[] | null;
+    "routines": RoutineRef[] | null;
+    "triggers": string[] | null;
+}
+
+export interface MigrationOptions {
+    /**
+     * 0 = por defecto
+     */
+    "workers": number;
+
+    /**
+     * 0 = automático
+     */
+    "chunkRows": number;
+    "skipExisting": boolean;
+    "verifyForeignKeys": boolean;
+    "verifyRowCounts": boolean;
+}
+
+export interface MigrationPlan {
+    "planHash": string;
+    "route": string;
+    "tables": PlanTable[] | null;
+    "views": PlanObject[] | null;
+    "routines": PlanObject[] | null;
+    "triggers": PlanObject[] | null;
+    "workers": number;
+    "warnings": MigrationWarning[] | null;
+
+    /**
+     * DDL exacto de las fases A, D, E y F
+     */
+    "statements": string[] | null;
+    "serverCaps": ServerCaps;
+
+    /**
+     * el schema destino se crea
+     */
+    "targetNew": boolean;
+}
+
+export interface MigrationRequest {
+    "source": MigrationEndpoint;
+    "target": MigrationEndpoint;
+    "objects": MigrationObjects;
+    "options": MigrationOptions;
+}
+
+export interface MigrationResult {
+    "job": MigrationJob;
+    "failed": MigrationFailure[] | null;
+    "created": MigrationCreated[] | null;
+    "warnings": MigrationWarning[] | null;
+    "verification": MigrationVerification | null;
+}
+
+export interface MigrationTableState {
+    "name": string;
+    "state": string;
+    "structureOnly": boolean;
+    "rowsDone": number;
+    "rowsEst": number;
+    "chunksDone": number;
+    "chunksAll": number;
+    "error"?: string;
+}
+
+export interface MigrationVerification {
+    "orphans": OrphanRow[] | null;
+    "rowCounts": RowCountDiff[] | null;
+    "objects": ObjectDiff[] | null;
+
+    /**
+     * vistas, rutinas y triggers comparados (= len(Objects))
+     */
+    "objectsChecked": number;
+    "checked": boolean;
+}
+
+export interface MigrationWarning {
+    "code": string;
+
+    /**
+     * info | warning | danger
+     */
+    "level": string;
+    "object": string;
+    "message": string;
+}
+
 export interface MonitorCaps {
     "serverVersion": string;
     "isMariaDB": boolean;
@@ -468,9 +621,61 @@ export interface MonitorRun {
     "gaps": number;
 }
 
+/**
+ * ObjectDiff es el resultado de comparar una vista, rutina o trigger creado con lo que hay en el destino: `same`, `missing` (no está),
+ * `different` (otro código) o `unreadable` (no se pudo leer uno de los dos y no se puede afirmar nada). Salen todos, también los iguales.
+ */
+export interface ObjectDiff {
+    "kind": string;
+    "name": string;
+    "status": string;
+}
+
+export interface OrphanRow {
+    "foreignKey": string;
+    "table": string;
+    "count": number;
+
+    /**
+     * el recuento se cortó en el tope de la consulta
+     */
+    "atLeast": boolean;
+}
+
 export interface PathChange {
     "from": string;
     "to": string;
+}
+
+export interface PlanObject {
+    "name": string;
+    "kind": string;
+    "table": string;
+
+    /**
+     * Skipped: no se migra. O ya existe en el destino y «omitir lo que ya existe» lo deja como está, y Compare dice si su código es
+     * igual (`same`), distinto (`different`) o no se pudo comparar (`unknown`); o el usuario no puede leer su código en el origen
+     * (Compare = `unreadable`: hace falta SHOW_ROUTINE global, SELECT sobre mysql.proc en MariaDB, SHOW VIEW o ser el definer).
+     */
+    "skipped": boolean;
+    "compare": string;
+}
+
+export interface PlanTable {
+    "name": string;
+    "estRows": number;
+    "estBytes": number;
+    "chunks": number;
+    "chunkKey": string;
+    "columns": number;
+    "skippedColumns": string[] | null;
+    "skipped": boolean;
+
+    /**
+     * se crea vacía: sin filas ni trozos
+     */
+    "structureOnly": boolean;
+    "warnings": string[] | null;
 }
 
 /**
@@ -688,6 +893,18 @@ export interface RoutinePreview {
 }
 
 /**
+ * RoutineRef identifica una rutina: procedimiento y función pueden repetir nombre.
+ */
+export interface RoutineRef {
+    "name": string;
+
+    /**
+     * procedure | function
+     */
+    "kind": string;
+}
+
+/**
  * RoutineResult: un fallo de la base no es error de la llamada, llega en Failed. Restored dice que la original se
  * recuperó tras un CREATE fallido; BackupSQL es la copia previa cuando ni la restauración funcionó.
  */
@@ -697,6 +914,12 @@ export interface RoutineResult {
     "restored": boolean;
     "backupSql": string;
     "detail": RoutineDetail | null;
+}
+
+export interface RowCountDiff {
+    "table": string;
+    "source": number;
+    "target": number;
 }
 
 /**
@@ -758,6 +981,11 @@ export interface SeriesRequest {
     "to": string;
     "metrics": string[] | null;
     "maxPoints": number;
+}
+
+export interface ServerCaps {
+    "maxConnections": number;
+    "freeConnections": number;
 }
 
 export interface Settings {
@@ -904,4 +1132,14 @@ export interface TopRequest {
     "limit": number;
     "compare": boolean;
     "includeSystem": boolean;
+}
+
+export interface VerifyOptions {
+    "foreignKeys": boolean;
+    "rowCounts": boolean;
+
+    /**
+     * compara el código de las vistas, rutinas y triggers creados (⚑D22)
+     */
+    "objects": boolean;
 }

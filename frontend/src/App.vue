@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from "vue";
 import AppLayout from "./components/layout/AppLayout.vue";
+import MigrationDialog from "./components/schema/MigrationDialog.vue";
 import QueryWorkspace from "./components/query/QueryWorkspace.vue";
 import WelcomeView from "./views/WelcomeView.vue";
 import MonitorView from "./views/MonitorView.vue";
@@ -63,4 +64,6 @@ const showDev = computed(() => import.meta.env.DEV && window.location.hash === "
     </div>
     <MonitorView v-if="monitorSeen" v-show="ui.mainView === 'monitor'" class="h-full" />
   </AppLayout>
+  <!-- A nivel de App: una migración larga no depende de qué panel del sidebar esté abierto (spec 23). -->
+  <MigrationDialog />
 </template>

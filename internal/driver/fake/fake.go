@@ -44,6 +44,9 @@ type Driver struct {
 	OnDigests        func(ctx context.Context) ([]model.DigestCounters, error)
 	OnDigestTexts    func(ctx context.Context, digests []string) (map[string]string, error)
 
+	// Mig es el «servidor» en memoria de la migración (driver.SchemaMigrator, spec 23); varios drivers/pools pueden compartirlo.
+	Mig *MigEngine
+
 	SchemaReader driver.SchemaReader // si es nil se usa un *Schema vacío
 	OnKill       func(connID string) // se llama en cada Conn.Kill
 	// OnKillProcess atiende driver.ProcessKiller; sin hook, el KILL se da por hecho.

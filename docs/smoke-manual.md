@@ -126,6 +126,23 @@ Hacerlo con la app nativa contra un servidor real (la verdad contra el servidor 
 - [ ] **Ajustes**: cambiar retención, tope de tamaño e intervalo y reabrir; un valor fuera de rango se rechaza en el campo. «Borrar datos» pide confirmación y vacía «Ejecuciones».
 - [ ] Rango de 7 días en «Top queries» con varios días de datos crudos: tarda del orden de 0,7 s (spinner visible) y no bloquea la interfaz.
 
+## Migrar schema (spec 23)
+Hacerlo con la app nativa contra un servidor real (la ruta por Go y la de dentro del servidor solo se probaron contra contenedores y el backend simulado).
+- [ ] Clic derecho en una base → «Migrar schema…»: el asistente abre con el destino en la misma conexión y un nombre propuesto; un nombre de sistema, el mismo schema o uno vacío no avanzan y el motivo sale en rojo.
+- [ ] Paso «Contenido»: marca «Solo estructura» en una tabla con filas y migra: en el destino la tabla existe con sus columnas, índices y claves, sin filas, y su primer `AUTO_INCREMENT` es 1; el resto trae todas sus filas.
+- [ ] Tras migrar un schema con rutinas, vistas y triggers, pulsa «Verificar»: dice cuántos objetos comparó y, sin diferencias, «mismo código en rutinas, vistas y triggers». Cambia una rutina directamente en el destino y vuelve a verificar: sale «Procedimiento x: código distinto».
+- [ ] Con un usuario que solo tiene `ALL` sobre el schema origen (sin `SHOW_ROUTINE` global): en el paso «Contenido» las rutinas salen en una línea ámbar «no se puede leer su código…», no se pueden marcar, y si desmarcas todo lo demás el aviso dice por qué no hay nada que migrar. Con `GRANT SHOW_ROUTINE ON *.*` (y una conexión nueva) pasan a poder elegirse.
+- [ ] Migra dos veces al mismo destino con «omitir lo que ya existe»: la segunda vez cada rutina, vista y trigger sale «ya existe con el mismo código, se omite» y ninguno se vuelve a crear; cambia una rutina en el destino y comprueba que sale «código distinto» y que NO se reemplaza.
+- [ ] **Servidor con un schema de varios GB** (tablas con y sin clave primaria, foráneas cíclicas): el plan enseña ruta, workers, trozos, avisos y el SQL; «Migrar» copia con la barra avanzando, filas/s y tiempo restante razonables; al terminar las tablas, foráneas, vistas, rutinas y triggers del destino existen y apuntan al destino.
+- [ ] **El origen no se toca**: mientras corre, el servidor de origen no registra ninguna escritura de la migración (general log o `performance_schema`); con un usuario de solo `SELECT` sobre el origen la migración termina igual.
+- [ ] **Cancelar** una copia larga dentro del servidor: pasa a «Cancelando…», el `INSERT … SELECT` desaparece de `SHOW PROCESSLIST` (el `KILL QUERY` surte efecto) y queda «Cancelada»; «Limpiar destino» pide escribir el nombre y borra solo lo creado.
+- [ ] **Cerrar el asistente con la copia en marcha**: sigue en segundo plano, avisa al terminar y al reabrir vuelve al progreso o al resultado.
+- [ ] Un destino de solo lectura se rechaza; el origen de solo lectura es válido. Un destino con `sql_require_primary_key` y tablas sin PK se rechaza antes de crear nada.
+- [ ] Destino en **otro servidor** (MySQL → MySQL): los datos coinciden; MySQL 8 → MariaDB se rechaza por el collation.
+- [ ] Vistas/rutinas con **DEFINER** de otro usuario y con SQL dinámico (`PREPARE`): salen los avisos del plan y el resultado es el esperado.
+- [ ] Servidor con `lower_case_table_names` distinto de 0: migrar a un nombre que solo difiere en mayúsculas se rechaza como el mismo schema.
+- [ ] «Verificar» con las foráneas apagadas durante la carga: con el origen quieto no encuentra huérfanos; con filas huérfanas conocidas las encuentra.
+
 ## Ajustes e interfaz
 - [ ] Cambiar tema/idioma en Ajustes (`⌘/Ctrl+,`) y reabrir: se conserva. Ancho del panel y del divisor también.
 - [ ] Un límite de filas bajo (p. ej. 1 000) aplica a la siguiente consulta; uno fuera de rango se rechaza en el campo.
@@ -139,3 +156,4 @@ Hacerlo con la app nativa contra un servidor real (la verdad contra el servidor 
 - 2026-10-28 (noche, macOS): verificado «Nueva fila» y la reapertura de la conexión de la pestaña tras detener una consulta (C7). Pendiente de probar en la app nativa: insertar a partir de una fila existente, eliminar/restaurar, conflictos de borrado, CASCADE/RESTRICT y el lote mixto.
 - 2026-11-04: añadido el bloque «Monitoreo DBA» (spec 22). Nada verificado aún en la app nativa.
 - 2026-11-12: añadidos los puntos «Volver a las consultas» (T16.9) y «Quién en Top queries» (T16.10). Nada verificado aún en la app nativa.
+- 2026-11-14: añadido el bloque «Migrar schema» (spec 23). Nada verificado aún en la app nativa.
